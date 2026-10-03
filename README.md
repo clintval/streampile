@@ -10,10 +10,10 @@
 
 Forward-only pileups streamed from coordinate-sorted SAM, BAM, and CRAM records.
 
-Install from GitHub with pip or uv:
+Install with pip or uv:
 
 ```console
-pip install git+https://github.com/clintval/streampile
+pip install streampile
 ```
 
 ## Development and Testing
