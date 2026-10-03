@@ -1,0 +1,5 @@
+contig	pos	ref	depth	ref_reads	alt_refs	alts	alt_reads
+chr1	21	T	5	5			
+chr1	22	G	5	5			
+chr1	23	C	4	3	CA	C	1
+chr1	24	A	4	3			

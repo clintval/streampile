@@ -8,7 +8,12 @@ readme = "README.md"
 keywords = ["bioinformatics", "pileup", "SAM", "BAM", "NGS", "HTS", "genomics"]
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pybgzf >=0.1.1",
+    "pysam >=0.23",
+    "typeline >=2.3.0",
+    "typing-extensions >=4.12",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -29,6 +34,9 @@ classifiers = [
 "homepage" = "https://github.com/clintval/streampile"
 "repository" = "https://github.com/clintval/streampile"
 "Bug Tracker" = "https://github.com/clintval/streampile/issues"
+
+[project.scripts]
+streampile = "streampile._cli:main"
 
 [dependency-groups]
 dev = [
@@ -55,6 +63,8 @@ only-include = ["streampile", "tests", "README.md", "CONTRIBUTING.md", "LICENSE"
 # caught before it can be locked. Must stay >= the Dependabot `cooldown` in
 # .github/dependabot.yml, or Dependabot will propose versions that can't lock.
 exclude-newer = "1 week"
+# pybgzf and typeline are released alongside streampile, so their new releases are allowed right away.
+exclude-newer-package = { pybgzf = false, typeline = false }
 
 [tool.poe.tasks]
 fix-format = "ruff format"
@@ -108,7 +118,7 @@ doctest_optionflags = [
 ]
 
 [tool.mypy]
-files                       = ["streampile/", "tests/"]
+files                       = ["streampile/", "tests/", "benchmarks/"]
 strict                      = true
 warn_unreachable            = true
 enable_error_code           = [
@@ -117,7 +127,7 @@ enable_error_code           = [
 ]
 
 [tool.pyright]
-include                            = ["streampile/", "tests/"]
+include                            = ["streampile/", "tests/", "benchmarks/"]
 enableTypeIgnoreComments           = false
 reportUnnecessaryTypeIgnoreComment = "error"
 reportImportCycles                 = false
@@ -128,7 +138,7 @@ reportUnusedCallResult             = false
 pythonVersion                      = "3.11"
 
 [tool.ty.src]
-include = ["streampile/", "tests/"]
+include = ["streampile/", "tests/", "benchmarks/"]
 
 [tool.ty.analysis]
 respect-type-ignore-comments = false
@@ -137,7 +147,7 @@ respect-type-ignore-comments = false
 unused-ignore-comment = "error"
 
 [tool.ruff]
-include        = ["streampile/**", "tests/**"]
+include        = ["streampile/**/*.py", "tests/**/*.py", "benchmarks/**/*.py"]
 line-length    = 100
 target-version = "py311"
 output-format  = "full"
