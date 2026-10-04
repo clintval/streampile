@@ -7,15 +7,14 @@ from streampile import Pileup
 from streampile import PileupRead
 from streampile import PileupReadType
 from streampile import StreamingPileupBuilder
+from streampile._pileup import BASE
+from streampile._pileup import DELETION
+from streampile._pileup import INSERTION
+from streampile._pileup import SKIP
 
 from .records import HEADER
 from .records import entries
 from .records import record
-
-BASE = PileupReadType.base
-DELETION = PileupReadType.deletion
-INSERTION = PileupReadType.insertion
-SKIP = PileupReadType.skip
 
 
 def columns(reads: list[AlignedSegment], positions: range, **options: int) -> list[Pileup]:

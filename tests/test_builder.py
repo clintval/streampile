@@ -12,18 +12,14 @@ from pysam import AlignmentHeader
 
 from streampile import Pileup
 from streampile import PileupRead
-from streampile import PileupReadType
 from streampile import StreamingPileupBuilder
+from streampile._pileup import BASE
 
 from .records import HEADER
 from .records import entries
 from .records import record
 from .records import unmapped
 from .records import write_bam
-
-BASE = PileupReadType.base
-DELETION = PileupReadType.deletion
-INSERTION = PileupReadType.insertion
 
 
 def test_builder_refuses_records_not_declared_coordinate_sorted() -> None:
