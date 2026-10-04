@@ -9,6 +9,7 @@ keywords = ["bioinformatics", "pileup", "SAM", "BAM", "NGS", "HTS", "genomics"]
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
+    "bedspec >=4.0.0",
     "pybgzf >=0.1.1",
     "pysam >=0.23",
     "typeline >=2.3.0",
@@ -63,8 +64,8 @@ only-include = ["streampile", "tests", "README.md", "CONTRIBUTING.md", "LICENSE"
 # caught before it can be locked. Must stay >= the Dependabot `cooldown` in
 # .github/dependabot.yml, or Dependabot will propose versions that can't lock.
 exclude-newer = "1 week"
-# pybgzf and typeline are released alongside streampile, so their new releases are allowed right away.
-exclude-newer-package = { pybgzf = false, typeline = false }
+# bedspec, pybgzf, superintervals and typeline are released alongside streampile, so their new releases are allowed right away.
+exclude-newer-package = { bedspec = false, pybgzf = false, superintervals = false, typeline = false }
 
 [tool.poe.tasks]
 fix-format = "ruff format"
