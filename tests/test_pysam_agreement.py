@@ -27,8 +27,8 @@ def ours(path: Path, contig: str, length: int, min_base_quality: int) -> list[li
 
     At a floor of 0 every entry is kept but leading insertions, which htslib never reports, and
     each of those must open an alignment that holds the next position. At a higher floor only
-    bases and deletions at the floor are kept, since htslib judges an insertion by its anchor
-    base and a skip by its next base, where a skip here has no quality.
+    bases and deletions at the floor are kept, since pysam's floor judges an insertion by its
+    anchor base and a skip by its next base, where a skip here has no quality.
     """
     columns: list[list[Entry]] = []
     held: set[tuple[int, str, int]] = set()

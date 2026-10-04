@@ -16,7 +16,7 @@ from streampile._footprint import is_placed
 from streampile._footprint import query_qualities
 
 DEFAULT_MIN_BASE_QUALITY: Final[int] = 13
-"""The default minimum base quality of a pileup, the same as pysam's."""
+"""The default minimum base quality of a pileup, as in pysam's `pileup()` and `samtools mpileup`."""
 
 DEFAULT_EXCLUDE_FLAGS: Final[int] = 0xF00
 """Secondary, QC-fail, duplicate, and supplementary reads, which are left out by default."""

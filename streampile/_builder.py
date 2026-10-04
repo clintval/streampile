@@ -75,7 +75,8 @@ class StreamingPileupBuilder:
                 secondary, QC-fail, duplicate, and supplementary reads, as in `tabulate`. htslib
                 keeps supplementary reads and fgbio keeps QC-fail reads.
             min_base_quality: the quality floor of each pileup's filtered views: 13 by default,
-                as in htslib, where `tabulate` counts bases of any quality by default.
+                as in pysam's `pileup()` and `samtools mpileup`, where `tabulate` counts bases of
+                any quality by default.
             proper_pairs_only: pile up only reads flagged as in a proper pair.
             read_filter: a function that keeps a read for pileups when it returns True, e.g.
                 `lambda read: read.is_proper_pair`, asked only of reads that pass the other
