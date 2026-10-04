@@ -101,3 +101,11 @@ def test_columns_agree_with_htslib_on_indels_and_skips(tmp_path: Path) -> None:
         assert ours(path, "chr1", 40, min_base_quality) == htslib(
             path, "chr1", 40, min_base_quality
         )
+
+
+def test_the_fixture_bam_holds_the_fixture_sam() -> None:
+    with (
+        AlignmentFile(str(DATA / "reads.sam")) as sam,
+        AlignmentFile(str(DATA / "reads.bam")) as bam,
+    ):
+        assert [read.to_string() for read in sam] == [read.to_string() for read in bam]
