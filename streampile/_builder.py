@@ -105,6 +105,7 @@ class StreamingPileupBuilder:
         self._active_reference_id: int = -1
         self._last_key: tuple[int, int] = (-1, -1)
         self._at: tuple[int, int] | None = None
+        self._closed: bool = False
 
     def __enter__(self) -> Self:
         """Enter the builder's context."""
@@ -134,6 +135,7 @@ class StreamingPileupBuilder:
         self._waiting.clear()
         self._next = None
         self._active = []
+        self._closed = True
 
     def accepts(self, record: AlignedSegment) -> bool:
         """Whether a read passes the builder's read filters and has a base on the reference."""
@@ -159,9 +161,11 @@ class StreamingPileupBuilder:
             pos: the 0-based position on the contig.
 
         Raises:
-            ValueError: if the contig is not in the header, the position is negative, or the
-                position is before the last one asked for.
+            ValueError: if the builder is closed, the contig is not in the header, the position is
+                negative, or the position is before the last one asked for.
         """
+        if self._closed:
+            raise ValueError("The builder is closed.")
         previous = self.previous_pileup
         if (
             previous is not None

@@ -72,6 +72,16 @@ def test_builder_refuses_unknown_contigs_and_negative_positions() -> None:
         list(builder.columns("chr1", 2, 1))
 
 
+def test_builder_refuses_pileups_once_closed() -> None:
+    with StreamingPileupBuilder([record("r", 10, "4M", "ACGT")]) as builder:
+        builder.pileup("chr1", 11)
+    for pos in (11, 12):
+        with pytest.raises(ValueError, match="The builder is closed."):
+            builder.pileup("chr1", pos)
+    with pytest.raises(ValueError, match="The builder is closed."):
+        list(builder.columns("chr1", 12, 14))
+
+
 def test_builder_returns_the_same_pileup_for_a_repeated_position() -> None:
     read = record("r", 100, "4M", "ACGT")
     builder = StreamingPileupBuilder([read])
