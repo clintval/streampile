@@ -25,7 +25,7 @@ pip install streampile
 A `StreamingPileupBuilder` reads coordinate-sorted records once, from start to finish, and piles them up at the positions you ask for.
 A position may repeat or move forward, but never back.
 Positions are 0-based, as in pysam.
-By default it leaves out secondary, supplementary, duplicate, and QC-fail reads, as htslib does, though fgbio keeps QC-fail reads, and its filtered views leave out bases under quality 13, as htslib's do.
+By default it leaves out secondary, supplementary, duplicate, and QC-fail reads, where htslib keeps supplementary reads and fgbio keeps QC-fail reads, and its filtered views leave out bases under quality 13, as htslib's do.
 
 ```pycon
 >>> from pysam import AlignmentFile
@@ -47,9 +47,10 @@ By default it leaves out secondary, supplementary, duplicate, and QC-fail reads,
 
 Each entry of `pileup.pileups` holds a read and its base, deletion, reference skip (`N`), or insertion at the position.
 A skip holds no base or quality: it counts in `unfiltered_depth`, as in htslib, but never in `filtered_depth` or the bases and qualities of a pileup.
-An insertion is an entry at the position before it, so one that opens an alignment is reported at the position before the first aligned base, and one that closes it at the last aligned base; htslib reports only the closing one, and fgbio only the opening one.
+An insertion is reported at the position before it, at either end of an alignment: one that opens it, before the first aligned base, and one that closes it, at the last; htslib reports only the closing one, and fgbio only the opening one.
 Each read's CIGAR is walked once, when the builder first reaches it, so a pileup costs one lookup per read.
 Pass `tap`, e.g. `tap=writer.write`, to be handed every record, in input order, once the builder has moved past it.
+Keeping input order holds every read behind the longest read still in a pileup, so a `tap` costs memory with long or spliced reads; without one, a read is dropped once passed.
 Pass `read_filter`, e.g. `read_filter=lambda read: read.is_proper_pair`, to leave more reads out of pileups, after the built-in filters; a read it rejects still goes to `tap`.
 Overlapping mates are both piled up; `pileup.without_overlaps()` keeps one read per template, the mate that comes first in the input, as fgbio's `withoutOverlaps` does.
 
@@ -96,6 +97,7 @@ Like the builder, it leaves out secondary, supplementary, duplicate, and QC-fail
 The alleles anchored at a base sit in parallel tuples, as VCF pairs `ALT` with `AD`: allele `i` is `alt_refs[i]` to `alts[i]`, seen in `alt_reads[i]` reads.
 A read counts toward `depth` at a base when it holds an aligned base there at the quality floor, or when the base lies inside an allele it was counted for, such as the deleted bases of a deletion or the second base of an MNV.
 It is counted once: as a reference read, for the allele it has anchored at the base, or in `depth` alone.
+A read that skips over a base with an `N` observed no base there, so it is not counted at all, unlike in a pileup's `unfiltered_depth`.
 Overlapping mates are both counted, so clip overlaps first to count each molecule once.
 
 ### Reading a Table
