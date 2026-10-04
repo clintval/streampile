@@ -44,7 +44,8 @@ Positions are 0-based, as in pysam.
 
 ```
 
-Each entry of `pileup.pileups` holds a read and its base, deletion, or insertion at the position.
+Each entry of `pileup.pileups` holds a read and its base, deletion, reference skip (`N`), or insertion at the position.
+A skip holds no base or quality: it counts in `unfiltered_depth`, as in htslib, but never in `filtered_depth` or the bases and qualities of a pileup.
 Each read's CIGAR is walked once, when the builder first reaches it, so a pileup costs one lookup per read.
 Pass `tap`, e.g. `tap=writer.write`, to be handed every record, in input order, once the builder has moved past it.
 

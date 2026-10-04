@@ -32,23 +32,29 @@ class PileupReadType(StrEnum):
     base = auto()
     deletion = auto()
     insertion = auto()
+    skip = auto()
 
 
 class PileupRead(NamedTuple):
     """One read at one pileup position.
 
-    A read holding a base or a deletion at a position appears once. A read with an insertion
-    right after the position appears again as an insertion entry, as does a read whose alignment
-    opens with an insertion, at the position before its first aligned base.
+    A read holding a base, a deletion, or a reference skip (an `N` operator) at a position appears
+    once. A read with an insertion right after the position appears again as an insertion entry,
+    as does a read whose alignment opens with an insertion, at the position before its first
+    aligned base.
+
+    A skip entry holds no base, no quality, and no query offset. htslib flags the same entry as
+    both `is_del` and `is_refskip` and gives it the offset and quality of the read's next base;
+    here a skip is not a deletion, and has no quality to pass a floor with.
 
     Attributes:
         alignment: the read.
         query_position: the 0-based query offset of the read's base at the position, or `None`
-            for a deletion or an insertion.
+            for a deletion, a skip, or an insertion.
         query_position_or_next: the query offset of the read's base at the position, or of the
-            read's next base for a deletion, as htslib reports it, or `None` for an insertion or
-            a deletion no base follows.
-        pileup_type: whether the read holds a base, a deletion, or an insertion.
+            read's next base for a deletion, as htslib reports it, or `None` for a skip, an
+            insertion, or a deletion no base follows.
+        pileup_type: whether the read holds a base, a deletion, a skip, or an insertion.
         insertion_offset: the query offset of the first inserted base of an insertion entry.
         insertion_length: the number of inserted bases of an insertion entry.
     """
@@ -95,6 +101,11 @@ class PileupRead(NamedTuple):
         return self.pileup_type is PileupReadType.insertion
 
     @property
+    def is_refskip(self) -> bool:
+        """Whether the read skips over the position with an `N` operator."""
+        return self.pileup_type is PileupReadType.skip
+
+    @property
     def inserted_bases(self) -> str | None:
         """The upper-cased inserted bases of an insertion entry, or `None` for any other."""
         sequence = self.alignment.query_sequence
@@ -130,10 +141,12 @@ def pileup_reads(footprint: Footprint, pos: int) -> list[PileupRead]:
         offset = footprint.offsets[index]
         if offset >= 0:
             entries.append(PileupRead(record, offset, offset, PileupReadType.base))
-        elif offset == DELETED_AT_END:
-            entries.append(PileupRead(record, None, None, PileupReadType.deletion))
-        elif offset != SKIPPED:
+        elif offset < DELETED_AT_END:
             entries.append(PileupRead(record, None, -offset - 3, PileupReadType.deletion))
+        elif offset == SKIPPED:
+            entries.append(PileupRead(record, None, None, PileupReadType.skip))
+        else:
+            entries.append(PileupRead(record, None, None, PileupReadType.deletion))
     if footprint.insertions:
         insertion = footprint.insertions.get(pos)
         if insertion is not None:
@@ -155,7 +168,8 @@ class Pileup:
     """The reads at one reference position.
 
     Reads with an insertion right after the position are included as insertion entries, so one
-    read can have two entries.
+    read can have two entries. Reads that skip over the position with an `N` operator are included
+    as skip entries.
 
     Attributes:
         reference_name: the name of the contig.
@@ -172,14 +186,18 @@ class Pileup:
 
     @property
     def unfiltered_depth(self) -> int:
-        """The number of reads with a base or a deletion at this position, ignoring quality."""
+        """The number of reads with a base, a deletion, or a skip at this position.
+
+        Quality is ignored, and insertion entries are not counted, as in htslib's column depth.
+        """
         return sum(1 for read in self.pileups if read.pileup_type is not PileupReadType.insertion)
 
     @property
     def filtered_depth(self) -> int:
         """The number of reads with a base or a deletion at this position at the quality floor.
 
-        A deletion is judged by the quality of the read's next base, as pysam does.
+        A deletion is judged by the quality of the read's next base, as pysam does. A skip has no
+        quality, so it is never counted, while pysam judges a skip by its next base too.
         """
         floor = self.min_base_quality
         return sum(

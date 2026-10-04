@@ -28,6 +28,7 @@ UNPLACED: int = sys.maxsize
 BASE = PileupReadType.base
 DELETION = PileupReadType.deletion
 INSERTION = PileupReadType.insertion
+SKIP = PileupReadType.skip
 
 
 class StreamingPileupBuilder:
@@ -266,10 +267,12 @@ class StreamingPileupBuilder:
                 offset = footprint.offsets[index]
                 if offset >= 0:
                     append(PileupRead(record, offset, offset, BASE))
-                elif offset == DELETED_AT_END:
-                    append(PileupRead(record, None, None, DELETION))
-                elif offset != SKIPPED:
+                elif offset < DELETED_AT_END:
                     append(PileupRead(record, None, -offset - 3, DELETION))
+                elif offset == SKIPPED:
+                    append(PileupRead(record, None, None, SKIP))
+                else:
+                    append(PileupRead(record, None, None, DELETION))
             if footprint.insertions:
                 insertion = footprint.insertions.get(pos)
                 if insertion is not None:

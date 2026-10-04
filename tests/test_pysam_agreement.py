@@ -9,11 +9,17 @@ from .records import DATA
 from .records import record
 from .records import write_bam
 
-Entry = tuple[str, int, int | None, int | None, bool, int]
+Entry = tuple[str, int, str, int, int]
+"""One entry: read name, flag, kind, query offset or -1 for none, and inserted length."""
 
 
 def ours(path: Path, contig: str, length: int, min_base_quality: int) -> list[list[Entry]]:
-    """Every column, as (name, flag, position, position or next, deletion, inserted length)."""
+    """Every column of the builder, in the shape `htslib` gives.
+
+    At a floor of 0 every entry is kept but leading insertions, which htslib never reports. At a
+    higher floor only bases and deletions at the floor are kept, since htslib judges an insertion
+    by its anchor base and a skip by its next base, where a skip here has no quality.
+    """
     columns: list[list[Entry]] = []
     with (
         AlignmentFile(str(path)) as reads,
@@ -26,30 +32,33 @@ def ours(path: Path, contig: str, length: int, min_base_quality: int) -> list[li
         ) as builder,
     ):
         for pileup in builder.columns(contig, 0, length):
-            insertions = {
-                (entry.alignment.query_name, entry.alignment.flag): entry.insertion_length
-                for entry in pileup.pileups
-                if entry.is_ins
-            }
-            columns.append(
-                sorted(
-                    (
-                        entry.alignment.query_name or "",
-                        entry.alignment.flag,
-                        entry.query_position,
-                        entry.query_position_or_next,
-                        entry.is_del,
-                        insertions.get((entry.alignment.query_name, entry.alignment.flag), 0),
+            anchored = {id(entry.alignment) for entry in pileup.pileups if not entry.is_ins}
+            column: list[Entry] = []
+            for entry in pileup.pileups:
+                read = (entry.alignment.query_name or "", entry.alignment.flag)
+                if entry.is_ins:
+                    if min_base_quality == 0 and id(entry.alignment) in anchored:
+                        offset = entry.insertion_offset
+                        assert offset is not None
+                        column.append((*read, "insertion", offset, entry.insertion_length))
+                elif entry.is_refskip:
+                    if min_base_quality == 0:
+                        column.append((*read, "skip", -1, 0))
+                elif min_base_quality == 0 or (entry.qual or 0) >= min_base_quality:
+                    offset = (
+                        -1 if entry.query_position_or_next is None else entry.query_position_or_next
                     )
-                    for entry in pileup.pileups
-                    if not entry.is_ins and (entry.qual or 0) >= min_base_quality
-                )
-            )
+                    column.append((*read, entry.pileup_type.value, offset, 0))
+            columns.append(sorted(column))
     return columns
 
 
 def htslib(path: Path, contig: str, length: int, min_base_quality: int) -> list[list[Entry]]:
-    """Every column from pysam's htslib pileup engine, refskips left out."""
+    """Every column from pysam's htslib pileup engine, with its conventions mapped to ours.
+
+    A skip has no offset, and a deletion that no base follows has none, where htslib gives the
+    query length. An insertion is its own entry, starting after the base or at the next base.
+    """
     columns: list[list[Entry]] = [[] for _ in range(length)]
     with AlignmentFile(str(path)) as reads:
         for column in reads.pileup(
@@ -63,18 +72,22 @@ def htslib(path: Path, contig: str, length: int, min_base_quality: int) -> list[
             ignore_overlaps=False,
             ignore_orphans=False,
         ):
-            columns[column.reference_pos] = sorted(
-                (
-                    entry.alignment.query_name or "",
-                    entry.alignment.flag,
-                    entry.query_position,
-                    entry.query_position_or_next,
-                    bool(entry.is_del),
-                    max(entry.indel, 0),
-                )
-                for entry in column.pileups
-                if not entry.is_refskip
-            )
+            entries: list[Entry] = []
+            for entry in column.pileups:
+                read = (entry.alignment.query_name or "", entry.alignment.flag)
+                offset = entry.query_position_or_next
+                if entry.is_refskip:
+                    if min_base_quality == 0:
+                        entries.append((*read, "skip", -1, 0))
+                elif entry.is_del:
+                    ends = offset >= (entry.alignment.infer_query_length() or 0)
+                    entries.append((*read, "deletion", -1 if ends else offset, 0))
+                else:
+                    entries.append((*read, "base", offset, 0))
+                if min_base_quality == 0 and entry.indel > 0:
+                    start = offset if entry.is_del else offset + 1
+                    entries.append((*read, "insertion", start, entry.indel))
+            columns[column.reference_pos] = sorted(entries)
     return columns
 
 
@@ -95,6 +108,7 @@ def test_columns_agree_with_htslib_on_indels_and_skips(tmp_path: Path) -> None:
         record("d", 10, "3M4N3M", "ACGTAC"),
         record("e", 12, "8M2I", "ACGTACGTTT"),
         record("f", 12, "2H8M3S", "ACGTACGTTTT", flag=1024),
+        record("g", 14, "2M2N1I2M", "ACTGT", quals=[40, 40, 20, 10, 40]),
     ]
     path = write_bam(tmp_path / "reads.bam", reads)
     for min_base_quality in (0, 30):

@@ -30,7 +30,9 @@ class TabulatedBase:
     Each informative read is counted once: as a reference read, as a read of the one allele it
     has anchored at this base, or, when an allele anchored at an earlier base spans this one,
     in `depth` alone. So `depth` is `ref_reads`, plus `alt_reads`, plus the reads with an allele
-    spanning the base.
+    spanning the base. A read that skips over the base with an `N` operator observed no base
+    there, so it is neither a reference read nor a read of an allele, and is not in `depth`,
+    unlike in a pileup's `unfiltered_depth`.
 
     The alleles anchored at the base are normalized VCF alleles at `pos`, held in parallel
     tuples, most reads first: allele `i` has reference bases `alt_refs[i]`, alternate bases

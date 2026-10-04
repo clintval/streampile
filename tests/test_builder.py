@@ -204,10 +204,34 @@ def test_builder_skips_soft_and_hard_clips() -> None:
     assert entries(builder.pileup("chr1", 13)) == []
 
 
-def test_builder_leaves_reads_out_of_their_reference_skips() -> None:
-    builder = StreamingPileupBuilder([record("r", 10, "2M3N2M", "ACGT")])
+def test_builder_piles_up_reference_skips() -> None:
+    builder = StreamingPileupBuilder([record("r", 10, "2M3N2M", "ACGT")], min_base_quality=0)
     columns = list(builder.columns("chr1", 10, 18))
-    assert [pileup.unfiltered_depth for pileup in columns] == [1, 1, 0, 0, 0, 1, 1, 0]
+    assert [entries(pileup) for pileup in columns] == [
+        [("r", "base", 0, 0, None)],
+        [("r", "base", 1, 1, None)],
+        [("r", "skip", None, None, None)],
+        [("r", "skip", None, None, None)],
+        [("r", "skip", None, None, None)],
+        [("r", "base", 2, 2, None)],
+        [("r", "base", 3, 3, None)],
+        [],
+    ]
+    assert [pileup.unfiltered_depth for pileup in columns] == [1, 1, 1, 1, 1, 1, 1, 0]
+    assert [pileup.filtered_depth for pileup in columns] == [1, 1, 0, 0, 0, 1, 1, 0]
+    skip = columns[2].pileups[0]
+    assert skip.is_refskip and not skip.is_del and not skip.is_ins
+    assert (skip.base, skip.qual) == (None, None)
+    assert (columns[2].get_query_sequences, columns[2].get_query_qualities) == ([], [])
+
+
+def test_builder_piles_up_an_insertion_after_a_reference_skip() -> None:
+    builder = StreamingPileupBuilder([record("r", 10, "2M2N1I2M", "ACTGT")])
+    assert entries(builder.pileup("chr1", 13)) == [
+        ("r", "skip", None, None, None),
+        ("r", "insertion", None, None, "T"),
+    ]
+    assert entries(builder.pileup("chr1", 14)) == [("r", "base", 3, 3, None)]
 
 
 def test_builder_piles_up_both_overlapping_mates() -> None:
