@@ -15,6 +15,7 @@ from streampile import PileupReadType
 from streampile import StreamingPileupBuilder
 
 from .records import HEADER
+from .records import entries
 from .records import record
 from .records import unmapped
 from .records import write_bam
@@ -22,20 +23,6 @@ from .records import write_bam
 BASE = PileupReadType.base
 DELETION = PileupReadType.deletion
 INSERTION = PileupReadType.insertion
-
-
-def entries(pileup: Pileup) -> list[tuple[str, str, int | None, int | None, str | None]]:
-    """Each entry of a pileup as (read name, type, query position, next, inserted bases)."""
-    return [
-        (
-            entry.alignment.query_name or "",
-            entry.pileup_type.value,
-            entry.query_position,
-            entry.query_position_or_next,
-            entry.inserted_bases,
-        )
-        for entry in pileup.pileups
-    ]
 
 
 def test_builder_refuses_records_not_declared_coordinate_sorted() -> None:

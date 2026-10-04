@@ -1,6 +1,7 @@
 from array import array
 from collections.abc import Iterable
 from dataclasses import dataclass
+from dataclasses import replace
 from enum import StrEnum
 from enum import auto
 from typing import Final
@@ -233,6 +234,23 @@ class Pileup:
             and (quality := read.qual) is not None
             and quality >= floor
         ]
+
+    def without_overlaps(self) -> Self:
+        """A copy of this pileup with one read per template, by query name.
+
+        As in fgbio's `withoutOverlaps`, the read kept for a template is the first of its name in
+        `pileups`, which a builder fills in input order: in a coordinate-sorted file, the mate
+        that starts first, or, for mates that start together, the one that comes first in the
+        file. Every entry of the kept read stays, its insertion entry included, where fgbio keeps
+        only the first entry of each template.
+        """
+        kept: dict[str | None, AlignedSegment] = {}
+        pileups = [
+            entry
+            for entry in self.pileups
+            if kept.setdefault(entry.alignment.query_name, entry.alignment) is entry.alignment
+        ]
+        return replace(self, pileups=pileups)
 
     @classmethod
     def from_alignments(

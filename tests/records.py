@@ -8,6 +8,8 @@ from pysam import AlignedSegment
 from pysam import AlignmentFile
 from pysam import AlignmentHeader
 
+from streampile import Pileup
+
 DATA = Path(__file__).parent / "data"
 
 HEADER = AlignmentHeader.from_text(
@@ -63,3 +65,17 @@ def write_bam(
             sink.write(read)
     pysam.index(str(path))
     return path
+
+
+def entries(pileup: Pileup) -> list[tuple[str, str, int | None, int | None, str | None]]:
+    """Each entry of a pileup as (read name, type, query position, next, inserted bases)."""
+    return [
+        (
+            entry.alignment.query_name or "",
+            entry.pileup_type.value,
+            entry.query_position,
+            entry.query_position_or_next,
+            entry.inserted_bases,
+        )
+        for entry in pileup.pileups
+    ]

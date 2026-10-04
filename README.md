@@ -49,6 +49,7 @@ A skip holds no base or quality: it counts in `unfiltered_depth`, as in htslib, 
 Each read's CIGAR is walked once, when the builder first reaches it, so a pileup costs one lookup per read.
 Pass `tap`, e.g. `tap=writer.write`, to be handed every record, in input order, once the builder has moved past it.
 Pass `read_filter`, e.g. `read_filter=lambda read: read.is_proper_pair`, to leave more reads out of pileups, after the built-in filters; a read it rejects still goes to `tap`.
+Overlapping mates are both piled up; `pileup.without_overlaps()` keeps one read per template, the mate that comes first in the input, as fgbio's `withoutOverlaps` does.
 
 ### Sweeping a Territory
 
