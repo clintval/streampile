@@ -15,7 +15,6 @@ from pybgzf import Columns
 from pybgzf import IndexFormat
 from typeline import Codecs
 from typeline import Comment
-from typeline import ExtraColumns
 from typeline import FixedRecordType
 from typeline import ReaderOptions
 from typeline import SubscriptableClassmethod
@@ -52,10 +51,6 @@ class TabulatedBase:
     Reads are split by the strand they are mapped to, so `ref_reads` is `ref_fwd + ref_rev`, and
     `alt_reads[i]` is `alt_fwd[i] + alt_rev[i]`.
 
-    Within a format version, columns are only ever appended, each keeping its meaning, so a table
-    written by a later streampile reads here, with the columns this version does not know kept,
-    as text, in `extra`.
-
     Attributes:
         contig: the name of the contig.
         pos: the 1-based position of the base, as in VCF.
@@ -70,8 +65,6 @@ class TabulatedBase:
         alt_reads: the number of reads of each allele.
         alt_fwd: the reads of each allele mapped to the forward strand.
         alt_rev: the reads of each allele mapped to the reverse strand.
-        extra: the columns after the known ones, as text, from a table written by a later
-            version within the same format version, written back after the known columns.
     """
 
     contig: str
@@ -87,7 +80,6 @@ class TabulatedBase:
     alt_reads: tuple[int, ...] = ()
     alt_fwd: tuple[int, ...] = ()
     alt_rev: tuple[int, ...] = ()
-    extra: ExtraColumns = ()
 
 
 TABULATION_CODECS: Final[Codecs] = {
@@ -97,7 +89,7 @@ TABULATION_CODECS: Final[Codecs] = {
 """How the allele fields of a `TabulatedBase` are read and written, comma-separated."""
 
 TABULATION_FORMAT: Final[str] = "1"
-"""The version of the table's format, within which columns are only ever appended."""
+"""The version of the table's format."""
 
 TABULATION_COLUMNS: Final[Columns] = Columns(
     refname=1, start=2, end=None, zero_based=False, meta_char="#"
