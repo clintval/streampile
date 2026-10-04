@@ -107,6 +107,18 @@ def test_normalize_trims_and_left_aligns(
     assert normalize(pos, ref, alt, lambda start, end: CHR1[start:end], floor) == expected
 
 
+def test_normalize_returns_at_once_for_an_allele_that_changes_nothing() -> None:
+    asked: list[tuple[int, int]] = []
+
+    def reference(start: int, end: int) -> str:
+        asked.append((start, end))
+        return "A" * (end - start)
+
+    assert normalize(1_000_000, "A", "A", reference) is None
+    assert normalize(1_000_000, "AC", "AC", reference) is None
+    assert asked == []
+
+
 def test_alleles_of_one_read(reference: FastaFile) -> None:
     tabulator = Tabulator(reference, min_base_quality=30)
     assert alleles_of(tabulator, 0, "20M", CHR1[0:20]) == []
@@ -382,3 +394,17 @@ def test_each_read_is_counted_once_where_it_holds_a_base_or_deletion(
             assert site.depth <= sum(
                 entry.is_del or entry.base is not None for entry in column.pileups
             )
+
+
+def test_a_read_that_spells_the_reference_across_an_insertion_and_deletion_is_a_reference_read(
+    tmp_path: Path,
+) -> None:
+    chr1 = "ACGTAGGCTAACGTTAGCCA"
+    reads = [
+        record(
+            "r", 0, "5M1I1D5M", chr1[0:5] + chr1[5] + chr1[6:11], header=header_of({"chr1": chr1})
+        )
+    ]
+    sites = tabulated(tmp_path, chr1, reads)
+    assert [(site.depth, site.ref_reads) for site in sites[:12]] == [(1, 1)] * 11 + [(0, 0)]
+    assert not any(site.alts for site in sites)

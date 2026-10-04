@@ -160,7 +160,9 @@ class Allele:
 def normalize(
     pos: int, ref: str, alt: str, reference: Callable[[int, int], str], floor: int = 0
 ) -> tuple[int, str, str] | None:
-    """Trim and left-align an allele as `bcftools norm` does, or `None` if it would pass `floor`.
+    """Trim and left-align an allele as `bcftools norm` does.
+
+    Returns `None` for an allele that changes nothing, or that would move past `floor`.
 
     Args:
         pos: the 0-based position of the allele's first reference base.
@@ -169,6 +171,8 @@ def normalize(
         reference: the bases of the contig from a 0-based start to an end.
         floor: the lowest position the allele may move to.
     """
+    if ref == alt:
+        return None
     while ref[-1] == alt[-1]:
         ref, alt = ref[:-1], alt[:-1]
         if not ref or not alt:
@@ -273,6 +277,8 @@ class Tabulator:
     alone or with mismatches next to it, is an indel or a complex allele. An allele that starts
     with an indel is anchored on the aligned base before it, as in VCF. Alleles are then trimmed
     and left-aligned, like `bcftools norm`, so they can be matched to other VCF alleles exactly.
+    A run that spells the reference, such as an insertion and a deletion of the same base, is no
+    allele, and its read is a reference read across it.
 
     A read is counted for an allele only when every read base of the allele, the anchor base
     included, is at the base-quality floor and is not an `N`. Otherwise the read is not
@@ -356,15 +362,21 @@ class Tabulator:
         """
         if record.reference_name is None:
             raise ValueError(f"Read {record.query_name} is not mapped.")
-        return self._alleles(record, _segments(record), self._reference(record.reference_name))
+        segments = _segments(record)
+        counted, dropped, _ = self._alleles(
+            record, segments, self._reference(record.reference_name)
+        )
+        return counted, dropped
 
     def _alleles(
         self, record: AlignedSegment, segments: list[Segment], reference: _Reference
-    ) -> tuple[list[Allele], list[tuple[int, int]]]:
+    ) -> tuple[list[Allele], list[tuple[int, int]], list[tuple[int, int]]]:
+        """The alleles of a read, the stretches it is not counted for, and those it matches."""
         sequence: str = record.query_sequence or ""
         qualities = query_qualities(record) if self.min_base_quality > 0 else None
         counted: list[Allele] = []
         dropped: list[tuple[int, int]] = []
+        matched: list[tuple[int, int]] = []
         for run in _runs(segments, sequence, reference, record.reference_start):
             first, last = run.events[0], run.events[-1]
             ref_start, query_start = first.ref_start, first.query_start
@@ -387,6 +399,9 @@ class Tabulator:
             ):
                 dropped.append((ref_start, ref_end))
                 continue
+            if ref == alt:
+                matched.append((ref_start, ref_end))
+                continue
             normalized = normalize(ref_start, ref, alt, reference.get, run.floor)
             if normalized is None:
                 dropped.append((run.floor, ref_end))
@@ -401,7 +416,7 @@ class Tabulator:
                     end=max(ref_end, pos + len(ref)),
                 )
             )
-        return counted, dropped
+        return counted, dropped, matched
 
     def _reference(self, contig: str) -> _Reference:
         reference = self._contigs.get(contig)
@@ -436,7 +451,7 @@ class Tabulator:
         if not touched:
             return
         segments = _segments(record)
-        counted, dropped = self._alleles(record, segments, reference)
+        counted, dropped, matched = self._alleles(record, segments, reference)
         excluded: set[int] = set(self._uninformative(record, segments, reference))
         for start, end in dropped:
             excluded.update(range(start, end))
@@ -448,6 +463,9 @@ class Tabulator:
             excluded.update(range(allele.start, allele.end))
             for ledger in touched:
                 ledger.add_allele(allele.pos, (allele.ref, allele.alt))
+        for start, end in matched:
+            _add(touched, start, end, ref=True)
+            excluded.update(range(start, end))
         for operator, block_start, _, length in segments:
             if operator == CMATCH:
                 cursor = block_start
