@@ -280,16 +280,18 @@ class Tabulator:
     A run that spells the reference, such as an insertion and a deletion of the same base, is no
     allele, and its read is a reference read across it.
 
-    A read is counted for an allele only when every read base of the allele, the anchor base
-    included, is at the base-quality floor and is not an `N`. Otherwise the read is not informative
-    at any base of that allele. A read is never counted for an allele that starts with an indel with
-    no aligned base before it, ends with a deletion with no aligned base after it, or holds a
-    reference base other than A, C, G, or T, before or after left-alignment. Nor is it counted for
-    an indel that would be left-aligned past the read's previous difference or reference skip, or
-    past its first aligned base, so one read is never counted for two alleles at one base; it is
-    then not informative from there to the end of the indel. A read with no stored qualities (QUAL
-    `*`) has quality 255 at every base, as in htslib, so it passes every floor, and a read with no
-    stored bases (SEQ `*`) is not counted at all.
+    A read is counted for an allele only when none of its bases in the allele is an `N`, and its
+    mismatched and inserted bases are at the base-quality floor, as is the base before an insertion
+    that opens the allele and the base after a deletion that closes it: as in htslib, an insertion
+    is judged with the base it follows, and a deletion by the read's next base, not its anchor.
+    Otherwise the read is not informative at any base of that allele. A read is never counted for an
+    allele that starts with an indel with no aligned base before it, ends with a deletion with no
+    aligned base after it, or holds a reference base other than A, C, G, or T, before or after left-
+    alignment. Nor is it counted for an indel that would be left-aligned past the read's previous
+    difference or reference skip, or past its first aligned base, so one read is never counted for
+    two alleles at one base; it is then not informative from there to the end of the indel. A read
+    with no stored qualities (QUAL `*`) has quality 255 at every base, as in htslib, so it passes
+    every floor, and a read with no stored bases (SEQ `*`) is not counted at all.
 
     A read counted for an allele is informative at every base the allele spans, a deletion's
     deleted bases included, and at every base an indel is left-aligned across. Elsewhere, a read
@@ -386,11 +388,15 @@ class Tabulator:
                 ref_start, query_start = ref_start - 1, query_start - 1
             ref = reference.get(ref_start, ref_end)
             alt = sequence[query_start:query_end]
+            opens_with_insertion = first.is_indel and first.ref_end == first.ref_start
+            closes_with_deletion = last.is_indel and last.ref_end > last.ref_start
+            judged_from = query_start if opens_with_insertion else first.query_start
+            judged_to = query_end + 1 if closes_with_deletion else query_end
             if (
-                (last.is_indel and last.ref_end > last.ref_start and not run.closed)
+                (closes_with_deletion and not run.closed)
                 or (
                     qualities is not None
-                    and min(qualities[query_start:query_end]) < self.min_base_quality
+                    and min(qualities[judged_from:judged_to]) < self.min_base_quality
                 )
                 or "N" in alt
                 or not set(ref) <= ACGT

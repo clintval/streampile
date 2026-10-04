@@ -416,3 +416,21 @@ def test_no_allele_is_left_aligned_onto_a_reference_n(tmp_path: Path) -> None:
     sites = tabulated(tmp_path, chr1, reads)
     assert [site.depth for site in sites[:12]] == [1, 1] + [0] * 5 + [1] * 5
     assert not any(site.alts for site in sites)
+
+
+@pytest.mark.parametrize("anchor,after,counted", [(10, 40, True), (40, 10, False)])
+def test_a_deletion_is_judged_by_the_base_after_it_as_in_pileups(
+    tmp_path: Path, anchor: int, after: int, counted: bool
+) -> None:
+    chr1 = "ACGTAGGCTAACGTTAGCCA"
+    quals = [40, 40, anchor, after, 40, 40]
+    reads = [
+        record(
+            "r", 2, "3M1D3M", chr1[2:5] + chr1[6:9], quals=quals, header=header_of({"chr1": chr1})
+        )
+    ]
+    sites = tabulated(tmp_path, chr1, reads, min_base_quality=20)
+    with AlignmentFile(str(tmp_path / "reads.bam")) as alignments:
+        deleted = StreamingPileupBuilder(alignments, min_base_quality=20).pileup("chr1", 5)
+    assert sites[5].depth == deleted.filtered_depth == int(counted)
+    assert alleles(sites[4]) == ({"AG>A": 1} if counted else {})
