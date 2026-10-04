@@ -222,6 +222,13 @@ def test_tabulate_checks_the_territory_when_called(tmp_path: Path) -> None:
                 _ = tabulate(reads, fasta, territory(("chr2", 0, 5), span))
 
 
+def test_tabulate_counts_long_spans_in_pieces_as_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    spans = [("chr1", 0, 60), ("chr2", 0, 40)]
+    whole = sites_of(spans, min_base_quality=30)
+    monkeypatch.setattr("streampile._tabulate.CHUNK", 7)
+    assert sites_of(spans, min_base_quality=30) == whole
+
+
 def test_tabulate_counts_reads_spanning_several_spans(tmp_path: Path, reference: FastaFile) -> None:
     reads = [record("long", 0, "30M", CHR1[0:10] + "T" + CHR1[11:30], header=HEADER)]
     path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)

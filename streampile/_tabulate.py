@@ -25,6 +25,9 @@ ACGT: Final[frozenset[str]] = frozenset("ACGT")
 
 REFERENCE_PADDING: Final[int] = 10_000
 
+CHUNK: Final[int] = 1_000_000
+"""The most bases of a territory span counted at once, which bounds memory on long spans."""
+
 
 @final
 class _Reference:
@@ -585,7 +588,9 @@ def _by_header(
                 f"Span {contig}:{span.start}-{span.end} runs past the end of {contig},"
                 + f" which has {length} bases."
             )
-        by_contig.setdefault(contig, []).append((span.start, span.end))
+        by_contig.setdefault(contig, []).extend(
+            (start, min(start + CHUNK, span.end)) for start in range(span.start, span.end, CHUNK)
+        )
     return sorted(by_contig.items(), key=lambda contig: alignments.get_tid(contig[0]))
 
 
