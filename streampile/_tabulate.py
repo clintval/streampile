@@ -347,7 +347,8 @@ class Tabulator:
 
         Raises:
             ValueError: if a contig of the territory is not in the alignment header or the
-                reference, or has another length in each.
+                reference, or has another length in each, or a span runs past the end of its
+                contig.
         """
         contigs = _by_header(alignments, self.reference, territory)
         return (
@@ -536,6 +537,26 @@ def _add(ledgers: list[_Ledger], start: int, end: int, *, ref: bool) -> None:
         ledger.add(start, end, ref=ref)
 
 
+def _contig_length(alignments: AlignmentFile, reference: FastaFile, contig: str) -> int:
+    """The length of a contig, checked against the alignment header and the reference.
+
+    Raises:
+        ValueError: if the contig is not in the alignment header or the reference, or has another
+            length in each.
+    """
+    if alignments.get_tid(contig) < 0:
+        raise ValueError(f"Contig {contig} is not in the alignment header.")
+    if contig not in reference.references:
+        raise ValueError(f"Contig {contig} is not in the reference.")
+    length = alignments.get_reference_length(contig)
+    if reference.get_reference_length(contig) != length:
+        raise ValueError(
+            f"Contig {contig} has {reference.get_reference_length(contig)} bases in the reference"
+            + f" but {length} in the alignment header."
+        )
+    return length
+
+
 def _by_header(
     alignments: AlignmentFile, reference: FastaFile, territory: Territory
 ) -> list[tuple[str, list[tuple[int, int]]]]:
@@ -543,22 +564,20 @@ def _by_header(
 
     Raises:
         ValueError: if a contig of the territory is not in the alignment header or the
-            reference, or has another length in each.
+            reference, or has another length in each, or a span runs past the end of its contig.
     """
+    lengths: dict[str, int] = {}
     by_contig: dict[str, list[tuple[int, int]]] = {}
     for span in territory:
         contig = span.refname
-        if contig not in by_contig:
-            if alignments.get_tid(contig) < 0:
-                raise ValueError(f"Contig {contig} is not in the alignment header.")
-            if contig not in reference.references:
-                raise ValueError(f"Contig {contig} is not in the reference.")
-            length = alignments.get_reference_length(contig)
-            if reference.get_reference_length(contig) != length:
-                raise ValueError(
-                    f"Contig {contig} has {reference.get_reference_length(contig)} bases in the"
-                    + f" reference but {length} in the alignment header."
-                )
+        length = lengths.get(contig)
+        if length is None:
+            length = lengths[contig] = _contig_length(alignments, reference, contig)
+        if span.end > length:
+            raise ValueError(
+                f"Span {contig}:{span.start}-{span.end} runs past the end of {contig},"
+                + f" which has {length} bases."
+            )
         by_contig.setdefault(contig, []).append((span.start, span.end))
     return sorted(by_contig.items(), key=lambda contig: alignments.get_tid(contig[0]))
 
@@ -590,7 +609,7 @@ def tabulate(
 
     Raises:
         ValueError: if a contig of the territory is not in the alignment header or the
-            reference, or has another length in each.
+            reference, or has another length in each, or a span runs past the end of its contig.
     """
     tabulator = Tabulator(
         reference,

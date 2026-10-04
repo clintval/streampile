@@ -214,6 +214,7 @@ def test_tabulate_checks_the_territory_when_called(tmp_path: Path) -> None:
         (DATA / "reference.fa", ("chr3", 0, 10), "Contig chr3 is not in the alignment header."),
         (only_chr1, ("chr2", 0, 10), "Contig chr2 is not in the reference."),
         (short, ("chr1", 0, 10), "Contig chr1 has 50 bases in the reference but 60 in the"),
+        (DATA / "reference.fa", ("chr2", 30, 45), "Span chr2:30-45 runs past the end of chr2,"),
     ]
     with AlignmentFile(str(DATA / "reads.bam")) as reads:
         for path, span, message in refused:
