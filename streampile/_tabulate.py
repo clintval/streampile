@@ -306,16 +306,17 @@ class Tabulator:
 
     A read is counted for an allele only when none of its bases in the allele is an `N`, and its
     mismatched and inserted bases are at the base-quality floor, as is the base before an insertion
-    that opens the allele and the base after a deletion that closes it: as in htslib, an insertion
-    is judged with the base it follows, and a deletion by the read's next base, not its anchor.
-    Otherwise the read is not informative at any base of that allele. A read is never counted for an
-    allele that starts with an indel with no aligned base before it, ends with a deletion with no
-    aligned base after it, or holds a reference base other than A, C, G, or T, before or after
-    left-alignment. Nor is it counted for an indel that would be left-aligned past the read's
-    previous difference or reference skip, or past its first aligned base, so one read is never
-    counted for two alleles at one base; it is then not informative from there to the end of the
-    indel. A read with no stored qualities (QUAL `*`) has quality 255 at every base, as in htslib,
-    so it passes every floor, and a read with no stored bases (SEQ `*`) is not counted at all.
+    that opens the allele and the base after a deletion that closes it: as in pysam's `pileup()` and
+    `samtools mpileup`, an insertion is judged with the base it follows, and a deletion by the
+    read's next base, not its anchor. Otherwise the read is not informative at any base of that
+    allele. A read is never counted for an allele that starts with an indel with no aligned base
+    before it, ends with a deletion with no aligned base after it, or holds a reference base other
+    than A, C, G, or T, before or after left-alignment. Nor is it counted for an indel that would be
+    left-aligned past the read's previous difference or reference skip, or past its first aligned
+    base, so one read is never counted for two alleles at one base; it is then not informative from
+    there to the end of the indel. A read with no stored qualities (QUAL `*`) has quality 255 at
+    every base, as in htslib, so it passes every floor, and a read with no stored bases (SEQ `*`) is
+    not counted at all.
 
     A read counted for an allele is informative at every base the allele spans, a deletion's
     deleted bases included, and at every base an indel is left-aligned across. Elsewhere, a read
@@ -337,7 +338,8 @@ class Tabulator:
         Args:
             reference: the indexed reference the reads are aligned to.
             min_base_quality: the lowest base quality of an informative base: 0 by default, where
-                a `StreamingPileupBuilder` filters at 13 by default, as htslib does.
+                a `StreamingPileupBuilder` filters at 13 by default, as pysam's `pileup()` and
+                `samtools mpileup` do.
             min_mapping_quality: the lowest mapping quality of a counted read.
             exclude_flags: reads with any of these SAM flags are not counted: by default,
                 secondary, QC-fail, duplicate, and supplementary reads. Unmapped reads never are.
@@ -637,7 +639,8 @@ def tabulate(
         reference: the indexed reference the reads are aligned to.
         territory: the bases to tabulate, e.g. `Territory(BedReader.from_path[Bed3N](path))`.
         min_base_quality: the lowest base quality of an informative base: 0 by default, where a
-            `StreamingPileupBuilder` filters at 13 by default, as htslib does.
+            `StreamingPileupBuilder` filters at 13 by default, as pysam's `pileup()` and
+            `samtools mpileup` do.
         min_mapping_quality: the lowest mapping quality of a counted read.
         exclude_flags: reads with any of these SAM flags are not counted: by default, secondary,
             QC-fail, duplicate, and supplementary reads.
