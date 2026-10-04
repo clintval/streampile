@@ -231,15 +231,17 @@ def _runs(segments: list[Segment], sequence: str, reference: "_Reference") -> li
         if operator == CMATCH:
             bases = reference.get(ref_pos, ref_pos + length)
             read = sequence[query : query + length]
-            if bases == read:
+            previous = -1
+            if read != bases:
+                for offset, (base, ref_base) in enumerate(zip(read, bases, strict=False)):
+                    if base != ref_base:
+                        if offset > previous + 1:
+                            runs.border(aligned=True)
+                        at, query_at = ref_pos + offset, query + offset
+                        runs.add(_Event(at, at + 1, query_at, query_at + 1, False))
+                        previous = offset
+            if previous < len(bases) - 1:
                 runs.border(aligned=True)
-                continue
-            for offset, (base, ref_base) in enumerate(zip(read, bases, strict=False)):
-                if base == ref_base:
-                    runs.border(aligned=True)
-                else:
-                    at, query_at = ref_pos + offset, query + offset
-                    runs.add(_Event(at, at + 1, query_at, query_at + 1, False))
             if len(bases) < length:
                 runs.border(aligned=False)
         elif operator == CINS:
