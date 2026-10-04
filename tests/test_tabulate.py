@@ -1,5 +1,6 @@
 import random
 from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -31,8 +32,9 @@ HEADER = AlignmentHeader.from_text(
 
 
 @pytest.fixture
-def reference() -> FastaFile:
-    return FastaFile(str(DATA / "reference.fa"))
+def reference() -> Iterator[FastaFile]:
+    with FastaFile(str(DATA / "reference.fa")) as fasta:
+        yield fasta
 
 
 def alleles(base: TabulatedBase) -> dict[str, int]:
