@@ -45,7 +45,7 @@ It filters reads as `tabulate` does, by `min_mapping_quality` and `exclude_flags
 
 ```
 
-Each entry of `pileup.pileups` holds a read and its base, deletion, reference skip (`N`), or insertion at the position.
+Each entry of `pileup.pileups` holds a read and its base, deletion, reference skip (the CIGAR `N` operator), or insertion at the position; `is_no_call` marks a base entry holding an `N` base.
 A skip holds no base or quality: it counts in `unfiltered_depth`, as in htslib, but never in `filtered_depth`, `bases`, or `qualities`.
 `bases` and `qualities` list only the bases at the quality floor, in the same order, where pysam's `get_query_sequences()` and `get_query_qualities()` list every entry.
 An insertion is reported at the position before it, at either end of an alignment: one that opens it, before the first aligned base, and one that closes it, at the last; htslib reports only the closing one, and fgbio only the opening one.
@@ -100,7 +100,8 @@ Reads are also split by the strand they are mapped to: `ref_reads` is `ref_fwd +
 A read counts toward `depth` at a base when it holds an aligned base there at the quality floor, or when the base lies inside an allele it was counted for, such as the deleted bases of a deletion or the second base of an MNV.
 It is counted once: as a reference read, for the allele it has anchored at the base, or in `depth` alone.
 As in the builder's `filtered_depth` and in htslib, a deletion is judged by the quality of the read's next base.
-A read that skips over a base with an `N` observed no base there, so it is not counted at all, unlike in a pileup's `unfiltered_depth`.
+A read that skips over a base with the CIGAR `N` operator observed no base there, so it is not counted at all, unlike in a pileup's `unfiltered_depth`.
+A read holding an `N` base, a no-call, is not informative either: it is counted in `no_calls`, not `depth`, so the molecular depth at a base is `depth + no_calls`, less any reads left out by the quality floor or for an allele they could not be counted for.
 Overlapping mates are both counted, so clip overlaps first to count each molecule once.
 
 ### Reading a Table
@@ -142,11 +143,11 @@ streampile tabulate \
 ##min_base_quality=30
 ##min_mapping_quality=20
 ##exclude_flags=0xf00
-#contig	pos	ref	depth	ref_reads	ref_fwd	ref_rev	alt_refs	alts	alt_reads	alt_fwd	alt_rev
-chr1	21	T	5	5	3	2					
-chr1	22	G	5	5	3	2					
-chr1	23	C	4	3	2	1	CA	C	1	0	1
-chr1	24	A	4	3	2	1					
+#contig	pos	ref	depth	no_calls	ref_reads	ref_fwd	ref_rev	alt_refs	alts	alt_reads	alt_fwd	alt_rev
+chr1	21	T	5	0	5	3	2					
+chr1	22	G	5	0	5	3	2					
+chr1	23	C	4	0	3	2	1	CA	C	1	0	1
+chr1	24	A	4	0	3	2	1					
 ```
 
 A table whose path ends in `.gz` or `.bgz` is written as BGZF with [pybgzf](https://github.com/clintval/pybgzf), and `--index tbi` or `--index csi` indexes it by contig and position as it is written.

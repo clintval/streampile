@@ -13,7 +13,7 @@ from pysam import CSOFT_CLIP
 from pysam import AlignedSegment
 
 SKIPPED: Final[int] = -1
-"""The offset of a reference position that the read skips over with an `N` operator."""
+"""The offset of a reference position the read skips over, with the CIGAR `N` operator."""
 
 DELETED_AT_END: Final[int] = -2
 """The offset of a deleted reference position that no base of the read follows."""

@@ -35,9 +35,12 @@ class TabulatedBase:
     Each informative read is counted once: as a reference read, as a read of the one allele it
     has anchored at this base, or, when an allele anchored at an earlier base spans this one,
     in `depth` alone. So `depth` is `ref_reads`, plus `alt_reads`, plus the reads with an allele
-    spanning the base. A read that skips over the base with an `N` operator observed no base
-    there, so it is neither a reference read nor a read of an allele, and is not in `depth`,
-    unlike in a pileup's `unfiltered_depth`.
+    spanning the base. A read that skips over the base, with the CIGAR `N` operator, observed no
+    base there, so it is neither a reference read nor a read of an allele, and is not in `depth`,
+    unlike in a pileup's `unfiltered_depth`. A read holding an `N` base there, a no-call, is not
+    informative either, and is counted in `no_calls` instead, so the molecular depth at the base
+    is `depth + no_calls`, less any read left out by the base-quality floor or for an allele it
+    could not be counted for.
 
     The alleles anchored at the base are normalized VCF alleles at `pos`, held in parallel
     tuples, most reads first: allele `i` has reference bases `alt_refs[i]`, alternate bases
@@ -56,6 +59,7 @@ class TabulatedBase:
         pos: the 1-based position of the base, as in VCF.
         ref: the upper-cased reference base.
         depth: the number of informative reads.
+        no_calls: the number of reads holding an `N` base at the base, which are not in `depth`.
         ref_reads: the number of informative reads with no allele at or spanning the base.
         ref_fwd: the reference reads mapped to the forward strand.
         ref_rev: the reference reads mapped to the reverse strand.
@@ -72,6 +76,7 @@ class TabulatedBase:
     pos: int
     ref: str
     depth: int
+    no_calls: int
     ref_reads: int
     ref_fwd: int
     ref_rev: int

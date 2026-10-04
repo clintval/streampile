@@ -43,6 +43,13 @@ def test_a_deletion_entry_holds_the_quality_of_the_next_base() -> None:
     assert (entry.inserted_bases, entry.inserted_qualities) == (None, None)
 
 
+def test_a_base_entry_of_an_n_is_a_no_call() -> None:
+    read = record("r", 10, "4M", "AnGT")
+    entries = [PileupRead(read, offset, offset, BASE) for offset in range(4)]
+    assert [entry.is_no_call for entry in entries] == [False, True, False, False]
+    assert not PileupRead(read, None, None, SKIP).is_no_call
+
+
 @pytest.mark.parametrize(
     "pileup_type,is_del,is_ins,is_refskip",
     [

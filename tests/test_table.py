@@ -19,6 +19,7 @@ HEADER = "\t".join([
     "pos",
     "ref",
     "depth",
+    "no_calls",
     "ref_reads",
     "ref_fwd",
     "ref_rev",
@@ -30,12 +31,15 @@ HEADER = "\t".join([
 ])
 
 BASES = [
-    TabulatedBase(contig="chr1", pos=1, ref="A", depth=0, ref_reads=0, ref_fwd=0, ref_rev=0),
+    TabulatedBase(
+        contig="chr1", pos=1, ref="A", depth=0, no_calls=0, ref_reads=0, ref_fwd=0, ref_rev=0
+    ),
     TabulatedBase(
         contig="chr1",
         pos=2,
         ref="C",
         depth=9,
+        no_calls=1,
         ref_reads=5,
         ref_fwd=3,
         ref_rev=2,
@@ -45,12 +49,15 @@ BASES = [
         alt_fwd=(2, 0),
         alt_rev=(1, 1),
     ),
-    TabulatedBase(contig="chr1", pos=3, ref="A", depth=9, ref_reads=8, ref_fwd=4, ref_rev=4),
+    TabulatedBase(
+        contig="chr1", pos=3, ref="A", depth=9, no_calls=0, ref_reads=8, ref_fwd=4, ref_rev=4
+    ),
     TabulatedBase(
         contig="chr2",
         pos=7,
         ref="G",
         depth=4,
+        no_calls=0,
         ref_reads=3,
         ref_fwd=3,
         ref_rev=0,
@@ -77,8 +84,8 @@ def test_a_table_round_trips_with_empty_alleles(tmp_path: Path) -> None:
     lines = (tmp_path / "bases.tsv").read_text().splitlines()
     assert lines[:2] == ["##streampile-tabulation=1", f"##streampile-version={VERSION}"]
     assert lines[2] == HEADER
-    assert lines[3] == "chr1\t1\tA\t0\t0\t0\t0\t\t\t\t\t"
-    assert lines[4] == "chr1\t2\tC\t9\t5\t3\t2\tC,CA\tT,C\t3,1\t2,0\t1,1"
+    assert lines[3] == "chr1\t1\tA\t0\t0\t0\t0\t0\t\t\t\t\t"
+    assert lines[4] == "chr1\t2\tC\t9\t1\t5\t3\t2\tC,CA\tT,C\t3,1\t2,0\t1,1"
     assert list(TabulationReader.from_path(tmp_path / "bases.tsv")) == BASES
 
 
@@ -100,10 +107,10 @@ def test_an_index_finds_the_rows_of_a_region(tmp_path: Path, index: IndexFormat)
     write(path, BASES, index=index)
     with pybgzf.IndexedReader(path) as reader:
         assert list(reader.query("chr1", 1, 3)) == [
-            "chr1\t2\tC\t9\t5\t3\t2\tC,CA\tT,C\t3,1\t2,0\t1,1",
-            "chr1\t3\tA\t9\t8\t4\t4\t\t\t\t\t",
+            "chr1\t2\tC\t9\t1\t5\t3\t2\tC,CA\tT,C\t3,1\t2,0\t1,1",
+            "chr1\t3\tA\t9\t0\t8\t4\t4\t\t\t\t\t",
         ]
-        assert list(reader.query("chr2", 0, 100)) == ["chr2\t7\tG\t4\t3\t3\t0\tG\tGTT\t1\t0\t1"]
+        assert list(reader.query("chr2", 0, 100)) == ["chr2\t7\tG\t4\t0\t3\t3\t0\tG\tGTT\t1\t0\t1"]
 
 
 def test_an_indexed_table_refuses_rows_out_of_order(tmp_path: Path) -> None:
@@ -137,7 +144,7 @@ def test_the_metadata_and_header_come_first_and_once(
     assert len(lines) == 6 + len(BASES)
     if index is not None:
         with pybgzf.IndexedReader(path) as reader:
-            assert list(reader.query("chr1", 0, 1)) == ["chr1\t1\tA\t0\t0\t0\t0\t\t\t\t\t"]
+            assert list(reader.query("chr1", 0, 1)) == ["chr1\t1\tA\t0\t0\t0\t0\t0\t\t\t\t\t"]
     comments: list[Comment] = []
     table = TabulationReader.from_path(path, on_comment=comments.append)
     assert table.metadata == {

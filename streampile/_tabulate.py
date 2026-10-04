@@ -61,7 +61,7 @@ class _Reference:
 class _Ledger:
     """The counts of one territory span while reads are added to it, by strand."""
 
-    __slots__ = ("alleles", "depth", "end", "ref_fwd", "ref_rev", "start")
+    __slots__ = ("alleles", "depth", "end", "no_calls", "ref_fwd", "ref_rev", "start")
 
     def __init__(self, start: int, end: int) -> None:
         self.start: int = start
@@ -69,6 +69,7 @@ class _Ledger:
         self.depth: list[int] = [0] * (end - start + 1)
         self.ref_fwd: list[int] = [0] * (end - start + 1)
         self.ref_rev: list[int] = [0] * (end - start + 1)
+        self.no_calls: list[int] = [0] * (end - start)
         self.alleles: dict[int, dict[tuple[str, str], list[int]]] = {}
 
     def add(self, start: int, end: int, *, ref: bool, reverse: bool) -> None:
@@ -80,6 +81,10 @@ class _Ledger:
                 counts = self.ref_rev if reverse else self.ref_fwd
                 counts[start - self.start] += 1
                 counts[end - self.start] -= 1
+
+    def add_no_call(self, pos: int) -> None:
+        if self.start <= pos < self.end:
+            self.no_calls[pos - self.start] += 1
 
     def add_allele(self, pos: int, key: tuple[str, str], *, reverse: bool) -> None:
         if self.start <= pos < self.end:
@@ -99,6 +104,7 @@ class _Ledger:
                     pos=self.start + offset + 1,
                     ref=base,
                     depth=depth,
+                    no_calls=self.no_calls[offset],
                     ref_reads=ref_fwd + ref_rev,
                     ref_fwd=ref_fwd,
                     ref_rev=ref_rev,
@@ -110,6 +116,7 @@ class _Ledger:
                 pos=self.start + offset + 1,
                 ref=base,
                 depth=depth,
+                no_calls=self.no_calls[offset],
                 ref_reads=ref_fwd + ref_rev,
                 ref_fwd=ref_fwd,
                 ref_rev=ref_rev,
@@ -313,7 +320,8 @@ class Tabulator:
     A read counted for an allele is informative at every base the allele spans, a deletion's
     deleted bases included, and at every base an indel is left-aligned across. Elsewhere, a read
     is informative at a base where it holds an aligned base at the floor that is not an `N`, over
-    a reference base of A, C, G, or T. Reference skips (`N` operators) and clips cover nothing.
+    a reference base of A, C, G, or T. Reference skips, the CIGAR `N` operator, and clips cover
+    nothing. A read's `N` bases, its no-calls, are counted apart, whatever their quality.
     """
 
     def __init__(
@@ -478,7 +486,11 @@ class Tabulator:
         segments = _segments(record)
         reverse = record.is_reverse
         counted, dropped, matched = self._alleles(record, segments, reference)
-        excluded: set[int] = set(self._uninformative(record, segments, reference))
+        uninformative, no_calls = self._uninformative(record, segments, reference)
+        excluded: set[int] = {*uninformative, *no_calls}
+        for pos in no_calls:
+            for ledger in touched:
+                ledger.add_no_call(pos)
         for start, end in dropped:
             excluded.update(range(start, end))
         for allele in counted:
@@ -502,31 +514,34 @@ class Tabulator:
 
     def _uninformative(
         self, record: AlignedSegment, segments: list[Segment], reference: _Reference
-    ) -> Iterator[int]:
-        """The aligned positions of a read below the floor, at a read N, or over a non-ACGT base."""
+    ) -> tuple[list[int], list[int]]:
+        """The aligned positions of a read under the floor or over a non-ACGT base, and its Ns."""
         sequence: str = record.query_sequence or ""
         qualities = query_qualities(record)
         low = None
         if qualities is not None and self.min_base_quality > 0:
             low = bytes(qualities).translate(self._low_quality)
+        uninformative: list[int] = []
+        no_calls: list[int] = []
         for operator, ref_pos, query, length in segments:
             if operator != CMATCH:
                 continue
             end = query + length
             at = sequence.find("N", query, end)
             while at >= 0:
-                yield ref_pos + at - query
+                no_calls.append(ref_pos + at - query)
                 at = sequence.find("N", at + 1, end)
             if low is not None:
                 at = low.find(1, query, end)
                 while at >= 0:
-                    yield ref_pos + at - query
+                    uninformative.append(ref_pos + at - query)
                     at = low.find(1, at + 1, end)
             bases = reference.get(ref_pos, ref_pos + length)
             if bases.strip("ACGT"):
-                yield from (
+                uninformative.extend(
                     ref_pos + offset for offset, base in enumerate(bases) if base not in ACGT
                 )
+        return uninformative, no_calls
 
 
 def _touched(

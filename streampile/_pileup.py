@@ -26,7 +26,10 @@ MISSING_BASE_QUALITY: Final[int] = 255
 
 
 class PileupReadType(StrEnum):
-    """What a read holds at a pileup's position."""
+    """What a read holds at a pileup's position.
+
+    A `skip` is a reference skip, the CIGAR `N` operator, not an `N` base, which is a `base`.
+    """
 
     base = auto()
     deletion = auto()
@@ -43,12 +46,11 @@ SKIP = PileupReadType.skip
 class PileupRead(NamedTuple):
     """One read at one pileup position.
 
-    A read holding a base, a deletion, or a reference skip (an `N` operator) at a position appears
-    once. A read with an insertion right after the position appears again as an insertion entry,
-    as does a read whose alignment opens with an insertion, at the position before its first
-    aligned base. So an insertion at either end of an alignment is reported: htslib reports only
-    one that closes an alignment, and fgbio only one that opens it, at offset 0 even after a
-    soft clip.
+    A read holding a base, a deletion, or a reference skip (the CIGAR `N` operator) at a position
+    appears once. A read with an insertion right after the position appears again as an insertion
+    entry, as does a read whose alignment opens with an insertion, at the position before its first
+    aligned base. So an insertion at either end of an alignment is reported: htslib reports only one
+    that closes an alignment, and fgbio only one that opens it, at offset 0 even after a soft clip.
 
     A skip entry holds no base, no quality, and no query offset. htslib flags the same entry as
     both `is_del` and `is_refskip` and gives it the offset and quality of the read's next base;
@@ -103,13 +105,18 @@ class PileupRead(NamedTuple):
         return self.pileup_type is PileupReadType.deletion
 
     @property
+    def is_no_call(self) -> bool:
+        """Whether the read holds an `N` base, a no-call, at the position."""
+        return self.base == "N"
+
+    @property
     def is_ins(self) -> bool:
         """Whether this entry is an insertion right after the position."""
         return self.pileup_type is PileupReadType.insertion
 
     @property
     def is_refskip(self) -> bool:
-        """Whether the read skips over the position with an `N` operator."""
+        """Whether the read skips over the position, with the CIGAR `N` operator."""
         return self.pileup_type is PileupReadType.skip
 
     @property
@@ -167,8 +174,8 @@ def pileup_entries(footprints: Iterable[Footprint], pos: int) -> tuple[PileupRea
 class Pileup:
     """The reads at one reference position.
 
-    Reads with an insertion right after the position are included as insertion entries, so one
-    read can have two entries. Reads that skip over the position with an `N` operator are included
+    Reads with an insertion right after the position are included as insertion entries, so one read
+    can have two entries. Reads that skip over the position with the CIGAR `N` operator are included
     as skip entries.
 
     Attributes:

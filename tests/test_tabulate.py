@@ -162,13 +162,14 @@ def test_tabulate_the_fixture_by_hand() -> None:
     sites = sites_of([("chr1", 0, 60)], min_base_quality=30, min_mapping_quality=20)
     assert len(sites) == 60
     assert sites["chr1", 1] == TabulatedBase(
-        contig="chr1", pos=1, ref="A", depth=1, ref_reads=1, ref_fwd=1, ref_rev=0
+        contig="chr1", pos=1, ref="A", depth=1, no_calls=0, ref_reads=1, ref_fwd=1, ref_rev=0
     )
     assert sites["chr1", 11] == TabulatedBase(
         contig="chr1",
         pos=11,
         ref="A",
         depth=4,
+        no_calls=0,
         ref_reads=2,
         ref_fwd=2,
         ref_rev=0,
@@ -431,9 +432,9 @@ def test_each_read_is_counted_once_where_it_holds_a_base_or_deletion(
         assert_strands_add_up(sites)
         for site, spans, column in zip(sites, spanning(sites), columns, strict=True):
             assert site.depth == site.ref_reads + sum(site.alt_reads) + spans
-            assert site.depth <= sum(
-                entry.is_del or entry.base is not None for entry in column.pileups
-            )
+            assert site.no_calls == sum(entry.is_no_call for entry in column.pileups)
+            observed = sum(entry.is_del or entry.base is not None for entry in column.pileups)
+            assert site.depth + site.no_calls <= observed
 
 
 def test_a_read_that_spells_the_reference_across_an_insertion_and_deletion_is_a_reference_read(
@@ -503,3 +504,23 @@ def test_tabulate_reads_both_ends_of_reads_with_long_skips(tmp_path: Path) -> No
         (far + 11, {f"{chr1[far + 10]}>{mismatch}": 1})
     ]
     assert all(site.ref == chr1[site.pos - 1] for site in sites)
+
+
+def test_reads_with_n_bases_are_no_calls_and_iupac_reference_bases_count_no_reads(
+    tmp_path: Path,
+) -> None:
+    chr1 = "ACGTRCGTAC"
+    header = header_of({"chr1": chr1})
+    reads = [
+        record("n", 0, "8M", "ANGTACGT", header=header),
+        record("r", 0, "4M", "ACGT", header=header),
+    ]
+    sites = tabulated(tmp_path, chr1, reads, min_base_quality=30)
+    assert [site.depth for site in sites] == [2, 1, 2, 2, 0, 1, 1, 1, 0, 0]
+    assert [site.no_calls for site in sites] == [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+    assert (sites[1].ref, sites[1].ref_reads, sites[1].alts) == ("C", 1, ())
+    assert (sites[4].ref, sites[4].ref_reads, sites[4].alts) == ("R", 0, ())
+    with AlignmentFile(str(tmp_path / "reads.bam")) as alignments:
+        pileup = StreamingPileupBuilder(alignments).pileup("chr1", 1)
+    assert pileup.bases == ["N", "C"]
+    assert [entry.is_no_call for entry in pileup.pileups] == [True, False]
