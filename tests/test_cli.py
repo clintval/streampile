@@ -1,27 +1,37 @@
 import re
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pysam import AlignmentFile
 from pysam import FastaFile
 
+from streampile import TabulatedBase
 from streampile import TabulationReader
 from streampile import tabulate
 from streampile._cli import main
 
 from .records import DATA
 from .records import territory
+from .records import write_fasta
 
 README = Path(__file__).parent.parent / "README.md"
 
 
-def run(out: Path, *extra: str, intervals: Path = DATA / "territory.bed") -> int:
+def run(
+    out: Path,
+    *extra: str,
+    intervals: Path = DATA / "territory.bed",
+    bam: Path = DATA / "reads.bam",
+    ref: Path = DATA / "reference.fa",
+) -> int:
     return main([
         "tabulate",
         "--bam",
-        str(DATA / "reads.bam"),
+        str(bam),
         "--ref",
-        str(DATA / "reference.fa"),
+        str(ref),
         "--intervals",
         str(intervals),
         *extra,
@@ -73,6 +83,39 @@ def test_tabulate_refuses_an_index_on_a_plain_table(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="An index and threads need a BGZF path"):
         run(tmp_path / "counts.tsv", "--index", "tbi")
     assert not (tmp_path / "counts.tsv").exists()
+
+
+def test_tabulate_writes_nothing_for_a_territory_it_refuses(tmp_path: Path) -> None:
+    bed = tmp_path / "territory.bed"
+    bed.write_text("chr1\t0\t10\nchr2\t0\t10\n")
+    with FastaFile(str(DATA / "reference.fa")) as reference:
+        fasta = write_fasta(tmp_path / "chr1.fa", {"chr1": reference.fetch("chr1")})
+    with pytest.raises(ValueError, match="Contig chr2 is not in the reference."):
+        run(tmp_path / "counts.tsv.gz", "--index", "tbi", intervals=bed, ref=fasta)
+    assert not (tmp_path / "counts.tsv.gz").exists()
+    assert not (tmp_path / "counts.tsv.gz.tbi").exists()
+
+
+@pytest.mark.parametrize("name", ["counts.tsv", "counts.tsv.gz"])
+def test_a_failed_run_leaves_no_table_and_keeps_the_old_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    def tabulate_then_fail(*args: Any, **kwargs: Any) -> Iterator[TabulatedBase]:
+        yield next(tabulate(*args, **kwargs))
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr("streampile._cli.tabulate", tabulate_then_fail)
+    out = tmp_path / name
+    out.write_text("old")
+    index = ["--index", "tbi"] if name.endswith(".gz") else []
+    with pytest.raises(RuntimeError, match="disk full"):
+        run(out, *index)
+    assert [path.name for path in tmp_path.iterdir()] == [name]
+    assert out.read_text() == "old"
+
+
+def test_tabulate_writes_to_a_path_that_is_not_a_regular_file() -> None:
+    assert run(Path("/dev/null")) == 0
 
 
 def test_tabulate_reads_flags_in_any_base(tmp_path: Path) -> None:

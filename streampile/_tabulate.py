@@ -335,19 +335,26 @@ class Tabulator:
         )
 
     def tabulate(self, alignments: AlignmentFile, territory: Territory) -> Iterator[TabulatedBase]:
-        """Yield every base of a territory, covered or not.
+        """Iterate over every base of a territory, covered or not.
 
-        Bases come in the order of the alignment header's contigs, then by position.
+        Bases come in the order of the alignment header's contigs, then by position. Every contig
+        of the territory is checked against the alignment header and the reference when this is
+        called, before any base is read, so a refused territory leaves nothing half written.
 
         Args:
             alignments: an indexed, coordinate-sorted alignment file.
             territory: the bases to tabulate.
 
         Raises:
-            ValueError: if a contig of the territory is not in the alignment header.
+            ValueError: if a contig of the territory is not in the alignment header or the
+                reference, or has another length in each.
         """
-        for contig, spans in _by_header(alignments, territory):
-            yield from self._tabulate_contig(alignments, contig, spans)
+        contigs = _by_header(alignments, self.reference, territory)
+        return (
+            base
+            for contig, spans in contigs
+            for base in self._tabulate_contig(alignments, contig, spans)
+        )
 
     def alleles(self, record: AlignedSegment) -> tuple[list[Allele], list[tuple[int, int]]]:
         """The alleles a read is counted for, and the stretches of those it is not counted for.
@@ -530,18 +537,29 @@ def _add(ledgers: list[_Ledger], start: int, end: int, *, ref: bool) -> None:
 
 
 def _by_header(
-    alignments: AlignmentFile, territory: Territory
+    alignments: AlignmentFile, reference: FastaFile, territory: Territory
 ) -> list[tuple[str, list[tuple[int, int]]]]:
     """The spans of a territory, grouped by contig in the order of the alignment header.
 
     Raises:
-        ValueError: if a contig of the territory is not in the alignment header.
+        ValueError: if a contig of the territory is not in the alignment header or the
+            reference, or has another length in each.
     """
     by_contig: dict[str, list[tuple[int, int]]] = {}
     for span in territory:
-        if span.refname not in by_contig and alignments.get_tid(span.refname) < 0:
-            raise ValueError(f"Contig {span.refname} is not in the alignment header.")
-        by_contig.setdefault(span.refname, []).append((span.start, span.end))
+        contig = span.refname
+        if contig not in by_contig:
+            if alignments.get_tid(contig) < 0:
+                raise ValueError(f"Contig {contig} is not in the alignment header.")
+            if contig not in reference.references:
+                raise ValueError(f"Contig {contig} is not in the reference.")
+            length = alignments.get_reference_length(contig)
+            if reference.get_reference_length(contig) != length:
+                raise ValueError(
+                    f"Contig {contig} has {reference.get_reference_length(contig)} bases in the"
+                    + f" reference but {length} in the alignment header."
+                )
+        by_contig.setdefault(contig, []).append((span.start, span.end))
     return sorted(by_contig.items(), key=lambda contig: alignments.get_tid(contig[0]))
 
 
@@ -554,10 +572,11 @@ def tabulate(
     min_mapping_quality: int = 0,
     exclude_flags: int = DEFAULT_EXCLUDE_FLAGS,
 ) -> Iterator[TabulatedBase]:
-    """Yield every base of a territory with its depth and the reads of each allele.
+    """Iterate over every base of a territory with its depth and the reads of each allele.
 
     See `Tabulator` for which reads count where. Bases come in the order of the alignment
-    header's contigs, then by position.
+    header's contigs, then by position. The territory is checked when this is called, as in
+    `Tabulator.tabulate`.
 
     Args:
         alignments: an indexed, coordinate-sorted alignment file.
@@ -568,6 +587,10 @@ def tabulate(
         min_mapping_quality: the lowest mapping quality of a counted read.
         exclude_flags: reads with any of these SAM flags are not counted: by default, secondary,
             QC-fail, duplicate, and supplementary reads.
+
+    Raises:
+        ValueError: if a contig of the territory is not in the alignment header or the
+            reference, or has another length in each.
     """
     tabulator = Tabulator(
         reference,
@@ -575,4 +598,4 @@ def tabulate(
         min_mapping_quality=min_mapping_quality,
         exclude_flags=exclude_flags,
     )
-    yield from tabulator.tabulate(alignments, territory)
+    return tabulator.tabulate(alignments, territory)

@@ -207,6 +207,20 @@ def test_tabulate_refuses_a_contig_not_in_the_header_and_skips_empty_spans() -> 
     assert sites_of([("chr1", 10, 10)]) == {}
 
 
+def test_tabulate_checks_the_territory_when_called(tmp_path: Path) -> None:
+    short = write_fasta(tmp_path / "short.fa", {"chr1": CHR1[:50], "chr2": "A" * 40})
+    only_chr1 = write_fasta(tmp_path / "chr1.fa", {"chr1": CHR1})
+    refused = [
+        (DATA / "reference.fa", ("chr3", 0, 10), "Contig chr3 is not in the alignment header."),
+        (only_chr1, ("chr2", 0, 10), "Contig chr2 is not in the reference."),
+        (short, ("chr1", 0, 10), "Contig chr1 has 50 bases in the reference but 60 in the"),
+    ]
+    with AlignmentFile(str(DATA / "reads.bam")) as reads:
+        for path, span, message in refused:
+            with FastaFile(str(path)) as fasta, pytest.raises(ValueError, match=message):
+                _ = tabulate(reads, fasta, territory(("chr2", 0, 5), span))
+
+
 def test_tabulate_counts_reads_spanning_several_spans(tmp_path: Path, reference: FastaFile) -> None:
     reads = [record("long", 0, "30M", CHR1[0:10] + "T" + CHR1[11:30], header=HEADER)]
     path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)

@@ -1,5 +1,8 @@
 import argparse
+import os
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 from bedspec import Bed3N
@@ -15,9 +18,32 @@ from streampile._table import TabulationWriter
 from streampile._tabulate import tabulate
 
 
+@contextmanager
+def _staged(out: Path, index: IndexFormat | None) -> Generator[Path, None, None]:
+    """Yield a hidden path beside `out` that replaces it, with its index, only on success.
+
+    On failure the hidden files are removed, so a table that looks complete is complete. A path
+    that is not a regular file, such as `/dev/stdout`, is written in place.
+    """
+    if out.exists() and not out.is_file():
+        yield out
+        return
+    staged = out.with_name(f".{os.getpid()}.{out.name}")
+    suffixes = [""] if index is None else ["", f".{index.name.lower()}"]
+    try:
+        yield staged
+    except BaseException:
+        for suffix in suffixes:
+            Path(f"{staged}{suffix}").unlink(missing_ok=True)
+        raise
+    for suffix in suffixes:
+        _ = Path(f"{staged}{suffix}").replace(f"{out}{suffix}")
+
+
 def _tabulate(args: argparse.Namespace) -> int:
     with BedReader.from_path[Bed3N](args.intervals) as features:
         territory = Territory(features)
+    index = None if args.index is None else IndexFormat[args.index.upper()]
     with (
         AlignmentFile(str(args.bam), threads=args.threads) as alignments,
         FastaFile(str(args.ref)) as reference,
@@ -31,11 +57,12 @@ def _tabulate(args: argparse.Namespace) -> int:
             exclude_flags=args.exclude_flags,
         )
         bgzf = args.out.suffix in BGZF_SUFFIXES
-        with TabulationWriter.from_path(
-            args.out,
-            index=None if args.index is None else IndexFormat[args.index.upper()],
-            threads=args.threads if bgzf else 1,
-        ) as writer:
+        with (
+            _staged(args.out, index) as out,
+            TabulationWriter.from_path(
+                out, index=index, threads=args.threads if bgzf else 1
+            ) as writer,
+        ):
             writer.write_header()
             for base in bases:
                 writer.write(base)
