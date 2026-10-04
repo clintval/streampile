@@ -56,13 +56,18 @@ def sites_of(
 
 
 def tabulated(
-    tmp_path: Path, chr1: str, reads: list[AlignedSegment], **options: int
+    tmp_path: Path,
+    chr1: str,
+    reads: list[AlignedSegment],
+    *spans: tuple[str, int, int],
+    **options: int,
 ) -> list[TabulatedBase]:
-    """Tabulate reads, made with `header_of({"chr1": chr1})`, over the whole of `chr1`."""
+    """Tabulate reads on a reference of one contig, `chr1`, over `spans` or the whole contig."""
     fasta = write_fasta(tmp_path / "reference.fa", {"chr1": chr1})
     path = write_bam(tmp_path / "reads.bam", reads, header=header_of({"chr1": chr1}))
+    spans = spans or (("chr1", 0, len(chr1)),)
     with AlignmentFile(str(path)) as alignments, FastaFile(str(fasta)) as reference:
-        return list(tabulate(alignments, reference, territory(("chr1", 0, len(chr1))), **options))
+        return list(tabulate(alignments, reference, territory(*spans), **options))
 
 
 def spanning(sites: list[TabulatedBase]) -> list[int]:
@@ -247,64 +252,45 @@ def test_tabulate_counts_long_spans_in_pieces_as_one(monkeypatch: pytest.MonkeyP
     assert sites_of(spans, min_base_quality=30) == whole
 
 
-def test_tabulate_counts_reads_spanning_several_spans(tmp_path: Path, reference: FastaFile) -> None:
+def test_tabulate_counts_reads_spanning_several_spans(tmp_path: Path) -> None:
     reads = [record("long", 0, "30M", CHR1[0:10] + "T" + CHR1[11:30], header=HEADER)]
-    path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
-    with AlignmentFile(str(path)) as alignments:
-        sites = list(
-            tabulate(
-                alignments, reference, territory(("chr1", 0, 5), ("chr1", 8, 12), ("chr1", 25, 28))
-            )
-        )
+    sites = tabulated(tmp_path, CHR1, reads, ("chr1", 0, 5), ("chr1", 8, 12), ("chr1", 25, 28))
     assert [site.depth for site in sites] == [1] * 12
     assert [site.pos for site in sites if site.alts] == [11]
 
 
 def test_tabulate_counts_bases_of_any_quality_but_not_qc_fail_reads_by_default(
-    tmp_path: Path, reference: FastaFile
+    tmp_path: Path,
 ) -> None:
     reads = [
         record("q0", 0, "4M", CHR1[0:4], quals=[0] * 4, header=HEADER),
         record("qcfail", 0, "4M", CHR1[0:4], flag=512, header=HEADER),
     ]
-    path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
-    with AlignmentFile(str(path)) as alignments:
-        sites = list(tabulate(alignments, reference, territory(("chr1", 0, 4))))
+    sites = tabulated(tmp_path, CHR1, reads, ("chr1", 0, 4))
     assert [(site.depth, site.ref_reads) for site in sites] == [(1, 1)] * 4
 
 
-def test_tabulate_reads_base_qualities_of_95_and_more(tmp_path: Path, reference: FastaFile) -> None:
+def test_tabulate_reads_base_qualities_of_95_and_more(tmp_path: Path) -> None:
     quals = [40, 40, 96, 40, 120, 40, 10, 40]
     reads = [record("r", 0, "8M", CHR1[0:2] + "T" + CHR1[3:8], quals=quals, header=HEADER)]
-    path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
-    with AlignmentFile(str(path)) as alignments:
-        sites = list(
-            tabulate(alignments, reference, territory(("chr1", 0, 8)), min_base_quality=30)
-        )
+    sites = tabulated(tmp_path, CHR1, reads, ("chr1", 0, 8), min_base_quality=30)
+    with AlignmentFile(str(tmp_path / "reads.bam")) as alignments:
         assert StreamingPileupBuilder(alignments.fetch("chr1")).pileup("chr1", 2).qualities == [96]
     assert [site.depth for site in sites] == [1, 1, 1, 1, 1, 1, 0, 1]
     assert [(site.pos, alleles(site)) for site in sites if site.alts] == [(3, {"G>T": 1})]
 
 
-def test_tabulate_counts_reads_with_no_stored_qualities_at_every_floor(
-    tmp_path: Path, reference: FastaFile
-) -> None:
+def test_tabulate_counts_reads_with_no_stored_qualities_at_every_floor(tmp_path: Path) -> None:
     reads = [
         record("noquals", 0, "10M", CHR1[0:5] + "T" + CHR1[6:10], quals="*", header=HEADER),
         record("nobases", 0, "10M", "*", header=HEADER),
     ]
-    path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
-    with AlignmentFile(str(path)) as alignments:
-        sites = list(
-            tabulate(alignments, reference, territory(("chr1", 0, 10)), min_base_quality=60)
-        )
+    sites = tabulated(tmp_path, CHR1, reads, ("chr1", 0, 10), min_base_quality=60)
     assert [site.depth for site in sites] == [1] * 10
     assert [(site.pos, alleles(site)) for site in sites if site.alts] == [(6, {"G>T": 1})]
 
 
-def test_tabulate_agrees_with_counting_bases_in_pileups(
-    tmp_path: Path, reference: FastaFile
-) -> None:
+def test_tabulate_agrees_with_counting_bases_in_pileups(tmp_path: Path) -> None:
     reads = [
         record("a", 0, "25M", CHR1[0:7] + "T" + CHR1[8:25], header=HEADER),
         record(
@@ -318,13 +304,9 @@ def test_tabulate_agrees_with_counting_bases_in_pileups(
         record("c", 5, "2S20M", "GG" + CHR1[5:15] + "C" + CHR1[16:25], header=HEADER),
         record("d", 10, "25M", CHR1[10:35], flag=1024, header=HEADER),
     ]
-    path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
-    with AlignmentFile(str(path)) as alignments:
-        sites = list(
-            tabulate(alignments, reference, territory(("chr1", 0, 40)), min_base_quality=30)
-        )
+    sites = tabulated(tmp_path, CHR1, reads, ("chr1", 0, 40), min_base_quality=30)
     with (
-        AlignmentFile(str(path)) as alignments,
+        AlignmentFile(str(tmp_path / "reads.bam")) as alignments,
         StreamingPileupBuilder(alignments, min_base_quality=30) as builder,
     ):
         columns = list(builder.columns("chr1", 0, 40))
@@ -493,11 +475,7 @@ def test_tabulate_reads_both_ends_of_reads_with_long_skips(tmp_path: Path) -> No
             header=header,
         ),
     ]
-    fasta = write_fasta(tmp_path / "reference.fa", {"chr1": chr1})
-    path = write_bam(tmp_path / "reads.bam", reads, header=header)
-    with AlignmentFile(str(path)) as alignments, FastaFile(str(fasta)) as reference:
-        spans = territory(("chr1", 100, 120), ("chr1", far - 10, far + 20))
-        sites = list(tabulate(alignments, reference, spans))
+    sites = tabulated(tmp_path, chr1, reads, ("chr1", 100, 120), ("chr1", far - 10, far + 20))
     depths = [1, 2, 1, 0] + [0, 0, 1, 2, 1, 0]
     assert [site.depth for site in sites] == [depth for depth in depths for _ in range(5)]
     assert [(site.pos, alleles(site)) for site in sites if site.alts] == [
