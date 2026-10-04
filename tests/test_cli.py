@@ -174,7 +174,7 @@ def test_tabulate_writes_to_a_path_that_is_not_a_regular_file() -> None:
 def test_tabulate_reads_flags_in_any_base(tmp_path: Path) -> None:
     out = tmp_path / "counts.tsv"
     assert run(out, "--exclude-flags", "0x0") == 0
-    assert rows(out)[0] == "chr1\t21\tT\t5\t5\t\t\t"
+    assert rows(out)[0] == "chr1\t21\tT\t5\t5\t3\t2\t\t\t\t\t"
 
 
 def test_a_command_is_required(capsys: pytest.CaptureFixture[str]) -> None:

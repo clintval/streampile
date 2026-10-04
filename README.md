@@ -96,6 +96,7 @@ Like the builder, it leaves out secondary, supplementary, duplicate, and QC-fail
 ```
 
 The alleles anchored at a base sit in parallel tuples, as VCF pairs `ALT` with `AD`: allele `i` is `alt_refs[i]` to `alts[i]`, seen in `alt_reads[i]` reads.
+Reads are also split by the strand they are mapped to: `ref_reads` is `ref_fwd + ref_rev`, and `alt_reads[i]` is `alt_fwd[i] + alt_rev[i]`.
 A read counts toward `depth` at a base when it holds an aligned base there at the quality floor, or when the base lies inside an allele it was counted for, such as the deleted bases of a deletion or the second base of an MNV.
 It is counted once: as a reference read, for the allele it has anchored at the base, or in `depth` alone.
 As in the builder's `filtered_depth` and in htslib, a deletion is judged by the quality of the read's next base.
@@ -141,11 +142,11 @@ streampile tabulate \
 ##min_base_quality=30
 ##min_mapping_quality=20
 ##exclude_flags=0xf00
-#contig	pos	ref	depth	ref_reads	alt_refs	alts	alt_reads
-chr1	21	T	5	5			
-chr1	22	G	5	5			
-chr1	23	C	4	3	CA	C	1
-chr1	24	A	4	3			
+#contig	pos	ref	depth	ref_reads	ref_fwd	ref_rev	alt_refs	alts	alt_reads	alt_fwd	alt_rev
+chr1	21	T	5	5	3	2					
+chr1	22	G	5	5	3	2					
+chr1	23	C	4	3	2	1	CA	C	1	0	1
+chr1	24	A	4	3	2	1					
 ```
 
 A table whose path ends in `.gz` or `.bgz` is written as BGZF with [pybgzf](https://github.com/clintval/pybgzf), and `--index tbi` or `--index csi` indexes it by contig and position as it is written.

@@ -59,38 +59,39 @@ class _Reference:
 
 @final
 class _Ledger:
-    """The counts of one territory span while reads are added to it."""
+    """The counts of one territory span while reads are added to it, by strand."""
 
-    __slots__ = ("alleles", "depth", "end", "ref_reads", "start")
+    __slots__ = ("alleles", "depth", "end", "ref_fwd", "ref_rev", "start")
 
     def __init__(self, start: int, end: int) -> None:
         self.start: int = start
         self.end: int = end
         self.depth: list[int] = [0] * (end - start + 1)
-        self.ref_reads: list[int] = [0] * (end - start + 1)
-        self.alleles: dict[int, dict[tuple[str, str], int]] = {}
+        self.ref_fwd: list[int] = [0] * (end - start + 1)
+        self.ref_rev: list[int] = [0] * (end - start + 1)
+        self.alleles: dict[int, dict[tuple[str, str], list[int]]] = {}
 
-    def add(self, start: int, end: int, *, ref: bool) -> None:
+    def add(self, start: int, end: int, *, ref: bool, reverse: bool) -> None:
         start, end = max(start, self.start), min(end, self.end)
         if start < end:
             self.depth[start - self.start] += 1
             self.depth[end - self.start] -= 1
             if ref:
-                self.ref_reads[start - self.start] += 1
-                self.ref_reads[end - self.start] -= 1
+                counts = self.ref_rev if reverse else self.ref_fwd
+                counts[start - self.start] += 1
+                counts[end - self.start] -= 1
 
-    def add_allele(self, pos: int, key: tuple[str, str]) -> None:
+    def add_allele(self, pos: int, key: tuple[str, str], *, reverse: bool) -> None:
         if self.start <= pos < self.end:
-            counts = self.alleles.setdefault(pos, {})
-            counts[key] = counts.get(key, 0) + 1
+            self.alleles.setdefault(pos, {}).setdefault(key, [0, 0])[reverse] += 1
 
     def bases(self, contig: str, reference: _Reference) -> Iterator[TabulatedBase]:
         bases = reference.get(self.start, self.end)
-        depth = 0
-        ref_reads = 0
+        depth = ref_fwd = ref_rev = 0
         for offset, base in enumerate(bases):
             depth += self.depth[offset]
-            ref_reads += self.ref_reads[offset]
+            ref_fwd += self.ref_fwd[offset]
+            ref_rev += self.ref_rev[offset]
             counts = self.alleles.get(self.start + offset)
             if counts is None:
                 yield TabulatedBase(
@@ -98,7 +99,9 @@ class _Ledger:
                     pos=self.start + offset + 1,
                     ref=base,
                     depth=depth,
-                    ref_reads=ref_reads,
+                    ref_reads=ref_fwd + ref_rev,
+                    ref_fwd=ref_fwd,
+                    ref_rev=ref_rev,
                 )
                 continue
             alleles = sorted(counts.items(), key=_by_reads)
@@ -107,15 +110,19 @@ class _Ledger:
                 pos=self.start + offset + 1,
                 ref=base,
                 depth=depth,
-                ref_reads=ref_reads,
+                ref_reads=ref_fwd + ref_rev,
+                ref_fwd=ref_fwd,
+                ref_rev=ref_rev,
                 alt_refs=tuple(allele[0] for allele, _ in alleles),
                 alts=tuple(allele[1] for allele, _ in alleles),
-                alt_reads=tuple(reads for _, reads in alleles),
+                alt_reads=tuple(fwd + rev for _, (fwd, rev) in alleles),
+                alt_fwd=tuple(fwd for _, (fwd, _) in alleles),
+                alt_rev=tuple(rev for _, (_, rev) in alleles),
             )
 
 
-def _by_reads(item: tuple[tuple[str, str], int]) -> tuple[int, str, str]:
-    return -item[1], item[0][0], item[0][1]
+def _by_reads(item: tuple[tuple[str, str], list[int]]) -> tuple[int, str, str]:
+    return -sum(item[1]), item[0][0], item[0][1]
 
 
 @dataclass(frozen=True, slots=True)
@@ -469,28 +476,29 @@ class Tabulator:
         if not touched:
             return
         segments = _segments(record)
+        reverse = record.is_reverse
         counted, dropped, matched = self._alleles(record, segments, reference)
         excluded: set[int] = set(self._uninformative(record, segments, reference))
         for start, end in dropped:
             excluded.update(range(start, end))
         for allele in counted:
             after = allele.pos + len(allele.ref)
-            _add(touched, allele.start, allele.pos, ref=True)
-            _add(touched, allele.pos, after, ref=False)
-            _add(touched, after, allele.end, ref=True)
+            _add(touched, allele.start, allele.pos, ref=True, reverse=reverse)
+            _add(touched, allele.pos, after, ref=False, reverse=reverse)
+            _add(touched, after, allele.end, ref=True, reverse=reverse)
             excluded.update(range(allele.start, allele.end))
             for ledger in touched:
-                ledger.add_allele(allele.pos, (allele.ref, allele.alt))
+                ledger.add_allele(allele.pos, (allele.ref, allele.alt), reverse=reverse)
         for start, end in matched:
-            _add(touched, start, end, ref=True)
+            _add(touched, start, end, ref=True, reverse=reverse)
             excluded.update(range(start, end))
         for operator, block_start, _, length in segments:
             if operator == CMATCH:
                 cursor = block_start
                 for pos in sorted(p for p in excluded if block_start <= p < block_start + length):
-                    _add(touched, cursor, pos, ref=True)
+                    _add(touched, cursor, pos, ref=True, reverse=reverse)
                     cursor = pos + 1
-                _add(touched, cursor, block_start + length, ref=True)
+                _add(touched, cursor, block_start + length, ref=True, reverse=reverse)
 
     def _uninformative(
         self, record: AlignedSegment, segments: list[Segment], reference: _Reference
@@ -542,9 +550,9 @@ def _touched(
     return touched
 
 
-def _add(ledgers: list[_Ledger], start: int, end: int, *, ref: bool) -> None:
+def _add(ledgers: list[_Ledger], start: int, end: int, *, ref: bool, reverse: bool) -> None:
     for ledger in ledgers:
-        ledger.add(start, end, ref=ref)
+        ledger.add(start, end, ref=ref, reverse=reverse)
 
 
 def _contig_length(alignments: AlignmentFile, reference: FastaFile, contig: str) -> int:

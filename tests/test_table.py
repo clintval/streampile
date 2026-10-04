@@ -14,28 +14,51 @@ from streampile import TabulationWriter
 
 VERSION = version("streampile")
 
+HEADER = "\t".join([
+    "#contig",
+    "pos",
+    "ref",
+    "depth",
+    "ref_reads",
+    "ref_fwd",
+    "ref_rev",
+    "alt_refs",
+    "alts",
+    "alt_reads",
+    "alt_fwd",
+    "alt_rev",
+])
+
 BASES = [
-    TabulatedBase(contig="chr1", pos=1, ref="A", depth=0, ref_reads=0),
+    TabulatedBase(contig="chr1", pos=1, ref="A", depth=0, ref_reads=0, ref_fwd=0, ref_rev=0),
     TabulatedBase(
         contig="chr1",
         pos=2,
         ref="C",
         depth=9,
         ref_reads=5,
+        ref_fwd=3,
+        ref_rev=2,
         alt_refs=("C", "CA"),
         alts=("T", "C"),
         alt_reads=(3, 1),
+        alt_fwd=(2, 0),
+        alt_rev=(1, 1),
     ),
-    TabulatedBase(contig="chr1", pos=3, ref="A", depth=9, ref_reads=8),
+    TabulatedBase(contig="chr1", pos=3, ref="A", depth=9, ref_reads=8, ref_fwd=4, ref_rev=4),
     TabulatedBase(
         contig="chr2",
         pos=7,
         ref="G",
         depth=4,
         ref_reads=3,
+        ref_fwd=3,
+        ref_rev=0,
         alt_refs=("G",),
         alts=("GTT",),
         alt_reads=(1,),
+        alt_fwd=(0,),
+        alt_rev=(1,),
     ),
 ]
 
@@ -53,9 +76,9 @@ def test_a_table_round_trips_with_empty_alleles(tmp_path: Path) -> None:
     write(tmp_path / "bases.tsv", BASES)
     lines = (tmp_path / "bases.tsv").read_text().splitlines()
     assert lines[:2] == ["##streampile-tabulation=1", f"##streampile-version={VERSION}"]
-    assert lines[2] == "#contig\tpos\tref\tdepth\tref_reads\talt_refs\talts\talt_reads"
-    assert lines[3] == "chr1\t1\tA\t0\t0\t\t\t"
-    assert lines[4] == "chr1\t2\tC\t9\t5\tC,CA\tT,C\t3,1"
+    assert lines[2] == HEADER
+    assert lines[3] == "chr1\t1\tA\t0\t0\t0\t0\t\t\t\t\t"
+    assert lines[4] == "chr1\t2\tC\t9\t5\t3\t2\tC,CA\tT,C\t3,1\t2,0\t1,1"
     assert list(TabulationReader.from_path(tmp_path / "bases.tsv")) == BASES
 
 
@@ -77,10 +100,10 @@ def test_an_index_finds_the_rows_of_a_region(tmp_path: Path, index: IndexFormat)
     write(path, BASES, index=index)
     with pybgzf.IndexedReader(path) as reader:
         assert list(reader.query("chr1", 1, 3)) == [
-            "chr1\t2\tC\t9\t5\tC,CA\tT,C\t3,1",
-            "chr1\t3\tA\t9\t8\t\t\t",
+            "chr1\t2\tC\t9\t5\t3\t2\tC,CA\tT,C\t3,1\t2,0\t1,1",
+            "chr1\t3\tA\t9\t8\t4\t4\t\t\t\t\t",
         ]
-        assert list(reader.query("chr2", 0, 100)) == ["chr2\t7\tG\t4\t3\tG\tGTT\t1"]
+        assert list(reader.query("chr2", 0, 100)) == ["chr2\t7\tG\t4\t3\t3\t0\tG\tGTT\t1\t0\t1"]
 
 
 def test_an_indexed_table_refuses_rows_out_of_order(tmp_path: Path) -> None:
@@ -108,13 +131,13 @@ def test_the_metadata_and_header_come_first_and_once(
         f"##streampile-version={VERSION}",
         "##min_base_quality=30",
         "##territory=territory.bed",
-        "#contig\tpos\tref\tdepth\tref_reads\talt_refs\talts\talt_reads",
+        HEADER,
         "## made by streampile",
     ]
     assert len(lines) == 6 + len(BASES)
     if index is not None:
         with pybgzf.IndexedReader(path) as reader:
-            assert list(reader.query("chr1", 0, 1)) == ["chr1\t1\tA\t0\t0\t\t\t"]
+            assert list(reader.query("chr1", 0, 1)) == ["chr1\t1\tA\t0\t0\t0\t0\t\t\t\t\t"]
     comments: list[Comment] = []
     table = TabulationReader.from_path(path, on_comment=comments.append)
     assert table.metadata == {

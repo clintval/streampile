@@ -44,6 +44,9 @@ class TabulatedBase:
     `alts[i]`, and `alt_reads[i]` reads, e.g. `C`, `T` for an SNV, `CA`, `C` for a deletion, or
     `C`, `CT` for an insertion.
 
+    Reads are split by the strand they are mapped to, so `ref_reads` is `ref_fwd + ref_rev`, and
+    `alt_reads[i]` is `alt_fwd[i] + alt_rev[i]`.
+
     Within a format version, columns are only ever appended, each keeping its meaning, so a table
     written by a later streampile reads here, with the columns this version does not know kept,
     as text, in `extra`.
@@ -54,9 +57,13 @@ class TabulatedBase:
         ref: the upper-cased reference base.
         depth: the number of informative reads.
         ref_reads: the number of informative reads with no allele at or spanning the base.
+        ref_fwd: the reference reads mapped to the forward strand.
+        ref_rev: the reference reads mapped to the reverse strand.
         alt_refs: the reference bases of each allele.
         alts: the alternate bases of each allele.
         alt_reads: the number of reads of each allele.
+        alt_fwd: the reads of each allele mapped to the forward strand.
+        alt_rev: the reads of each allele mapped to the reverse strand.
         extra: the columns after the known ones, as text, from a table written by a later
             version within the same format version, written back after the known columns.
     """
@@ -66,9 +73,13 @@ class TabulatedBase:
     ref: str
     depth: int
     ref_reads: int
+    ref_fwd: int
+    ref_rev: int
     alt_refs: tuple[str, ...] = ()
     alts: tuple[str, ...] = ()
     alt_reads: tuple[int, ...] = ()
+    alt_fwd: tuple[int, ...] = ()
+    alt_rev: tuple[int, ...] = ()
     extra: ExtraColumns = ()
 
 

@@ -77,6 +77,14 @@ def spanning(sites: list[TabulatedBase]) -> list[int]:
     return [counts[site.pos] for site in sites]
 
 
+def assert_strands_add_up(sites: list[TabulatedBase]) -> None:
+    for site in sites:
+        assert site.ref_fwd + site.ref_rev == site.ref_reads
+        assert len(site.alt_fwd) == len(site.alt_rev) == len(site.alt_reads)
+        for fwd, rev, reads in zip(site.alt_fwd, site.alt_rev, site.alt_reads, strict=True):
+            assert fwd + rev == reads
+
+
 def alleles_of(
     tabulator: Tabulator, start: int, cigar: str, bases: str, quals: list[int] | None = None
 ) -> list[tuple[int, str]]:
@@ -153,16 +161,22 @@ def test_alleles_need_a_mapped_read(reference: FastaFile) -> None:
 def test_tabulate_the_fixture_by_hand() -> None:
     sites = sites_of([("chr1", 0, 60)], min_base_quality=30, min_mapping_quality=20)
     assert len(sites) == 60
-    assert sites["chr1", 1] == TabulatedBase(contig="chr1", pos=1, ref="A", depth=1, ref_reads=1)
+    assert sites["chr1", 1] == TabulatedBase(
+        contig="chr1", pos=1, ref="A", depth=1, ref_reads=1, ref_fwd=1, ref_rev=0
+    )
     assert sites["chr1", 11] == TabulatedBase(
         contig="chr1",
         pos=11,
         ref="A",
         depth=4,
         ref_reads=2,
+        ref_fwd=2,
+        ref_rev=0,
         alt_refs=("A", "AC"),
         alts=("T", "GG"),
         alt_reads=(1, 1),
+        alt_fwd=(1, 0),
+        alt_rev=(0, 1),
     )
     assert (sites["chr1", 12].depth, sites["chr1", 12].ref_reads) == (4, 3)
     assert (sites["chr1", 13].depth, sites["chr1", 13].ref_reads) == (3, 3)
@@ -173,11 +187,14 @@ def test_tabulate_the_fixture_by_hand() -> None:
     assert [sites["chr1", pos].depth for pos in range(45, 51)] == [1, 3, 3, 3, 3, 3]
 
 
-def test_tabulate_counts_every_informative_read_once() -> None:
+def test_tabulate_counts_every_informative_read_once_on_its_strand() -> None:
     sites = sites_of([("chr1", 0, 60), ("chr2", 0, 40)], min_base_quality=30)
     spanning = {("chr1", 12): 1, ("chr1", 24): 1}
     for key, site in sites.items():
         assert site.depth == site.ref_reads + sum(site.alt_reads) + spanning.get(key, 0)
+    assert sum(site.ref_fwd for site in sites.values()) > 0
+    assert sum(site.ref_rev for site in sites.values()) > 0
+    assert_strands_add_up(list(sites.values()))
 
 
 def test_tabulate_leaves_out_reads_by_flag_and_mapping_quality() -> None:
@@ -411,6 +428,7 @@ def test_each_read_is_counted_once_where_it_holds_a_base_or_deletion(
         sites = tabulated(tmp_path, chr1, reads, min_base_quality=min_base_quality)
         with AlignmentFile(str(tmp_path / "reads.bam")) as alignments:
             columns = list(StreamingPileupBuilder(alignments).columns("chr1", 0, len(chr1)))
+        assert_strands_add_up(sites)
         for site, spans, column in zip(sites, spanning(sites), columns, strict=True):
             assert site.depth == site.ref_reads + sum(site.alt_reads) + spans
             assert site.depth <= sum(
