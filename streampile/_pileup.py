@@ -19,6 +19,9 @@ from streampile._footprint import is_placed
 DEFAULT_MIN_BASE_QUALITY: Final[int] = 13
 """The default minimum base quality of a pileup, the same as pysam's."""
 
+DEFAULT_EXCLUDE_FLAGS: Final[int] = 0xF00
+"""Secondary, QC-fail, duplicate, and supplementary reads, which are left out by default."""
+
 MISSING_BASE_QUALITY: Final[int] = 255
 """The base quality of every base of a read with no stored qualities (QUAL `*`), as in htslib."""
 

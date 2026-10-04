@@ -25,7 +25,7 @@ pip install streampile
 A `StreamingPileupBuilder` reads coordinate-sorted records once, from start to finish, and piles them up at the positions you ask for.
 A position may repeat or move forward, but never back.
 Positions are 0-based, as in pysam.
-By default it leaves out secondary, supplementary, duplicate, and QC-fail reads, where htslib keeps supplementary reads and fgbio keeps QC-fail reads, and its filtered views leave out bases under quality 13, as htslib's do.
+It filters reads as `tabulate` does, by `min_mapping_quality` and `exclude_flags`, and by default leaves out secondary, supplementary, duplicate, and QC-fail reads, where htslib keeps supplementary reads and fgbio keeps QC-fail reads. Its filtered views leave out bases under quality 13, as htslib's do.
 
 ```pycon
 >>> from pysam import AlignmentFile

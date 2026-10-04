@@ -35,13 +35,7 @@ def ours(path: Path, contig: str, length: int, min_base_quality: int) -> list[li
     leading: list[tuple[int, str, int]] = []
     with (
         AlignmentFile(str(path)) as reads,
-        StreamingPileupBuilder(
-            reads,
-            include_secondary=True,
-            include_supplementary=True,
-            include_duplicate=True,
-            include_qcfail=True,
-        ) as builder,
+        StreamingPileupBuilder(reads, exclude_flags=0) as builder,
     ):
         for pileup in builder.columns(contig, 0, length):
             anchored = {id(entry.alignment) for entry in pileup.pileups if not entry.is_ins}

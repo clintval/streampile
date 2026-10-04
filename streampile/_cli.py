@@ -9,9 +9,9 @@ from pybgzf import IndexFormat
 from pysam import AlignmentFile
 from pysam import FastaFile
 
+from streampile._pileup import DEFAULT_EXCLUDE_FLAGS
 from streampile._table import BGZF_SUFFIXES
 from streampile._table import TabulationWriter
-from streampile._tabulate import DEFAULT_EXCLUDE_FLAGS
 from streampile._tabulate import tabulate
 
 

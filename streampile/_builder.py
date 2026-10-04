@@ -13,6 +13,7 @@ from pysam import AlignmentHeader
 
 from streampile._footprint import Footprint
 from streampile._footprint import is_placed
+from streampile._pileup import DEFAULT_EXCLUDE_FLAGS
 from streampile._pileup import DEFAULT_MIN_BASE_QUALITY
 from streampile._pileup import Pileup
 from streampile._pileup import PileupRead
@@ -53,13 +54,10 @@ class StreamingPileupBuilder:
         self,
         records: Iterable[AlignedSegment],
         *,
-        min_mapq: int = 0,
+        min_mapping_quality: int = 0,
+        exclude_flags: int = DEFAULT_EXCLUDE_FLAGS,
         min_base_quality: int = DEFAULT_MIN_BASE_QUALITY,
         proper_pairs_only: bool = False,
-        include_secondary: bool = False,
-        include_supplementary: bool = False,
-        include_duplicate: bool = False,
-        include_qcfail: bool = False,
         read_filter: Callable[[AlignedSegment], bool] | None = None,
         tap: Callable[[AlignedSegment], Any] | None = None,
     ) -> None:
@@ -72,15 +70,13 @@ class StreamingPileupBuilder:
 
         Args:
             records: coordinate-sorted reads, such as an open `AlignmentFile`.
-            min_mapq: the lowest mapping quality of a read to pile up.
+            min_mapping_quality: the lowest mapping quality of a read to pile up.
+            exclude_flags: reads with any of these SAM flags are not piled up: by default,
+                secondary, QC-fail, duplicate, and supplementary reads, as in `tabulate`. htslib
+                keeps supplementary reads and fgbio keeps QC-fail reads.
             min_base_quality: the quality floor of each pileup's filtered views: 13 by default,
                 as in htslib, where `tabulate` counts bases of any quality by default.
             proper_pairs_only: pile up only reads flagged as in a proper pair.
-            include_secondary: pile up secondary alignments.
-            include_supplementary: pile up supplementary alignments.
-            include_duplicate: pile up reads flagged as duplicates.
-            include_qcfail: pile up reads flagged as failing quality checks. They are left out
-                by default, as htslib leaves them out, although fgbio keeps them.
             read_filter: a function that keeps a read for pileups when it returns True, e.g.
                 `lambda read: read.is_proper_pair`, asked only of reads that pass the other
                 filters. A read it rejects still goes to `tap`.
@@ -101,13 +97,10 @@ class StreamingPileupBuilder:
             sort_order = SORT_ORDER.search(str(self.header))
             if sort_order is None or sort_order.group(1) != "coordinate":
                 raise ValueError("Records must be coordinate sorted.")
-        self.min_mapq: int = min_mapq
+        self.min_mapping_quality: int = min_mapping_quality
+        self.exclude_flags: int = exclude_flags
         self.min_base_quality: int = min_base_quality
         self.proper_pairs_only: bool = proper_pairs_only
-        self.include_secondary: bool = include_secondary
-        self.include_supplementary: bool = include_supplementary
-        self.include_duplicate: bool = include_duplicate
-        self.include_qcfail: bool = include_qcfail
         self.read_filter: Callable[[AlignedSegment], bool] | None = read_filter
         self.tap: Callable[[AlignedSegment], Any] | None = tap
         self.previous_pileup: Pileup | None = None
@@ -152,21 +145,13 @@ class StreamingPileupBuilder:
 
     def accepts(self, record: AlignedSegment) -> bool:
         """Whether a read passes the built-in filters, is placed, and then passes `read_filter`."""
-        if record.mapping_quality < self.min_mapq:
-            return False
-        if self.proper_pairs_only and not record.is_proper_pair:
-            return False
-        if not self.include_secondary and record.is_secondary:
-            return False
-        if not self.include_supplementary and record.is_supplementary:
-            return False
-        if not self.include_duplicate and record.is_duplicate:
-            return False
-        if not self.include_qcfail and record.is_qcfail:
-            return False
-        if not is_placed(record):
-            return False
-        return self.read_filter is None or self.read_filter(record)
+        return (
+            not record.flag & self.exclude_flags
+            and record.mapping_quality >= self.min_mapping_quality
+            and (record.is_proper_pair or not self.proper_pairs_only)
+            and is_placed(record)
+            and (self.read_filter is None or self.read_filter(record))
+        )
 
     def pileup(self, contig: str, pos: int) -> Pileup:
         """Advance to a position, at or after the last one, and pile up the reads there.

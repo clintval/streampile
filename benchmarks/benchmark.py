@@ -47,7 +47,7 @@ def streampile_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
     with (
         AlignmentFile(str(bam)) as reads,
         StreamingPileupBuilder(
-            reads, min_mapq=MIN_MAPPING_QUALITY, include_qcfail=False
+            reads, min_mapping_quality=MIN_MAPPING_QUALITY, exclude_flags=EXCLUDE_FLAGS
         ) as builder,
     ):
         for span in spans:

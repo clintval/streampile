@@ -17,10 +17,8 @@ from pysam import AlignedSegment
 from pysam import AlignmentFile
 from pysam import FastaFile
 
+from streampile._pileup import DEFAULT_EXCLUDE_FLAGS
 from streampile._table import TabulatedBase
-
-DEFAULT_EXCLUDE_FLAGS: Final[int] = 0xF00
-"""Secondary, QC-failed, duplicate, and supplementary reads, which are left out by default."""
 
 ACGT: Final[frozenset[str]] = frozenset("ACGT")
 
