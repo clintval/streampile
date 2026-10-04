@@ -54,7 +54,7 @@ class Footprint:
         start: int = record.reference_start
         offsets = array("i")
         insertions: dict[int, tuple[int, int]] = {}
-        query_length: int = record.query_length
+        query_length: int = record.query_length or record.infer_query_length() or 0
         query = 0
         position = start
         for operator, length in record.cigartuples or ():

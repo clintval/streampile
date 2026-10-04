@@ -29,6 +29,8 @@ def next_after(offset: int) -> int:
         ("2M1I1I2M", "ACGTAC", [0, 1, 4, 5], {11: (2, 2)}, 10, 14),
         ("3M2D", "ACG", [0, 1, 2, DELETED_AT_END, DELETED_AT_END], {}, 10, 15),
         ("3M2D1S", "ACGT", [0, 1, 2, next_after(3), next_after(3)], {}, 10, 15),
+        ("3M2D1M", "*", [0, 1, 2, next_after(3), next_after(3), 3], {}, 10, 16),
+        ("3M2D", "*", [0, 1, 2, DELETED_AT_END, DELETED_AT_END], {}, 10, 15),
         ("1=1X2M", "ACGT", [0, 1, 2, 3], {}, 10, 14),
     ],
 )
