@@ -36,6 +36,12 @@ class PileupReadType(StrEnum):
     skip = auto()
 
 
+BASE = PileupReadType.base
+DELETION = PileupReadType.deletion
+INSERTION = PileupReadType.insertion
+SKIP = PileupReadType.skip
+
+
 class PileupRead(NamedTuple):
     """One read at one pileup position.
 
@@ -135,34 +141,27 @@ class PileupRead(NamedTuple):
         return list(qualities[offset : offset + self.insertion_length])
 
 
-def pileup_reads(footprint: Footprint, pos: int) -> list[PileupRead]:
-    """The entries of one read at one position, which it may not cover."""
-    record = footprint.record
+def pileup_entries(footprints: Iterable[Footprint], pos: int) -> list[PileupRead]:
+    """The entries of reads at one position, in the order of the reads, which may not cover it."""
     entries: list[PileupRead] = []
-    index = pos - footprint.start
-    if 0 <= index < len(footprint.offsets):
-        offset = footprint.offsets[index]
-        if offset >= 0:
-            entries.append(PileupRead(record, offset, offset, PileupReadType.base))
-        elif offset < DELETED_AT_END:
-            entries.append(PileupRead(record, None, -offset - 3, PileupReadType.deletion))
-        elif offset == SKIPPED:
-            entries.append(PileupRead(record, None, None, PileupReadType.skip))
-        else:
-            entries.append(PileupRead(record, None, None, PileupReadType.deletion))
-    if footprint.insertions:
-        insertion = footprint.insertions.get(pos)
-        if insertion is not None:
-            entries.append(
-                PileupRead(
-                    record,
-                    None,
-                    None,
-                    PileupReadType.insertion,
-                    insertion_offset=insertion[0],
-                    insertion_length=insertion[1],
-                )
-            )
+    append = entries.append
+    for footprint in footprints:
+        record = footprint.record
+        index = pos - footprint.start
+        if 0 <= index < len(footprint.offsets):
+            offset = footprint.offsets[index]
+            if offset >= 0:
+                append(PileupRead(record, offset, offset, BASE))
+            elif offset < DELETED_AT_END:
+                append(PileupRead(record, None, -offset - 3, DELETION))
+            elif offset == SKIPPED:
+                append(PileupRead(record, None, None, SKIP))
+            else:
+                append(PileupRead(record, None, None, DELETION))
+        if footprint.insertions:
+            insertion = footprint.insertions.get(pos)
+            if insertion is not None:
+                append(PileupRead(record, None, None, INSERTION, insertion[0], insertion[1]))
     return entries
 
 
@@ -271,15 +270,14 @@ class Pileup:
             pos: the 0-based position on the contig.
             min_base_quality: the quality floor of the pileup's filtered views.
         """
-        entries = [
-            entry
+        footprints = (
+            Footprint(alignment)
             for alignment in alignments
             if is_placed(alignment) and alignment.reference_name == contig
-            for entry in pileup_reads(Footprint(alignment), pos)
-        ]
+        )
         return cls(
             reference_name=contig,
             reference_pos=pos,
-            pileups=entries,
+            pileups=pileup_entries(footprints, pos),
             min_base_quality=min_base_quality,
         )

@@ -11,24 +11,17 @@ from typing import Self
 from pysam import AlignedSegment
 from pysam import AlignmentHeader
 
-from streampile._footprint import DELETED_AT_END
-from streampile._footprint import SKIPPED
 from streampile._footprint import Footprint
 from streampile._footprint import is_placed
 from streampile._pileup import DEFAULT_MIN_BASE_QUALITY
 from streampile._pileup import Pileup
 from streampile._pileup import PileupRead
-from streampile._pileup import PileupReadType
+from streampile._pileup import pileup_entries
 
 SORT_ORDER = re.compile(r"^@HD\t.*\bSO:([^\t\n]+)", re.MULTILINE)
 
 UNPLACED: int = sys.maxsize
 """The contig index given to reads with no contig, which sort after every placed read."""
-
-BASE = PileupReadType.base
-DELETION = PileupReadType.deletion
-INSERTION = PileupReadType.insertion
-SKIP = PileupReadType.skip
 
 
 class StreamingPileupBuilder:
@@ -211,7 +204,7 @@ class StreamingPileupBuilder:
             entries: list[PileupRead] = []
         else:
             self._advance(reference_id, pos)
-            entries = self._entries(pos)
+            entries = pileup_entries(self._active, pos)
         pileup = Pileup(contig, pos, entries, self.min_base_quality)
         self.previous_pileup = pileup
         return pileup
@@ -264,25 +257,3 @@ class StreamingPileupBuilder:
                 or (waiting[0][1] == reference_id and waiting[0][2] <= pos)
             ):
                 tap(waiting.popleft()[0])
-
-    def _entries(self, pos: int) -> list[PileupRead]:
-        entries: list[PileupRead] = []
-        append = entries.append
-        for footprint in self._active:
-            record = footprint.record
-            index = pos - footprint.start
-            if index >= 0:
-                offset = footprint.offsets[index]
-                if offset >= 0:
-                    append(PileupRead(record, offset, offset, BASE))
-                elif offset < DELETED_AT_END:
-                    append(PileupRead(record, None, -offset - 3, DELETION))
-                elif offset == SKIPPED:
-                    append(PileupRead(record, None, None, SKIP))
-                else:
-                    append(PileupRead(record, None, None, DELETION))
-            if footprint.insertions:
-                insertion = footprint.insertions.get(pos)
-                if insertion is not None:
-                    append(PileupRead(record, None, None, INSERTION, insertion[0], insertion[1]))
-        return entries
