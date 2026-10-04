@@ -219,3 +219,11 @@ def test_without_overlaps_keeps_a_mate_at_the_floor_over_one_under_it() -> None:
     kept = Pileup.from_alignments(reads, "chr1", 107, min_base_quality=13).without_overlaps()
     assert [entry.alignment.flag for entry in kept.pileups] == [99]
     assert kept.filtered_depth == 0
+
+
+def test_from_alignments_drops_reads_on_other_contigs() -> None:
+    reads = [record("a", 10, "4M", "ACGT"), record("b", 10, "4M", "TTTT", contig="chr2")]
+    for contig, name, base in (("chr1", "a", "C"), ("chr2", "b", "T")):
+        pileup = Pileup.from_alignments(reads, contig, 11)
+        assert [entry.alignment.query_name for entry in pileup.pileups] == [name]
+        assert pileup.bases == [base]
