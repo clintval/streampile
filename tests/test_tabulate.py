@@ -524,3 +524,20 @@ def test_reads_with_n_bases_are_no_calls_and_iupac_reference_bases_count_no_read
         pileup = StreamingPileupBuilder(alignments).pileup("chr1", 1)
     assert pileup.bases == ["N", "C"]
     assert [entry.is_no_call for entry in pileup.pileups] == [True, False]
+
+
+def test_tabulate_reads_a_soft_masked_reference_as_upper_case(tmp_path: Path) -> None:
+    chr1 = "ACGTAGGCTAACGTTAGCCA"
+    masked = chr1[:4] + chr1[4:15].lower() + chr1[15:]
+    header = header_of({"chr1": chr1})
+    reads = [
+        record("snv", 0, "20M", chr1[:8] + "A" + chr1[9:], header=header),
+        record("deletion", 2, "4M1D6M", chr1[2:6] + chr1[7:13], header=header),
+    ]
+    sites = tabulated(tmp_path, masked, reads)
+    assert "".join(site.ref for site in sites) == chr1
+    assert [site.depth for site in sites] == [1, 1] + [2] * 11 + [1] * 7
+    assert [(site.pos, alleles(site)) for site in sites if site.alts] == [
+        (5, {"AG>A": 1}),
+        (9, {"T>A": 1}),
+    ]
