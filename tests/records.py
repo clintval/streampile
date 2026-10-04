@@ -1,6 +1,7 @@
 from array import array
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Literal
 
 import pysam
 from pysam import AlignedSegment
@@ -23,11 +24,11 @@ def record(
     contig: str = "chr1",
     flag: int = 0,
     mapq: int = 60,
-    quals: list[int] | None = None,
+    quals: list[int] | Literal["*"] | None = None,
     header: AlignmentHeader = HEADER,
     kind: type[AlignedSegment] = AlignedSegment,
 ) -> AlignedSegment:
-    """A mapped read built field by field."""
+    """A mapped read built field by field, with Q40 bases unless given, and `*` as in SAM."""
     read = kind(header)
     read.query_name = name
     read.flag = flag
@@ -35,8 +36,9 @@ def record(
     read.reference_start = start
     read.mapping_quality = mapq
     read.cigarstring = cigar
-    read.query_sequence = bases
-    read.query_qualities = array("B", [40] * len(bases) if quals is None else quals)
+    read.query_sequence = None if bases == "*" else bases
+    if bases != "*" and quals != "*":
+        read.query_qualities = array("B", [40] * len(bases) if quals is None else quals)
     return read
 
 

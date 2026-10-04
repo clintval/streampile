@@ -127,6 +127,32 @@ def test_builder_piles_up_insertions_at_read_starts_and_ends() -> None:
     assert entries(builder.pileup("chr1", 14)) == []
 
 
+def test_reads_with_no_stored_qualities_pass_every_floor() -> None:
+    builder = StreamingPileupBuilder(
+        [record("r", 10, "2M1D1M2I", "ACGTT", quals="*")], min_base_quality=60
+    )
+    at_base = builder.pileup("chr1", 11)
+    assert at_base.get_query_sequences == ["C"]
+    assert (at_base.get_query_qualities, at_base.filtered_depth) == ([255], 1)
+    at_deletion = builder.pileup("chr1", 12)
+    assert (at_deletion.pileups[0].qual, at_deletion.filtered_depth) == (255, 1)
+    at_insertion = builder.pileup("chr1", 13)
+    assert entries(at_insertion) == [
+        ("r", "base", 2, 2, None),
+        ("r", "insertion", None, None, "TT"),
+    ]
+    assert at_insertion.pileups[1].inserted_qualities == [255, 255]
+
+
+def test_reads_with_no_stored_bases_hold_no_base_or_quality() -> None:
+    pileup = StreamingPileupBuilder([record("r", 10, "2M1I1M", "*")]).pileup("chr1", 11)
+    assert entries(pileup) == [("r", "base", 1, 1, None), ("r", "insertion", None, None, None)]
+    assert [(entry.base, entry.qual) for entry in pileup.pileups] == [(None, None), (None, None)]
+    assert pileup.pileups[1].inserted_qualities is None
+    assert (pileup.unfiltered_depth, pileup.filtered_depth) == (1, 0)
+    assert (pileup.get_query_sequences, pileup.get_query_qualities) == ([], [])
+
+
 def test_builder_skips_soft_and_hard_clips() -> None:
     builder = StreamingPileupBuilder([record("r", 10, "5H2S3M1S", "TTACGA")])
     assert entries(builder.pileup("chr1", 9)) == []

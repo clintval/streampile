@@ -182,6 +182,20 @@ def test_tabulate_counts_reads_spanning_several_intervals(
     assert [site.pos for site in sites if site.alts] == [11]
 
 
+def test_tabulate_counts_reads_with_no_stored_qualities_at_every_floor(
+    tmp_path: Path, reference: FastaFile
+) -> None:
+    reads = [
+        record("noquals", 0, "10M", CHR1[0:5] + "T" + CHR1[6:10], quals="*", header=HEADER),
+        record("nobases", 0, "10M", "*", header=HEADER),
+    ]
+    path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
+    with AlignmentFile(str(path)) as alignments:
+        sites = list(tabulate(alignments, reference, [("chr1", 0, 10)], min_base_quality=60))
+    assert [site.depth for site in sites] == [1] * 10
+    assert [(site.pos, alleles(site)) for site in sites if site.alts] == [(6, {"G>T": 1})]
+
+
 def test_tabulate_agrees_with_counting_bases_in_pileups(
     tmp_path: Path, reference: FastaFile
 ) -> None:

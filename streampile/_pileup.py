@@ -18,6 +18,9 @@ from streampile._footprint import is_placed
 DEFAULT_MIN_BASE_QUALITY: Final[int] = 13
 """The default minimum base quality of a pileup, the same as pysam's."""
 
+MISSING_BASE_QUALITY: Final[int] = 255
+"""The base quality of every base of a read with no stored qualities (QUAL `*`), as in htslib."""
+
 
 def _qualities(record: AlignedSegment) -> "array[int] | None":
     return cast("array[int] | None", record.query_qualities)
@@ -67,11 +70,19 @@ class PileupRead(NamedTuple):
 
     @property
     def qual(self) -> int | None:
-        """The base quality at the position, or of the read's next base for a deletion."""
-        qualities = _qualities(self.alignment)
-        if self.query_position_or_next is None or qualities is None:
+        """The base quality at the position, or of the read's next base for a deletion.
+
+        A read with bases but no stored qualities (QUAL `*`) has quality 255 at every base, as in
+        htslib, so it passes every floor. It is `None` where there is no base to take it from: for
+        an insertion, a deletion no base follows, or a read with no stored bases (SEQ `*`).
+        """
+        offset = self.query_position_or_next
+        if offset is None:
             return None
-        return qualities[self.query_position_or_next]
+        qualities = _qualities(self.alignment)
+        if qualities is None:
+            return MISSING_BASE_QUALITY if offset < self.alignment.query_length else None
+        return qualities[offset]
 
     @property
     def is_del(self) -> bool:
@@ -95,13 +106,19 @@ class PileupRead(NamedTuple):
 
     @property
     def inserted_qualities(self) -> list[int] | None:
-        """The base qualities of the inserted bases of an insertion entry, or `None`."""
-        qualities = _qualities(self.alignment)
-        if self.insertion_offset is None or qualities is None:
+        """The base qualities of the inserted bases of an insertion entry, or `None`.
+
+        They are 255 for a read with no stored qualities, and `None` for one with no stored bases.
+        """
+        offset = self.insertion_offset
+        if offset is None:
             return None
-        return list(
-            qualities[self.insertion_offset : self.insertion_offset + self.insertion_length]
-        )
+        qualities = _qualities(self.alignment)
+        if qualities is None:
+            if not self.alignment.query_length:
+                return None
+            return [MISSING_BASE_QUALITY] * self.insertion_length
+        return list(qualities[offset : offset + self.insertion_length])
 
 
 def pileup_reads(footprint: Footprint, pos: int) -> list[PileupRead]:

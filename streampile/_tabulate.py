@@ -271,7 +271,9 @@ class Tabulator:
     informative at any base of that allele. A read is never counted for an allele that starts
     with an indel with no aligned base before it, ends with a deletion with no aligned base after
     it, would be left-aligned to before the read's first aligned base, or holds a reference base
-    other than A, C, G, or T.
+    other than A, C, G, or T. A read with no stored qualities (QUAL `*`) has quality 255 at every
+    base, as in htslib, so it passes every floor, and a read with no stored bases (SEQ `*`) is
+    not counted at all.
 
     A read counted for an allele is informative at every base the allele spans, a deletion's
     deleted bases included, and at every base an indel is left-aligned across. Elsewhere, a read
@@ -369,8 +371,7 @@ class Tabulator:
             alt = sequence[query_start:query_end]
             if (
                 (last.is_indel and last.ref_end > last.ref_start and not run.closed)
-                or qualities is None
-                or min(qualities[query_start:query_end]) < self._floor
+                or (qualities is not None and min(qualities[query_start:query_end]) < self._floor)
                 or "N" in alt
                 or not set(ref) <= ACGT
                 or (
@@ -456,9 +457,7 @@ class Tabulator:
         sequence: str = record.query_sequence or ""
         qualities: str | None = record.query_qualities_str
         low: list[int] = []
-        if qualities is None:
-            low = list(range(len(sequence)))
-        elif self.min_base_quality > 0:
+        if qualities is not None and self.min_base_quality > 0:
             mask = qualities.encode().translate(self._low_quality)
             at = mask.find(1)
             while at >= 0:
