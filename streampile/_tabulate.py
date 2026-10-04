@@ -121,11 +121,16 @@ class _Event:
 
 @dataclass(frozen=True, slots=True)
 class _Run:
-    """Adjacent differences of one read, and whether a matching aligned base borders each end."""
+    """Adjacent differences of one read, and whether a matching aligned base borders each end.
+
+    `floor` is the lowest position the run's allele may be left-aligned to: the end of the read's
+    previous difference or reference skip, or else the read's first aligned base.
+    """
 
     events: list[_Event]
     anchored: bool
     closed: bool
+    floor: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,10 +212,11 @@ def _segments(record: AlignedSegment) -> list[Segment]:
 class _Runs:
     """Collects the runs of one read as its aligned bases and indels are walked in order."""
 
-    def __init__(self) -> None:
+    def __init__(self, start: int) -> None:
         self.runs: list[_Run] = []
         self.events: list[_Event] = []
         self.anchored: bool = False
+        self.floor: int = start
 
     def add(self, event: _Event) -> None:
         self.events.append(event)
@@ -218,14 +224,17 @@ class _Runs:
     def border(self, *, aligned: bool) -> None:
         """End any run at a matching aligned base, or at a clip, skip, or end of the read."""
         if self.events:
-            self.runs.append(_Run(self.events, self.anchored, aligned))
+            self.runs.append(_Run(self.events, self.anchored, aligned, self.floor))
+            self.floor = self.events[-1].ref_end
             self.events = []
         self.anchored = aligned
 
 
-def _runs(segments: list[Segment], sequence: str, reference: "_Reference") -> list[_Run]:
+def _runs(
+    segments: list[Segment], sequence: str, reference: "_Reference", start: int
+) -> list[_Run]:
     """The runs of adjacent differences from the reference of one read, in alignment order."""
-    runs = _Runs()
+    runs = _Runs(start)
     for operator, ref_pos, query, length in segments:
         if operator == CMATCH:
             bases = reference.get(ref_pos, ref_pos + length)
@@ -249,6 +258,8 @@ def _runs(segments: list[Segment], sequence: str, reference: "_Reference") -> li
             runs.add(_Event(ref_pos, ref_pos + length, query, query, True))
         else:
             runs.border(aligned=False)
+            if operator == CREF_SKIP:
+                runs.floor = ref_pos + length
     runs.border(aligned=False)
     return runs.runs
 
@@ -267,10 +278,12 @@ class Tabulator:
     included, is at the base-quality floor and is not an `N`. Otherwise the read is not
     informative at any base of that allele. A read is never counted for an allele that starts
     with an indel with no aligned base before it, ends with a deletion with no aligned base after
-    it, would be left-aligned to before the read's first aligned base, or holds a reference base
-    other than A, C, G, or T. A read with no stored qualities (QUAL `*`) has quality 255 at every
-    base, as in htslib, so it passes every floor, and a read with no stored bases (SEQ `*`) is
-    not counted at all.
+    it, or holds a reference base other than A, C, G, or T. Nor is it counted for an indel that
+    would be left-aligned past the read's previous difference or reference skip, or past its first
+    aligned base, so one read is never counted for two alleles at one base; it is then not
+    informative from there to the end of the indel. A read with no stored qualities (QUAL `*`)
+    has quality 255 at every base, as in htslib, so it passes every floor, and a read with no
+    stored bases (SEQ `*`) is not counted at all.
 
     A read counted for an allele is informative at every base the allele spans, a deletion's
     deleted bases included, and at every base an indel is left-aligned across. Elsewhere, a read
@@ -352,7 +365,7 @@ class Tabulator:
         qualities = query_qualities(record) if self.min_base_quality > 0 else None
         counted: list[Allele] = []
         dropped: list[tuple[int, int]] = []
-        for run in _runs(segments, sequence, reference):
+        for run in _runs(segments, sequence, reference, record.reference_start):
             first, last = run.events[0], run.events[-1]
             ref_start, query_start = first.ref_start, first.query_start
             ref_end, query_end = last.ref_end, last.query_end
@@ -371,14 +384,12 @@ class Tabulator:
                 )
                 or "N" in alt
                 or not set(ref) <= ACGT
-                or (
-                    normalized := normalize(
-                        ref_start, ref, alt, reference.get, record.reference_start
-                    )
-                )
-                is None
             ):
                 dropped.append((ref_start, ref_end))
+                continue
+            normalized = normalize(ref_start, ref, alt, reference.get, run.floor)
+            if normalized is None:
+                dropped.append((run.floor, ref_end))
                 continue
             pos, ref, alt = normalized
             counted.append(
@@ -429,16 +440,14 @@ class Tabulator:
         excluded: set[int] = set(self._uninformative(record, segments, reference))
         for start, end in dropped:
             excluded.update(range(start, end))
-        claimed: set[int] = set()
         for allele in counted:
-            for pos in range(allele.start, allele.end):
-                if pos not in claimed:
-                    claimed.add(pos)
-                    is_ref = not allele.pos <= pos < allele.pos + len(allele.ref)
-                    _add(touched, pos, pos + 1, ref=is_ref)
+            after = allele.pos + len(allele.ref)
+            _add(touched, allele.start, allele.pos, ref=True)
+            _add(touched, allele.pos, after, ref=False)
+            _add(touched, after, allele.end, ref=True)
+            excluded.update(range(allele.start, allele.end))
             for ledger in touched:
                 ledger.add_allele(allele.pos, (allele.ref, allele.alt))
-        excluded |= claimed
         for operator, block_start, _, length in segments:
             if operator == CMATCH:
                 cursor = block_start

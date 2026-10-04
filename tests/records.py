@@ -58,6 +58,19 @@ def unmapped(name: str, bases: str = "ACGT", header: AlignmentHeader = HEADER) -
     return read
 
 
+def write_fasta(path: Path, contigs: dict[str, str]) -> Path:
+    """Write and index a FASTA of the given contigs."""
+    path.write_text("".join(f">{name}\n{bases}\n" for name, bases in contigs.items()))
+    pysam.faidx(str(path))
+    return path
+
+
+def header_of(contigs: dict[str, str]) -> AlignmentHeader:
+    """A coordinate-sorted header of the given contigs."""
+    lines = "".join(f"@SQ\tSN:{name}\tLN:{len(bases)}\n" for name, bases in contigs.items())
+    return AlignmentHeader.from_text(f"@HD\tVN:1.6\tSO:coordinate\n{lines}")
+
+
 def territory(*spans: tuple[str, int, int]) -> Territory:
     """The territory of 0-based half-open `(contig, start, end)` spans."""
     return Territory(Bed3(contig, start=start, end=end) for contig, start, end in spans)

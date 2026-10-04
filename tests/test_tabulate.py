@@ -1,7 +1,9 @@
+import random
 from collections import Counter
 from pathlib import Path
 
 import pytest
+from pysam import AlignedSegment
 from pysam import AlignmentFile
 from pysam import AlignmentHeader
 from pysam import FastaFile
@@ -15,10 +17,12 @@ from streampile import normalize
 from streampile import tabulate
 
 from .records import DATA
+from .records import header_of
 from .records import record
 from .records import territory
 from .records import unmapped
 from .records import write_bam
+from .records import write_fasta
 
 CHR1 = "ACGTAGGCTAACGTTAGCCATGCAAAAAGTCCATGACGTCGATCGGATCCTAGGCTAGCT"
 HEADER = AlignmentHeader.from_text(
@@ -49,6 +53,28 @@ def sites_of(
             (site.contig, site.pos): site
             for site in tabulate(reads, fasta, territory(*spans), **options)
         }
+
+
+def tabulated(
+    tmp_path: Path, chr1: str, reads: list[AlignedSegment], **options: int
+) -> list[TabulatedBase]:
+    """Tabulate reads, made with `header_of({"chr1": chr1})`, over the whole of `chr1`."""
+    fasta = write_fasta(tmp_path / "reference.fa", {"chr1": chr1})
+    path = write_bam(tmp_path / "reads.bam", reads, header=header_of({"chr1": chr1}))
+    with AlignmentFile(str(path)) as alignments, FastaFile(str(fasta)) as reference:
+        return list(tabulate(alignments, reference, territory(("chr1", 0, len(chr1))), **options))
+
+
+def spanning(sites: list[TabulatedBase]) -> list[int]:
+    """The reads at each base with an allele anchored at an earlier base that spans it."""
+    counts = Counter(
+        site.pos + offset
+        for site in sites
+        for ref, reads in zip(site.alt_refs, site.alt_reads, strict=True)
+        for offset in range(1, len(ref))
+        for _ in range(reads)
+    )
+    return [counts[site.pos] for site in sites]
 
 
 def alleles_of(
@@ -267,3 +293,92 @@ def test_bases_round_trip_through_a_table(tmp_path: Path) -> None:
             writer.write(base)
     assert list(TabulationReader.from_path(tmp_path / "bases.tsv.gz")) == bases
     assert any(base.alts for base in bases) and any(not base.alts for base in bases)
+
+
+def test_left_alignment_stops_at_the_end_of_a_reference_skip(tmp_path: Path) -> None:
+    chr1 = "ACGT" + "A" * 10 + "CGTACGTACG"
+    reads = [record("r", 0, "4M4N2M1D3M", "ACGTAAAAA", header=header_of({"chr1": chr1}))]
+    sites = tabulated(tmp_path, chr1, reads)
+    assert [site.depth for site in sites[:14]] == [1] * 4 + [0] * 7 + [1] * 3
+    assert not any(site.alts for site in sites)
+
+
+def test_left_alignment_stops_at_the_end_of_the_previous_difference(tmp_path: Path) -> None:
+    chr1 = "TTC" + "AAAA" + "GCATGCATGC"
+    reads = [record("r", 0, "6M1D4M", "TTTAAA" + "GCAT", header=header_of({"chr1": chr1}))]
+    sites = tabulated(tmp_path, chr1, reads)
+    assert [site.depth for site in sites[:11]] == [1] * 3 + [0] * 4 + [1] * 4
+    assert [(site.pos, alleles(site)) for site in sites if site.alts] == [(3, {"C>T": 1})]
+    assert [site.ref_reads for site in sites[:3]] == [1, 1, 0]
+
+
+def test_left_alignment_stops_at_a_read_n(tmp_path: Path) -> None:
+    chr1 = "GGCAAAAGTCATGCA"
+    reads = [record("r", 0, "6M1D5M", "GGCNAA" + "GTCAT", header=header_of({"chr1": chr1}))]
+    sites = tabulated(tmp_path, chr1, reads)
+    assert [site.depth for site in sites[:12]] == [1] * 3 + [0] * 4 + [1] * 5
+    assert not any(site.alts for site in sites)
+
+
+def random_reference(rng: random.Random, length: int) -> str:
+    """Bases in runs of short repeats, where indels left-align far."""
+    bases = ""
+    while len(bases) < length:
+        unit = "".join(rng.choice("ACGT") for _ in range(rng.choice([1, 1, 2, 3])))
+        bases += unit * rng.randint(1, 6)
+    return bases[:length]
+
+
+def random_read(rng: random.Random, name: str, chr1: str) -> AlignedSegment:
+    """A read with mismatches, read Ns, indels, and skips, ending in five matching bases."""
+    start = position = rng.randint(0, 30)
+    bases, cigar = "", ""
+    for _ in range(rng.randint(2, 7)):
+        operator = rng.choices("MXnIDN", weights=[6, 2, 1, 1, 1, 1])[0]
+        length = rng.randint(1, 8) if operator == "M" else rng.randint(1, 3)
+        if operator in "MXn":
+            for base in chr1[position : position + length]:
+                bases += {
+                    "M": base,
+                    "n": "N",
+                    "X": rng.choice([other for other in "ACGT" if other != base]),
+                }[operator]
+            cigar += f"{length}M"
+            position += length
+        elif operator == "I":
+            bases += "".join(rng.choice("ACGT") for _ in range(length))
+            cigar += f"{length}I"
+        else:
+            cigar += f"{length}{operator}"
+            position += length
+    bases += chr1[position : position + 5]
+    return record(
+        name,
+        start,
+        f"{cigar}5M",
+        bases,
+        flag=rng.choice([0, 16]),
+        quals=[rng.choice([2, 20, 40, 40, 40]) for _ in bases],
+        header=header_of({"chr1": chr1}),
+    )
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_each_read_is_counted_once_where_it_holds_a_base_or_deletion(
+    tmp_path: Path, seed: int
+) -> None:
+    rng = random.Random(seed)
+    chr1 = random_reference(rng, 150)
+    reads = sorted(
+        (random_read(rng, f"r{index}", chr1) for index in range(30)),
+        key=lambda read: read.reference_start,
+    )
+    for min_base_quality in (0, 30):
+        sites = tabulated(tmp_path, chr1, reads, min_base_quality=min_base_quality)
+        with AlignmentFile(str(tmp_path / "reads.bam")) as alignments:
+            columns = list(StreamingPileupBuilder(alignments).columns("chr1", 0, len(chr1)))
+        for site, spans, column in zip(sites, spanning(sites), columns, strict=True):
+            assert site.depth == site.ref_reads + sum(site.alt_reads) + spans
+            assert site.depth <= sum(
+                entry.is_del or entry.base is not None for entry in column.pileups
+            )
