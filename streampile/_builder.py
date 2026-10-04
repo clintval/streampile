@@ -145,11 +145,12 @@ class StreamingPileupBuilder:
         With a `tap`, the rest of the input is read to the end, so an output written by `tap` is
         complete. Without one, no more of the input is read.
         """
-        if self.tap is not None:
+        tap = self.tap
+        if tap is not None:
             while self._waiting:
-                self._evict(self._waiting.popleft()[0])
+                tap(self._waiting.popleft()[0])
             while self._next is not None:
-                self._evict(self._next)
+                tap(self._next)
                 self._next = next(self._records, None)
         self._waiting.clear()
         self._next = None
@@ -231,10 +232,6 @@ class StreamingPileupBuilder:
         for pos in range(start, end):
             yield self.pileup(contig, pos)
 
-    def _evict(self, record: AlignedSegment) -> None:
-        if self.tap is not None:
-            self.tap(record)
-
     def _advance(self, reference_id: int, pos: int) -> None:
         if reference_id != self._active_reference_id:
             self._active = []
@@ -243,7 +240,7 @@ class StreamingPileupBuilder:
             self._active = [footprint for footprint in self._active if footprint.end > pos]
         target = (reference_id, pos + 1)
         waiting = self._waiting
-        tapped = self.tap is not None
+        tap = self.tap
         while self._next is not None:
             record = self._next
             record_id = record.reference_id if record.reference_id >= 0 else UNPLACED
@@ -253,7 +250,7 @@ class StreamingPileupBuilder:
             if key < self._last_key:
                 raise ValueError(f"Records are out of coordinate order at {record.query_name}.")
             self._last_key = key
-            if tapped:
+            if tap is not None:
                 end = record.reference_end
                 waiting.append((record, record_id, key[1] + 1 if end is None else end))
             if record_id == reference_id and self.accepts(record):
@@ -261,10 +258,12 @@ class StreamingPileupBuilder:
                 if footprint.end > pos:
                     self._active.append(footprint)
             self._next = next(self._records, None)
-        while waiting and (
-            waiting[0][1] < reference_id or (waiting[0][1] == reference_id and waiting[0][2] <= pos)
-        ):
-            self._evict(waiting.popleft()[0])
+        if tap is not None:
+            while waiting and (
+                waiting[0][1] < reference_id
+                or (waiting[0][1] == reference_id and waiting[0][2] <= pos)
+            ):
+                tap(waiting.popleft()[0])
 
     def _entries(self, pos: int) -> list[PileupRead]:
         entries: list[PileupRead] = []

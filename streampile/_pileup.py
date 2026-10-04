@@ -219,7 +219,6 @@ class Pileup:
             quality
             for read in self.pileups
             if read.pileup_type is PileupReadType.base
-            and read.base is not None
             and (quality := read.qual) is not None
             and quality >= floor
         ]

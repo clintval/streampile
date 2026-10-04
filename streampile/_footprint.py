@@ -27,11 +27,8 @@ class Footprint:
 
     Attributes:
         record: the read.
-        reference_id: the index of the read's contig in the header.
         start: the 0-based reference position of the read's first aligned or deleted base.
         end: the 0-based reference position just past the read's last aligned or deleted base.
-        first: the first position the read is piled up at: one before `start` when the read opens
-            with an insertion, else `start`.
         offsets: one entry per reference position from `start` to `end`. A non-negative entry is
             the query offset of the base aligned there, `SKIPPED` marks a reference skip, and a
             deleted position holds `DELETED_AT_END` or `-(next) - 3`, where `next` is the query
@@ -40,7 +37,7 @@ class Footprint:
             position just before it.
     """
 
-    __slots__ = ("end", "first", "insertions", "offsets", "record", "reference_id", "start")
+    __slots__ = ("end", "insertions", "offsets", "record", "start")
 
     def __init__(self, record: AlignedSegment) -> None:
         """Walk the CIGAR of a mapped read with at least one reference-consuming operator."""
@@ -72,10 +69,8 @@ class Footprint:
             elif operator == CSOFT_CLIP:
                 query += length
         self.record: AlignedSegment = record
-        self.reference_id: int = record.reference_id
         self.start: int = start
         self.end: int = position
-        self.first: int = start - 1 if (start - 1) in insertions else start
         self.offsets: array[int] = offsets
         self.insertions: dict[int, tuple[int, int]] = insertions
 
