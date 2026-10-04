@@ -82,6 +82,33 @@ def test_an_indexed_table_refuses_rows_out_of_order(tmp_path: Path) -> None:
         write(tmp_path / "bases.tsv.gz", [BASES[2], BASES[0]], index=IndexFormat.TBI)
 
 
+@pytest.mark.parametrize("index", [IndexFormat.TBI, IndexFormat.CSI])
+def test_an_indexed_table_refuses_rows_and_comments_before_its_header(
+    tmp_path: Path, index: IndexFormat
+) -> None:
+    path = tmp_path / "bases.tsv.gz"
+    with TabulationWriter.from_path(path, index=index) as writer:
+        with pytest.raises(ValueError, match="Cannot write a row to an indexed table before"):
+            writer.write(BASES[0])
+        with pytest.raises(ValueError, match="Cannot write a comment to an indexed table before"):
+            writer.write_comment("made by streampile")
+        writer.write_header()
+        writer.write_comment("made by streampile")
+        for base in BASES:
+            writer.write(base)
+    with pybgzf.IndexedReader(path) as reader:
+        assert list(reader.query("chr1", 0, 1)) == ["chr1\t1\tA\t0\t0\t\t\t"]
+    assert list(TabulationReader.from_path(path)) == BASES
+
+
+def test_a_table_with_no_index_may_go_without_a_header(tmp_path: Path) -> None:
+    for name in ("bases.tsv", "bases.tsv.gz"):
+        with TabulationWriter.from_path(tmp_path / name) as writer:
+            writer.write_comment("made by streampile")
+            writer.write(BASES[0])
+    assert (tmp_path / "bases.tsv").read_text() == "# made by streampile\nchr1\t1\tA\t0\t0\t\t\t\n"
+
+
 def test_the_writer_refuses_bad_options_before_opening_a_file(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="An index and threads need a BGZF path"):
         TabulationWriter.from_path(tmp_path / "bases.tsv", threads=2)

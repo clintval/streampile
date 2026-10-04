@@ -9,6 +9,7 @@ import pybgzf
 from pybgzf import Columns
 from pybgzf import IndexFormat
 from typeline import Codecs
+from typeline import Comment
 from typeline import FixedRecordType
 from typeline import ReaderOptions
 from typeline import SubscriptableClassmethod
@@ -105,6 +106,34 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
         _ = options.setdefault("codecs", TABULATION_CODECS)
         _ = options.setdefault("quoting", False)
         super().__init__(handle, **options)
+        self._indexed: bool = False
+        self._headed: bool = False
+
+    @override
+    def write_header(self) -> None:
+        """Write the header line."""
+        super().write_header()
+        self._headed = True
+
+    @override
+    def write(self, record: TabulatedBase) -> None:
+        """Write a row, refusing it before the header when the table is being indexed."""
+        self._check_headed("a row")
+        super().write(record)
+
+    @override
+    def write_comment(self, comment: str | Comment) -> None:
+        """Write a comment, refusing it before the header when the table is being indexed."""
+        self._check_headed("a comment")
+        super().write_comment(comment)
+
+    def _check_headed(self, what: str) -> None:
+        """Refuse a line before the header of an indexed table."""
+        if self._indexed and not self._headed:
+            raise ValueError(
+                f"Cannot write {what} to an indexed table before its header, which the index"
+                + " skips as the first line! Call write_header() first."
+            )
 
     @SubscriptableClassmethod
     @classmethod
@@ -123,7 +152,9 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
         A path ending in `.gz` or `.bgz` is written as BGZF, which any gzip reader can read, and
         can be indexed with tabix or CSI as it is written, on as many threads as given.
         Rows must then be sorted by position within each contig, and each contig must be
-        contiguous, as `tabulate` writes them.
+        contiguous, as `tabulate` writes them. The header must also come first, since the index
+        skips the first line: without it the index would skip the first row, and after a comment
+        it would read the header as a row, so rows and comments are refused until it is written.
         Other paths are written as UTF-8, and compressed when they end in `.bz2` or `.xz`.
         The writer is checked before the file is opened, so a refused writer leaves a file alone.
 
@@ -158,4 +189,5 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
         except BaseException:
             handle.close()
             raise
+        writer._indexed = index is not None
         return writer
