@@ -807,7 +807,7 @@ requires-dist = [
     { name = "bedspec", specifier = ">=4.0.0" },
     { name = "pybgzf", specifier = ">=0.1.2" },
     { name = "pysam", specifier = ">=0.23" },
-    { name = "typeline", specifier = ">=2.3.0" },
+    { name = "typeline", specifier = ">=2.4.0" },
     { name = "typing-extensions", specifier = ">=4.12" },
 ]
 
@@ -960,15 +960,15 @@ wheels = [
 
 [[package]]
 name = "typeline"
-version = "2.3.0"
+version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "msgspec" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6c/48/89b4d874e9b6883daef7f2d0aaeed31e5660248c80cc534fcb447d67be4b/typeline-2.3.0.tar.gz", hash = "sha256:b218534211beaa279983c6c6cb61827a87d12b548a231eb36d3990e20892768e", size = 58302, upload-time = "2026-10-03T17:05:10.119Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/de/be/97da07b98df6e2d03afa3199bf29e41563c66b5ada68fb17538f4b024030/typeline-2.4.0.tar.gz", hash = "sha256:e6b22f6683ad2af4cfec39e5f8254da6f368798f6be3bdc37c734d2183944087", size = 62386, upload-time = "2026-10-04T23:43:01.137Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/e5/4ffdc04b3903bf128a1aa36d69619de108545bf2a359a75fb89de95e01b6/typeline-2.3.0-py3-none-any.whl", hash = "sha256:804aee48d5b6a6066aa2d5a2bdecf38902de4c8b362985abeafbfd3a5d4401ca", size = 28759, upload-time = "2026-10-03T17:05:08.701Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/65/a2e1275ce3a1df0ef331e454b28c0fb685777216bd0f0099ae4e9bbabb09/typeline-2.4.0-py3-none-any.whl", hash = "sha256:9d5e005a1e3dfa71ee54987bb1356fd9512b8e699b2723a863e1f8da268a4aef", size = 29421, upload-time = "2026-10-04T23:42:59.77Z" },
 ]
 
 [[package]]
