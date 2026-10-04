@@ -186,7 +186,7 @@ class StreamingPileupBuilder:
             raise ValueError(f"Attempted to advance to {contig}:{pos} from {at}.")
         self._at = (reference_id, pos)
         if self.header is None:
-            entries: list[PileupRead] = []
+            entries: tuple[PileupRead, ...] = ()
         else:
             self._advance(reference_id, pos)
             entries = pileup_entries(self._active, pos)

@@ -65,12 +65,12 @@ def test_depths_count_bases_deletions_and_skips_but_not_insertions() -> None:
     depths = {
         name: (pileup.unfiltered_depth, pileup.filtered_depth)
         for name, pileup in {
-            "empty": Pileup("chr1", 10, []),
-            "base": Pileup("chr1", 10, [base]),
-            "deletion": Pileup("chr1", 10, [deletion]),
-            "skip": Pileup("chr1", 10, [skip]),
-            "insertion": Pileup("chr1", 10, [insertion]),
-            "mixed": Pileup("chr1", 10, [base, deletion, skip, insertion]),
+            "empty": Pileup("chr1", 10, ()),
+            "base": Pileup("chr1", 10, (base,)),
+            "deletion": Pileup("chr1", 10, (deletion,)),
+            "skip": Pileup("chr1", 10, (skip,)),
+            "insertion": Pileup("chr1", 10, (insertion,)),
+            "mixed": Pileup("chr1", 10, (base, deletion, skip, insertion)),
         }.items()
     }
     assert depths == {
@@ -153,11 +153,7 @@ def test_views_of_reads_with_no_stored_bases_or_no_cigar_are_empty() -> None:
     no_cigar.reference_start = 0
     no_cigar.query_sequence = None
     unplaced = Pileup.from_alignments([no_cigar], "chr1", 0)
-    assert (unplaced.pileups, unplaced.bases, unplaced.qualities) == (
-        [],
-        [],
-        [],
-    )
+    assert (unplaced.pileups, unplaced.bases, unplaced.qualities) == ((), [], [])
 
 
 def test_without_overlaps_keeps_the_first_read_of_each_template() -> None:

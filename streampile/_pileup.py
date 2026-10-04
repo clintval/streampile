@@ -144,7 +144,7 @@ class PileupRead(NamedTuple):
         return list(qualities[offset : offset + self.insertion_length])
 
 
-def pileup_entries(footprints: Iterable[Footprint], pos: int) -> list[PileupRead]:
+def pileup_entries(footprints: Iterable[Footprint], pos: int) -> tuple[PileupRead, ...]:
     """The entries of reads at one position, in the order of the reads, which may not cover it."""
     entries: list[PileupRead] = []
     append = entries.append
@@ -165,7 +165,7 @@ def pileup_entries(footprints: Iterable[Footprint], pos: int) -> list[PileupRead
             insertion = footprint.insertions.get(pos)
             if insertion is not None:
                 append(PileupRead(record, None, None, INSERTION, insertion[0], insertion[1]))
-    return entries
+    return tuple(entries)
 
 
 @dataclass(frozen=True)
@@ -186,7 +186,7 @@ class Pileup:
 
     reference_name: str
     reference_pos: int
-    pileups: list[PileupRead]
+    pileups: tuple[PileupRead, ...]
     min_base_quality: int = DEFAULT_MIN_BASE_QUALITY
 
     @property
@@ -257,11 +257,11 @@ class Pileup:
         only the first entry of each template.
         """
         kept: dict[str | None, AlignedSegment] = {}
-        pileups = [
+        pileups = tuple(
             entry
             for entry in self.pileups
             if kept.setdefault(entry.alignment.query_name, entry.alignment) is entry.alignment
-        ]
+        )
         return replace(self, pileups=pileups)
 
     @classmethod

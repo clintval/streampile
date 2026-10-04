@@ -76,14 +76,14 @@ def test_builder_returns_the_same_pileup_for_a_repeated_position() -> None:
     pileup = builder.pileup("chr1", 101)
     assert builder.pileup("chr1", 101) is pileup
     assert builder.previous_pileup is pileup
-    assert pileup == Pileup("chr1", 101, [PileupRead(read, 1, 1, BASE)])
+    assert pileup == Pileup("chr1", 101, (PileupRead(read, 1, 1, BASE),))
 
 
 def test_builder_with_no_records_or_header_is_still_forward_only() -> None:
     with StreamingPileupBuilder([]) as builder:
         assert builder.header is None
-        assert builder.pileup("chr2", 50) == Pileup("chr2", 50, [])
-        assert builder.pileup("chr1", 10) == Pileup("chr1", 10, [])
+        assert builder.pileup("chr2", 50) == Pileup("chr2", 50, ())
+        assert builder.pileup("chr1", 10) == Pileup("chr1", 10, ())
         with pytest.raises(ValueError, match="Attempted to advance to chr1:5 from chr1:10."):
             builder.pileup("chr1", 5)
         with pytest.raises(ValueError, match="Attempted to advance to chr2:60 from chr1:10."):
@@ -94,7 +94,7 @@ def test_builder_checks_the_header_of_an_empty_alignment_file(tmp_path: Path) ->
     path = write_bam(tmp_path / "empty.bam", [])
     with AlignmentFile(str(path)) as reads, StreamingPileupBuilder(reads) as builder:
         assert builder.header is reads.header
-        assert builder.pileup("chr2", 5) == Pileup("chr2", 5, [])
+        assert builder.pileup("chr2", 5) == Pileup("chr2", 5, ())
         with pytest.raises(ValueError, match="Contig chr3 is not in the header."):
             builder.pileup("chr3", 1)
         with pytest.raises(ValueError, match="Attempted to advance to chr1:5 from chr2:5."):
@@ -280,7 +280,7 @@ def test_builder_leaves_out_reads_with_no_reference_consuming_operator() -> None
     with StreamingPileupBuilder(reads, tap=evicted.append) as builder:
         assert [len(pileup.pileups) for pileup in builder.columns("chr1", 8, 12)] == [0, 0, 0, 0]
     assert evicted == reads
-    assert Pileup.from_alignments(reads, "chr1", 9).pileups == []
+    assert Pileup.from_alignments(reads, "chr1", 9).pileups == ()
 
 
 def test_builder_skips_soft_and_hard_clips() -> None:
