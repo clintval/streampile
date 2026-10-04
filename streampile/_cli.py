@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     tabulate_parser.add_argument(
-        "--bam", type=Path, required=True, help="indexed, coordinate-sorted SAM, BAM, or CRAM"
+        "--bam", type=Path, required=True, help="indexed, coordinate-sorted BAM or CRAM"
     )
     tabulate_parser.add_argument("--ref", type=Path, required=True, help="indexed reference FASTA")
     tabulate_parser.add_argument(

@@ -367,7 +367,7 @@ class Tabulator:
         called, before any base is read, so a refused territory leaves nothing half written.
 
         Args:
-            alignments: an indexed, coordinate-sorted alignment file.
+            alignments: an indexed, coordinate-sorted BAM or CRAM.
             territory: the bases to tabulate.
 
         Raises:
@@ -633,7 +633,7 @@ def tabulate(
     `Tabulator.tabulate`.
 
     Args:
-        alignments: an indexed, coordinate-sorted alignment file.
+        alignments: an indexed, coordinate-sorted BAM or CRAM.
         reference: the indexed reference the reads are aligned to.
         territory: the bases to tabulate, e.g. `Territory(BedReader.from_path[Bed3N](path))`.
         min_base_quality: the lowest base quality of an informative base: 0 by default, where a

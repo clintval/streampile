@@ -127,6 +127,12 @@ def test_tabulate_refuses_an_index_on_a_plain_table(tmp_path: Path) -> None:
     assert not (tmp_path / "counts.tsv").exists()
 
 
+def test_tabulate_refuses_a_sam_it_cannot_read_by_region(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="fetching by region is not available for SAM files"):
+        run(tmp_path / "counts.tsv", bam=DATA / "reads.sam")
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_tabulate_reads_a_cram_with_the_reference_it_is_given(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
