@@ -8,7 +8,6 @@ from pathlib import Path
 from bedspec import Bed3N
 from bedspec import BedReader
 from bedspec import Territory
-from pybgzf import BGZF_SUFFIXES
 from pybgzf import IndexFormat
 from pysam import AlignmentFile
 from pysam import FastaFile
@@ -66,11 +65,10 @@ def _tabulate(args: argparse.Namespace) -> int:
             "min_mapping_quality": args.min_mapping_quality,
             "exclude_flags": f"{args.exclude_flags:#x}",
         }
-        bgzf = args.out.suffix in BGZF_SUFFIXES
         with (
             _staged(args.out, index) as out,
             TabulationWriter.from_path(
-                out, index=index, threads=args.threads if bgzf else 1, metadata=metadata
+                out, index=index, threads=args.threads, metadata=metadata
             ) as writer,
         ):
             writer.write_header()

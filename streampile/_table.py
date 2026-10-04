@@ -262,16 +262,15 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
             index: the kind of index to write beside a BGZF file, or None to write none.
             index_path: where to write the index, instead of beside the file; required when the
                 file is not a regular file, such as a FIFO.
-            threads: the number of threads compressing a BGZF file.
+            threads: the number of threads compressing a BGZF file, unused for other files.
             metadata: more `##key=value` lines to write after the versions, in order.
             options: the options of the writer, with tabulation defaults for any not given.
         """
         path = Path(path).expanduser()
         if path.suffix not in BGZF_SUFFIXES:
-            if index is not None or index_path is not None or threads != 1:
+            if index is not None or index_path is not None:
                 raise ValueError(
-                    "An index and threads need a BGZF path ending in .gz, .bgz, or .bgzf, not:"
-                    + f" {path}"
+                    f"An index needs a BGZF path ending in .gz, .bgz, or .bgzf, not: {path}"
                 )
             plain: Self = unwrap(super().from_path)(cls, path, metadata=metadata, **options)
             return plain
