@@ -6,7 +6,7 @@ authors = [{ name = "Clint Valentine", email = "valentine.clint@gmail.com" }]
 license = "MIT"
 readme = "README.md"
 keywords = ["bioinformatics", "pileup", "SAM", "BAM", "NGS", "HTS", "genomics"]
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
 dependencies = [
     "bedspec >=4.0.0",
@@ -57,7 +57,7 @@ requires      = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.sdist]
-only-include = ["streampile", "tests", "README.md", "CONTRIBUTING.md", "LICENSE"]
+only-include = ["streampile", "tests", "README.md", "CONTRIBUTING.md", "LICENSE", "NOTICE"]
 
 [tool.uv]
 # Ignore releases younger than a week, so a compromised publish has time to be
