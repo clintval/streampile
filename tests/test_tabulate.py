@@ -408,3 +408,11 @@ def test_a_read_that_spells_the_reference_across_an_insertion_and_deletion_is_a_
     sites = tabulated(tmp_path, chr1, reads)
     assert [(site.depth, site.ref_reads) for site in sites[:12]] == [(1, 1)] * 11 + [(0, 0)]
     assert not any(site.alts for site in sites)
+
+
+def test_no_allele_is_left_aligned_onto_a_reference_n(tmp_path: Path) -> None:
+    chr1 = "GTNAAAAGTCATG"
+    reads = [record("r", 0, "6M1D5M", "GTNAAA" + "GTCAT", header=header_of({"chr1": chr1}))]
+    sites = tabulated(tmp_path, chr1, reads)
+    assert [site.depth for site in sites[:12]] == [1, 1] + [0] * 5 + [1] * 5
+    assert not any(site.alts for site in sites)

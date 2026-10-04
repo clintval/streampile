@@ -281,14 +281,14 @@ class Tabulator:
     allele, and its read is a reference read across it.
 
     A read is counted for an allele only when every read base of the allele, the anchor base
-    included, is at the base-quality floor and is not an `N`. Otherwise the read is not
-    informative at any base of that allele. A read is never counted for an allele that starts
-    with an indel with no aligned base before it, ends with a deletion with no aligned base after
-    it, or holds a reference base other than A, C, G, or T. Nor is it counted for an indel that
-    would be left-aligned past the read's previous difference or reference skip, or past its first
-    aligned base, so one read is never counted for two alleles at one base; it is then not
-    informative from there to the end of the indel. A read with no stored qualities (QUAL `*`)
-    has quality 255 at every base, as in htslib, so it passes every floor, and a read with no
+    included, is at the base-quality floor and is not an `N`. Otherwise the read is not informative
+    at any base of that allele. A read is never counted for an allele that starts with an indel with
+    no aligned base before it, ends with a deletion with no aligned base after it, or holds a
+    reference base other than A, C, G, or T, before or after left-alignment. Nor is it counted for
+    an indel that would be left-aligned past the read's previous difference or reference skip, or
+    past its first aligned base, so one read is never counted for two alleles at one base; it is
+    then not informative from there to the end of the indel. A read with no stored qualities (QUAL
+    `*`) has quality 255 at every base, as in htslib, so it passes every floor, and a read with no
     stored bases (SEQ `*`) is not counted at all.
 
     A read counted for an allele is informative at every base the allele spans, a deletion's
@@ -362,10 +362,8 @@ class Tabulator:
         """
         if record.reference_name is None:
             raise ValueError(f"Read {record.query_name} is not mapped.")
-        segments = _segments(record)
-        counted, dropped, _ = self._alleles(
-            record, segments, self._reference(record.reference_name)
-        )
+        reference = self._reference(record.reference_name)
+        counted, dropped, _ = self._alleles(record, _segments(record), reference)
         return counted, dropped
 
     def _alleles(
@@ -407,15 +405,11 @@ class Tabulator:
                 dropped.append((run.floor, ref_end))
                 continue
             pos, ref, alt = normalized
-            counted.append(
-                Allele(
-                    pos=pos,
-                    ref=ref,
-                    alt=alt,
-                    start=min(ref_start, pos),
-                    end=max(ref_end, pos + len(ref)),
-                )
-            )
+            start, end = min(ref_start, pos), max(ref_end, pos + len(ref))
+            if reference.get(start, ref_start).strip("ACGT"):
+                dropped.append((start, end))
+                continue
+            counted.append(Allele(pos=pos, ref=ref, alt=alt, start=start, end=end))
         return counted, dropped, matched
 
     def _reference(self, contig: str) -> _Reference:
