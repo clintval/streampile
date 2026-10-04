@@ -32,6 +32,10 @@ To fix what can be fixed automatically, run:
 uv run poe fix-all
 ```
 
+## Benchmarks
+
+See [`benchmarks/README.md`](benchmarks/README.md) for how to run them and recent results.
+
 ## Locking
 
 `[tool.uv]` in `pyproject.toml` ignores releases younger than a week, and `uv.lock` records that setting.
