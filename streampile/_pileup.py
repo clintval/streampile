@@ -42,7 +42,9 @@ class PileupRead(NamedTuple):
     A read holding a base, a deletion, or a reference skip (an `N` operator) at a position appears
     once. A read with an insertion right after the position appears again as an insertion entry,
     as does a read whose alignment opens with an insertion, at the position before its first
-    aligned base.
+    aligned base. So an insertion at either end of an alignment is reported: htslib reports only
+    one that closes an alignment, and fgbio only one that opens it, at offset 0 even after a
+    soft clip.
 
     A skip entry holds no base, no quality, and no query offset. htslib flags the same entry as
     both `is_del` and `is_refskip` and gives it the offset and quality of the read's next base;

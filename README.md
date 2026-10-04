@@ -47,6 +47,7 @@ By default it leaves out secondary, supplementary, duplicate, and QC-fail reads,
 
 Each entry of `pileup.pileups` holds a read and its base, deletion, reference skip (`N`), or insertion at the position.
 A skip holds no base or quality: it counts in `unfiltered_depth`, as in htslib, but never in `filtered_depth` or the bases and qualities of a pileup.
+An insertion is an entry at the position before it, so one that opens an alignment is reported at the position before the first aligned base, and one that closes it at the last aligned base; htslib reports only the closing one, and fgbio only the opening one.
 Each read's CIGAR is walked once, when the builder first reaches it, so a pileup costs one lookup per read.
 Pass `tap`, e.g. `tap=writer.write`, to be handed every record, in input order, once the builder has moved past it.
 Pass `read_filter`, e.g. `read_filter=lambda read: read.is_proper_pair`, to leave more reads out of pileups, after the built-in filters; a read it rejects still goes to `tap`.

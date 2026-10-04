@@ -132,6 +132,7 @@ def test_builder_piles_up_insertions_at_read_starts_and_ends() -> None:
         ("clipped", "insertion", None, None, "T"),
     ]
     assert at_nine.pileups[0].is_ins and at_nine.pileups[0].inserted_qualities == [10, 11]
+    assert [entry.insertion_offset for entry in at_nine.pileups] == [0, 1]
     assert at_nine.unfiltered_depth == 0
     assert entries(builder.pileup("chr1", 10)) == [
         ("opens", "base", 2, 2, None),
