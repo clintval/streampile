@@ -1,8 +1,9 @@
 """Time piling up every base of a territory with streampile and with pysam's htslib engine.
 
 Each engine counts, at every base, the reads holding each base at the quality floor, the reads
-with a deletion there, and the reads with an insertion after it, and the counts must agree.
-Each engine runs in its own process, so its peak resident memory is its own.
+with a deletion there, and the reads with an insertion after it. The pileup engines' counts agree
+unless a read opens with an insertion or has no stored qualities. Each engine runs in its own
+process, so its peak resident memory is its own.
 """
 
 import argparse

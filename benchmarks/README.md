@@ -1,7 +1,8 @@
 # Benchmarks
 
 `benchmark.py` piles up every base of a territory and counts, at each base, the reads holding each base at base quality 30 or more, the reads with a deletion there, and the reads with an insertion after it, from reads with mapping quality 20 or more.
-It runs each engine in its own process, prints its time and peak resident memory, and prints a digest of its counts, which must agree between engines.
+It runs each engine in its own process, prints its time and peak resident memory, and prints a digest of its counts.
+The `htslib` and `streampile` digests agree unless a read opens with an insertion, which only streampile reports, or has no stored qualities (QUAL `*`), which streampile counts at quality 255 and the `htslib` engine skips; nothing checks them.
 
 ```console
 uv run python benchmarks/benchmark.py --bam reads.bam --ref reference.fa --intervals territory.bed
@@ -12,7 +13,7 @@ The engines are:
 - `htslib`: pysam's `AlignmentFile.pileup` over each span, counting each entry in Python.
 - `streampile`: `StreamingPileupBuilder.columns` over each span, counting each entry in Python.
 - `tabulate`: `streampile.tabulate`, which also groups MNVs and normalizes indels.
-- `rebuild`: building each column from scratch from every overlapping read's aligned pairs, on `--rebuild-columns` evenly spaced columns (500 by default).
+- `rebuild`: building each column from scratch from every overlapping read's aligned pairs, on `--rebuild-columns` evenly spaced columns (2,000 by default; 500 in the results below).
 
 Results on an Apple M3 Max, for a coordinate-sorted, overlap-clipped duplex consensus BAM of 1.43 million reads over a 123 kb territory, about 750 reads deep:
 
