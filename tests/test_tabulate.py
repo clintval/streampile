@@ -182,6 +182,19 @@ def test_tabulate_counts_reads_spanning_several_intervals(
     assert [site.pos for site in sites if site.alts] == [11]
 
 
+def test_tabulate_counts_bases_of_any_quality_but_not_qc_fail_reads_by_default(
+    tmp_path: Path, reference: FastaFile
+) -> None:
+    reads = [
+        record("q0", 0, "4M", CHR1[0:4], quals=[0] * 4, header=HEADER),
+        record("qcfail", 0, "4M", CHR1[0:4], flag=512, header=HEADER),
+    ]
+    path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
+    with AlignmentFile(str(path)) as alignments:
+        sites = list(tabulate(alignments, reference, [("chr1", 0, 4)]))
+    assert [(site.depth, site.ref_reads) for site in sites] == [(1, 1)] * 4
+
+
 def test_tabulate_counts_reads_with_no_stored_qualities_at_every_floor(
     tmp_path: Path, reference: FastaFile
 ) -> None:

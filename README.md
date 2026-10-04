@@ -25,6 +25,7 @@ pip install streampile
 A `StreamingPileupBuilder` reads coordinate-sorted records once, from start to finish, and piles them up at the positions you ask for.
 A position may repeat or move forward, but never back.
 Positions are 0-based, as in pysam.
+By default it leaves out secondary, supplementary, duplicate, and QC-fail reads, as htslib does, though fgbio keeps QC-fail reads, and its filtered views leave out bases under quality 13, as htslib's do.
 
 ```pycon
 >>> from pysam import AlignmentFile
@@ -67,6 +68,7 @@ Overlapping mates are both piled up; `pileup.without_overlaps()` keeps one read 
 `tabulate` counts the reads of every allele at every base of a territory, one `TabulatedBase` per base, covered or not.
 Within a read, adjacent mismatches are grouped into one MNV, and indels are anchored, trimmed, and left-aligned as normalized VCF alleles.
 Positions are 1-based, as in VCF, so alleles can be matched to a VCF by `CHROM`, `POS`, `REF`, and `ALT`.
+Like the builder, it leaves out secondary, supplementary, duplicate, and QC-fail reads by default, but it counts bases of any quality unless given a `min_base_quality`, where the builder's floor is 13.
 
 ```pycon
 >>> from pysam import FastaFile

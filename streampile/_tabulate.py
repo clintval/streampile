@@ -293,10 +293,11 @@ class Tabulator:
 
         Args:
             reference: the indexed reference the reads are aligned to.
-            min_base_quality: the lowest base quality of an informative base.
+            min_base_quality: the lowest base quality of an informative base: 0 by default, where
+                a `StreamingPileupBuilder` filters at 13 by default, as htslib does.
             min_mapping_quality: the lowest mapping quality of a counted read.
-            exclude_flags: reads with any of these SAM flags are not counted. Unmapped reads
-                never are.
+            exclude_flags: reads with any of these SAM flags are not counted: by default,
+                secondary, QC-fail, duplicate, and supplementary reads. Unmapped reads never are.
         """
         self.reference: FastaFile = reference
         self.min_base_quality: int = min_base_quality
@@ -564,9 +565,11 @@ def tabulate(
         alignments: an indexed, coordinate-sorted alignment file.
         reference: the indexed reference the reads are aligned to.
         intervals: the territory, as 0-based half-open `(contig, start, end)` spans.
-        min_base_quality: the lowest base quality of an informative base.
+        min_base_quality: the lowest base quality of an informative base: 0 by default, where a
+            `StreamingPileupBuilder` filters at 13 by default, as htslib does.
         min_mapping_quality: the lowest mapping quality of a counted read.
-        exclude_flags: reads with any of these SAM flags are not counted.
+        exclude_flags: reads with any of these SAM flags are not counted: by default, secondary,
+            QC-fail, duplicate, and supplementary reads.
     """
     tabulator = Tabulator(
         reference,

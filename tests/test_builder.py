@@ -244,6 +244,17 @@ def test_builder_moves_across_contigs() -> None:
     assert [read.query_name for read in evicted] == ["one", "two"]
 
 
+def test_builder_floors_bases_at_13_and_leaves_out_qc_fail_reads_by_default() -> None:
+    reads = [
+        record("q12", 10, "4M", "ACGT", quals=[12] * 4),
+        record("q13", 10, "4M", "ACGT", quals=[13] * 4),
+        record("qcfail", 10, "4M", "ACGT", flag=512),
+    ]
+    pileup = StreamingPileupBuilder(reads).pileup("chr1", 10)
+    assert [entry.alignment.query_name for entry in pileup.pileups] == ["q12", "q13"]
+    assert (pileup.filtered_depth, pileup.get_query_qualities) == (1, [13])
+
+
 @pytest.mark.parametrize(
     "flag,mapq,options,kept",
     [

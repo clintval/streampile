@@ -80,12 +80,14 @@ class StreamingPileupBuilder:
         Args:
             records: coordinate-sorted reads, such as an open `AlignmentFile`.
             min_mapq: the lowest mapping quality of a read to pile up.
-            min_base_quality: the quality floor of each pileup's filtered views.
+            min_base_quality: the quality floor of each pileup's filtered views: 13 by default,
+                as in htslib, where `tabulate` counts bases of any quality by default.
             proper_pairs_only: pile up only reads flagged as in a proper pair.
             include_secondary: pile up secondary alignments.
             include_supplementary: pile up supplementary alignments.
             include_duplicate: pile up reads flagged as duplicates.
-            include_qcfail: pile up reads flagged as failing quality checks.
+            include_qcfail: pile up reads flagged as failing quality checks. They are left out
+                by default, as htslib leaves them out, although fgbio keeps them.
             read_filter: a function that keeps a read for pileups when it returns True, e.g.
                 `lambda read: read.is_proper_pair`, asked only of reads that pass the other
                 filters. A read it rejects still goes to `tap`.
