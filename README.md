@@ -124,7 +124,7 @@ Overlapping mates are both counted, so clip overlaps first to count each molecul
 
 ## Command Line
 
-`streampile tabulate` writes the same bases to a table:
+`streampile tabulate` writes the same bases to a table, from an indexed, coordinate-sorted BAM or CRAM, decoding a CRAM with the `--ref` FASTA:
 
 ```console
 streampile tabulate \
