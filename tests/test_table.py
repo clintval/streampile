@@ -1,4 +1,5 @@
 import gzip
+from dataclasses import replace
 from importlib.metadata import version
 from pathlib import Path
 
@@ -124,6 +125,20 @@ def test_the_metadata_and_header_come_first_and_once(
     }
     assert list(table) == BASES
     assert [comment.text for comment in comments][-1] == "## made by streampile"
+
+
+def test_a_reader_keeps_the_columns_a_later_version_appends(tmp_path: Path) -> None:
+    path = tmp_path / "bases.tsv"
+    write(path, BASES[:2])
+    lines = path.read_text().splitlines()
+    lines[2] += "\tlater"
+    lines[3] += "\t7"
+    lines[4] += "\t8"
+    path.write_text("\n".join(lines) + "\n")
+    later = list(TabulationReader.from_path(path))
+    assert later == [replace(BASES[0], extra=("7",)), replace(BASES[1], extra=("8",))]
+    write(tmp_path / "again.tsv", later)
+    assert list(TabulationReader.from_path(tmp_path / "again.tsv")) == later
 
 
 def test_a_reader_refuses_another_format_version(tmp_path: Path) -> None:

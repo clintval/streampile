@@ -13,6 +13,7 @@ from pybgzf import Columns
 from pybgzf import IndexFormat
 from typeline import Codecs
 from typeline import Comment
+from typeline import ExtraColumns
 from typeline import FixedRecordType
 from typeline import ReaderOptions
 from typeline import SubscriptableClassmethod
@@ -43,6 +44,10 @@ class TabulatedBase:
     `alts[i]`, and `alt_reads[i]` reads, e.g. `C`, `T` for an SNV, `CA`, `C` for a deletion, or
     `C`, `CT` for an insertion.
 
+    Within a format version, columns are only ever appended, each keeping its meaning, so a table
+    written by a later streampile reads here, with the columns this version does not know kept,
+    as text, in `extra`.
+
     Attributes:
         contig: the name of the contig.
         pos: the 1-based position of the base, as in VCF.
@@ -52,6 +57,8 @@ class TabulatedBase:
         alt_refs: the reference bases of each allele.
         alts: the alternate bases of each allele.
         alt_reads: the number of reads of each allele.
+        extra: the columns after the known ones, as text, from a table written by a later
+            version within the same format version, written back after the known columns.
     """
 
     contig: str
@@ -62,6 +69,7 @@ class TabulatedBase:
     alt_refs: tuple[str, ...] = ()
     alts: tuple[str, ...] = ()
     alt_reads: tuple[int, ...] = ()
+    extra: ExtraColumns = ()
 
 
 TABULATION_CODECS: Final[Codecs] = {

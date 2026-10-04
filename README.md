@@ -154,6 +154,8 @@ A table describes itself.
 It opens with `##key=value` lines: its format version, `streampile-tabulation`, the streampile version that wrote it, and every parameter it was tabulated with.
 A header line starting `#contig` follows, as VCF's starts `#CHROM`, so an index skips every line before the rows by their `#`.
 `TabulationReader` holds the `##` lines in its `metadata` and refuses a table of another format version.
+Within a format version, columns are only ever appended, each keeping its meaning: a reader of an earlier streampile reads a later table, keeping the columns it does not know, as text, in `TabulatedBase.extra`.
+Any other change to the columns is a new format version.
 
 ## Development and Testing
 
