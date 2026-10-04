@@ -1,3 +1,5 @@
+import weakref
+from collections import deque
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -225,6 +227,26 @@ def test_closing_reads_the_rest_of_the_input_only_for_a_tap(tapped: bool) -> Non
         assert pulled == ["r10", "r20"]
     assert pulled == (["r10", "r20", "r30", "r40", "r50"] if tapped else ["r10", "r20"])
     assert evicted == (reads if tapped else [])
+
+
+class Traceable(AlignedSegment):
+    """A read that can be weakly referenced, to see when nothing holds it any more."""
+
+
+@pytest.mark.parametrize("tapped", [False, True])
+def test_builder_holds_passed_reads_only_for_a_tap(tapped: bool) -> None:
+    reads = deque([
+        record("long", 100, "100M", "A" * 100, kind=Traceable),
+        record("short", 100, "10M", "A" * 10, kind=Traceable),
+        record("filtered", 105, "10M", "A" * 10, flag=1024, kind=Traceable),
+        record("later", 300, "4M", "ACGT", kind=Traceable),
+    ])
+    held = {read.query_name or "": weakref.ref(read) for read in reads}
+    source = (reads.popleft() for _ in range(len(reads)))
+    builder = StreamingPileupBuilder(source, tap=(lambda _: None) if tapped else None)
+    builder.pileup("chr1", 120)
+    alive = sorted(name for name, read in held.items() if read() is not None)
+    assert alive == (["filtered", "later", "long", "short"] if tapped else ["later", "long"])
 
 
 def test_builder_lets_reads_be_changed_before_they_are_written(tmp_path: Path) -> None:

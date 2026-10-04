@@ -25,9 +25,10 @@ def record(
     mapq: int = 60,
     quals: list[int] | None = None,
     header: AlignmentHeader = HEADER,
+    kind: type[AlignedSegment] = AlignedSegment,
 ) -> AlignedSegment:
     """A mapped read built field by field."""
-    read = AlignedSegment(header)
+    read = kind(header)
     read.query_name = name
     read.flag = flag
     read.reference_name = contig

@@ -38,8 +38,12 @@ class StreamingPileupBuilder:
     once, when the read is first reached, so building a pileup costs one lookup per read there.
 
     Every read, filtered or not, is handed to `tap` exactly once and in input order, as soon as
-    the builder has moved past it, or when the builder closes. A read can therefore be changed,
-    e.g. tagged, while it is in a pileup and then written by `tap`.
+    the builder has moved past it and every read before it, or when the builder closes. A read
+    can therefore be changed, e.g. tagged, while it is in a pileup and then written by `tap`.
+    Keeping input order means a read is held until every read before it has been passed, so a
+    long read, e.g. one with a long reference skip, holds back every read that starts within it:
+    with a `tap`, buffering behind the longest active read is inherent. Without a `tap`, a read
+    is dropped as soon as the builder has moved past it.
 
     ```python
     with (
@@ -210,6 +214,8 @@ class StreamingPileupBuilder:
         else:
             self._active = [footprint for footprint in self._active if footprint.end > pos]
         target = (reference_id, pos + 1)
+        waiting = self._waiting
+        tapped = self.tap is not None
         while self._next is not None:
             record = self._next
             record_id = record.reference_id if record.reference_id >= 0 else UNPLACED
@@ -219,14 +225,14 @@ class StreamingPileupBuilder:
             if key < self._last_key:
                 raise ValueError(f"Records are out of coordinate order at {record.query_name}.")
             self._last_key = key
-            end = record.reference_end
-            self._waiting.append((record, record_id, key[1] + 1 if end is None else end))
+            if tapped:
+                end = record.reference_end
+                waiting.append((record, record_id, key[1] + 1 if end is None else end))
             if record_id == reference_id and self.accepts(record):
                 footprint = Footprint(record)
                 if footprint.end > pos:
                     self._active.append(footprint)
             self._next = next(self._records, None)
-        waiting = self._waiting
         while waiting and (
             waiting[0][1] < reference_id or (waiting[0][1] == reference_id and waiting[0][2] <= pos)
         ):
