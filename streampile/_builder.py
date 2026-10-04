@@ -67,6 +67,7 @@ class StreamingPileupBuilder:
         include_supplementary: bool = False,
         include_duplicate: bool = False,
         include_qcfail: bool = False,
+        read_filter: Callable[[AlignedSegment], bool] | None = None,
         tap: Callable[[AlignedSegment], Any] | None = None,
     ) -> None:
         """Start a builder over coordinate-sorted reads.
@@ -85,6 +86,9 @@ class StreamingPileupBuilder:
             include_supplementary: pile up supplementary alignments.
             include_duplicate: pile up reads flagged as duplicates.
             include_qcfail: pile up reads flagged as failing quality checks.
+            read_filter: a function that keeps a read for pileups when it returns True, e.g.
+                `lambda read: read.is_proper_pair`, asked only of reads that pass the other
+                filters. A read it rejects still goes to `tap`.
             tap: a function given every read once the builder has moved past it.
 
         Raises:
@@ -109,6 +113,7 @@ class StreamingPileupBuilder:
         self.include_supplementary: bool = include_supplementary
         self.include_duplicate: bool = include_duplicate
         self.include_qcfail: bool = include_qcfail
+        self.read_filter: Callable[[AlignedSegment], bool] | None = read_filter
         self.tap: Callable[[AlignedSegment], Any] | None = tap
         self.previous_pileup: Pileup | None = None
         self._waiting: deque[tuple[AlignedSegment, int, int]] = deque()
@@ -150,7 +155,7 @@ class StreamingPileupBuilder:
         self._closed = True
 
     def accepts(self, record: AlignedSegment) -> bool:
-        """Whether a read passes the builder's read filters and has a base on the reference."""
+        """Whether a read passes the built-in filters, is placed, and then passes `read_filter`."""
         if record.mapping_quality < self.min_mapq:
             return False
         if self.proper_pairs_only and not record.is_proper_pair:
@@ -163,7 +168,9 @@ class StreamingPileupBuilder:
             return False
         if not self.include_qcfail and record.is_qcfail:
             return False
-        return is_placed(record)
+        if not is_placed(record):
+            return False
+        return self.read_filter is None or self.read_filter(record)
 
     def pileup(self, contig: str, pos: int) -> Pileup:
         """Advance to a position, at or after the last one, and pile up the reads there.

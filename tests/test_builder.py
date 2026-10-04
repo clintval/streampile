@@ -282,6 +282,28 @@ def test_builder_filters_reads(flag: int, mapq: int, options: dict[str, Any], ke
     assert evicted == [read]
 
 
+def test_builder_asks_a_read_filter_after_its_own_filters() -> None:
+    reads = [
+        record("q1", 100, "50M", "A" * 50),
+        record("x2", 104, "50M", "A" * 50),
+        record("q3", 108, "50M", "A" * 50, flag=1024),
+        record("q4", 112, "50M", "A" * 50),
+        unmapped("q5"),
+    ]
+    asked: list[str] = []
+
+    def keep(read: AlignedSegment) -> bool:
+        asked.append(read.query_name or "")
+        return not asked[-1].startswith("x")
+
+    evicted: list[AlignedSegment] = []
+    with StreamingPileupBuilder(reads, read_filter=keep, tap=evicted.append) as builder:
+        pileup = builder.pileup("chr1", 115)
+        assert [entry.alignment.query_name for entry in pileup.pileups] == ["q1", "q4"]
+    assert asked == ["q1", "x2", "q4"]
+    assert evicted == reads
+
+
 def test_builder_taps_every_read_once_in_input_order() -> None:
     reads = [
         record("long", 100, "50M", "A" * 50),
