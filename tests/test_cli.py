@@ -103,6 +103,21 @@ def test_tabulate_indexes_a_bgzf_table(tmp_path: Path) -> None:
     assert (tmp_path / "counts.tsv.gz.csi").is_file()
 
 
+@pytest.mark.parametrize("index", ["tbi", "csi"])
+def test_a_region_of_an_indexed_table_reads_back_as_typed_rows(tmp_path: Path, index: str) -> None:
+    bed = tmp_path / "territory.bed"
+    bed.write_text("chr1\t0\t60\nchr2\t0\t40\n")
+    out = tmp_path / "counts.tsv.gz"
+    assert run(out, "--min-base-quality", "30", "--index", index, intervals=bed) == 0
+    rows = list(TabulationReader.from_path(out))
+    assert list(TabulationReader.query(out, "chr1", 21, 24)) == [
+        row for row in rows if row.contig == "chr1" and 22 <= row.pos <= 24
+    ]
+    assert list(TabulationReader.query(out, "chr2", 0, 40)) == rows[60:]
+    assert any(row.alts for row in TabulationReader.query(out, "chr1", 0, 60))
+    assert list(TabulationReader.query(out, "chr3", 0, 10)) == []
+
+
 def test_tabulate_refuses_an_index_on_a_plain_table(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="An index and threads need a BGZF path"):
         run(tmp_path / "counts.tsv", "--index", "tbi")

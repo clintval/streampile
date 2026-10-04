@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -159,6 +160,18 @@ class TabulationReader(TsvReader[TabulatedBase], FixedRecordType):
                 f"The table is in format version {found_format}, but this reader reads version"
                 + f" {TABULATION_FORMAT}."
             )
+
+    @classmethod
+    def query(cls, path: Path | str, refname: str, start: int, end: int) -> Iterator[TabulatedBase]:
+        """Yield the rows of an indexed table on `refname` from 0-based `start` to `end`.
+
+        The table is BGZF with a tabix or CSI index beside it, as `streampile tabulate --index`
+        writes. The region is half-open, as in BED, so it holds the rows with `pos` from
+        `start + 1` to `end`.
+        """
+        decoder = cls(StringIO(), header=False)
+        with pybgzf.IndexedReader(path) as index:
+            yield from map(decoder.decode, index.query(refname, start, end))
 
 
 class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):

@@ -151,6 +151,14 @@ chr1	24	A	4	0	3	2	1
 ```
 
 A table whose path ends in `.gz` or `.bgz` is written as BGZF with [pybgzf](https://github.com/clintval/pybgzf), and `--index tbi` or `--index csi` indexes it by contig and position as it is written.
+`TabulationReader.query` reads the rows of a region of an indexed table, 0-based and half-open as in BED, back into typed records:
+
+```python
+from streampile import TabulationReader
+
+for base in TabulationReader.query("counts.tsv.gz", "chr1", 20, 24):
+    print(base.pos, base.depth, base.no_calls, base.alts, base.alt_reads)
+```
 
 A table describes itself.
 It opens with `##key=value` lines: its format version, `streampile-tabulation`, the streampile version that wrote it, and every parameter it was tabulated with.
