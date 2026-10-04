@@ -1,3 +1,5 @@
+from array import array
+
 import pytest
 from pysam import AlignedSegment
 
@@ -192,3 +194,28 @@ def test_without_overlaps_keeps_every_entry_of_the_kept_read() -> None:
     assert [entry.alignment.flag for entry in kept.pileups] == [99, 99, 0]
     assert (kept.reference_name, kept.reference_pos, kept.min_base_quality) == ("chr1", 12, 30)
     assert len(pileup.pileups) == 4
+
+
+def test_without_overlaps_keeps_a_mate_whose_base_another_mate_skips() -> None:
+    reads = [
+        record("t", 100, "20M300N20M", "A" * 40, flag=99),
+        record("t", 330, "40M", "G" * 10 + "C" + "G" * 29, flag=147),
+    ]
+    pileup = Pileup.from_alignments(reads, "chr1", 340)
+    kept = pileup.without_overlaps()
+    assert [entry.pileup_type for entry in pileup.pileups] == [SKIP, BASE]
+    assert (kept.filtered_depth, kept.bases) == (1, ["C"])
+    assert [entry.alignment.flag for entry in kept.pileups] == [147]
+
+
+def test_without_overlaps_keeps_a_mate_at_the_floor_over_one_under_it() -> None:
+    reads = [
+        record("t", 100, "10M", "A" * 10, flag=99, quals=[2] * 10),
+        record("t", 105, "10M", "GGC" + "G" * 7, flag=147),
+    ]
+    kept = Pileup.from_alignments(reads, "chr1", 107, min_base_quality=13).without_overlaps()
+    assert (kept.filtered_depth, kept.bases) == (1, ["C"])
+    reads[1].query_qualities = array("B", [2] * 10)
+    kept = Pileup.from_alignments(reads, "chr1", 107, min_base_quality=13).without_overlaps()
+    assert [entry.alignment.flag for entry in kept.pileups] == [99]
+    assert kept.filtered_depth == 0

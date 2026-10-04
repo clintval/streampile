@@ -250,17 +250,26 @@ class Pileup:
     def without_overlaps(self) -> Self:
         """A copy of this pileup with one read per template, by query name.
 
-        As in fgbio's `withoutOverlaps`, the read kept for a template is the first of its name in
-        `pileups`, which a builder fills in input order: in a coordinate-sorted file, the mate
-        that starts first, or, for mates that start together, the one that comes first in the
-        file. Every entry of the kept read stays, its insertion entry included, where fgbio keeps
-        only the first entry of each template.
+        The read kept for a template is the first of its name in `pileups` whose entry here is a
+        base or a deletion at `min_base_quality`, or else the first of its name. A builder fills
+        `pileups` in input order, so of two passing mates in a coordinate-sorted file, the one
+        that starts first is kept. A mate's skip, or its base under the floor, therefore never
+        hides the other mate's base, as in htslib, and as in fgbio, whose floor drops a failing
+        base before its `withoutOverlaps` keeps the first entry. Every entry of the kept read
+        stays, its insertion entry included, where fgbio keeps only the first entry of each
+        template.
         """
-        kept: dict[str | None, AlignedSegment] = {}
+        floor = self.min_base_quality
+        first: dict[str | None, AlignedSegment] = {}
+        passing: dict[str | None, AlignedSegment] = {}
+        for entry in self.pileups:
+            name = entry.alignment.query_name
+            _ = first.setdefault(name, entry.alignment)
+            if (quality := entry.qual) is not None and quality >= floor:
+                _ = passing.setdefault(name, entry.alignment)
+        kept = first | passing
         pileups = tuple(
-            entry
-            for entry in self.pileups
-            if kept.setdefault(entry.alignment.query_name, entry.alignment) is entry.alignment
+            entry for entry in self.pileups if kept[entry.alignment.query_name] is entry.alignment
         )
         return replace(self, pileups=pileups)
 

@@ -53,7 +53,7 @@ Each read's CIGAR is walked once, when the builder first reaches it, so a pileup
 Pass `tap`, e.g. `tap=writer.write`, to be handed every record, in input order, once the builder has moved past it.
 Keeping input order holds every read behind the longest read still in a pileup, so a `tap` costs memory with long or spliced reads; without one, a read is dropped once passed.
 Pass `read_filter`, e.g. `read_filter=lambda read: read.is_proper_pair`, to leave more reads out of pileups, after the built-in filters; a read it rejects still goes to `tap`.
-Overlapping mates are both piled up; `pileup.without_overlaps()` keeps one read per template, the mate that comes first in the input, as fgbio's `withoutOverlaps` does.
+Overlapping mates are both piled up; `pileup.without_overlaps()` keeps one read per template: the first in the input whose base or deletion there is at the quality floor, or else the first, so a mate's skip or low-quality base never hides the other mate's base.
 
 ### Sweeping a Territory
 
