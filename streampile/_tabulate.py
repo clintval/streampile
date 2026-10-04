@@ -6,17 +6,17 @@ from typing import Final
 from typing import final
 
 from bedspec import Territory
+from pysam import CDEL
+from pysam import CDIFF
+from pysam import CEQUAL
+from pysam import CINS
+from pysam import CMATCH
+from pysam import CREF_SKIP
+from pysam import CSOFT_CLIP
 from pysam import AlignedSegment
 from pysam import AlignmentFile
 from pysam import FastaFile
 
-from streampile._footprint import DELETION
-from streampile._footprint import INSERTION
-from streampile._footprint import MATCH
-from streampile._footprint import SEQUENCE_MATCH
-from streampile._footprint import SEQUENCE_MISMATCH
-from streampile._footprint import SKIP
-from streampile._footprint import SOFT_CLIP
 from streampile._table import TabulatedBase
 
 DEFAULT_EXCLUDE_FLAGS: Final[int] = 0xF00
@@ -188,21 +188,18 @@ def _segments(record: AlignedSegment) -> list[Segment]:
     ref_pos: int = record.reference_start
     query = 0
     for operator, length in record.cigartuples or ():
-        if operator == MATCH or operator == SEQUENCE_MATCH or operator == SEQUENCE_MISMATCH:
-            segments.append((MATCH, ref_pos, query, length))
+        if operator == CMATCH or operator == CEQUAL or operator == CDIFF:
+            segments.append((CMATCH, ref_pos, query, length))
             ref_pos += length
             query += length
-        elif operator == INSERTION:
-            segments.append((INSERTION, ref_pos, query, length))
+        elif operator == CINS:
+            segments.append((CINS, ref_pos, query, length))
             query += length
-        elif operator == DELETION:
-            segments.append((DELETION, ref_pos, query, length))
+        elif operator == CDEL or operator == CREF_SKIP:
+            segments.append((operator, ref_pos, query, length))
             ref_pos += length
-        elif operator == SKIP:
-            segments.append((SKIP, ref_pos, query, length))
-            ref_pos += length
-        elif operator == SOFT_CLIP:
-            segments.append((SOFT_CLIP, ref_pos, query, length))
+        elif operator == CSOFT_CLIP:
+            segments.append((CSOFT_CLIP, ref_pos, query, length))
             query += length
     return segments
 
@@ -231,7 +228,7 @@ def _runs(segments: list[Segment], sequence: str, reference: "_Reference") -> li
     """The runs of adjacent differences from the reference of one read, in alignment order."""
     runs = _Runs()
     for operator, ref_pos, query, length in segments:
-        if operator == MATCH:
+        if operator == CMATCH:
             bases = reference.get(ref_pos, ref_pos + length)
             read = sequence[query : query + length]
             if bases == read:
@@ -245,9 +242,9 @@ def _runs(segments: list[Segment], sequence: str, reference: "_Reference") -> li
                     runs.add(_Event(at, at + 1, query_at, query_at + 1, False))
             if len(bases) < length:
                 runs.border(aligned=False)
-        elif operator == INSERTION:
+        elif operator == CINS:
             runs.add(_Event(ref_pos, ref_pos, query, query + length, True))
-        elif operator == DELETION:
+        elif operator == CDEL:
             runs.add(_Event(ref_pos, ref_pos + length, query, query, True))
         else:
             runs.border(aligned=False)
@@ -440,7 +437,7 @@ class Tabulator:
                 ledger.add_allele(allele.pos, (allele.ref, allele.alt))
         excluded |= claimed
         for operator, block_start, _, length in segments:
-            if operator == MATCH:
+            if operator == CMATCH:
                 cursor = block_start
                 for pos in sorted(p for p in excluded if block_start <= p < block_start + length):
                     _add(touched, cursor, pos, ref=True)
@@ -464,7 +461,7 @@ class Tabulator:
         while at >= 0:
             low.append(at)
             at = sequence.find("N", at + 1)
-        blocks = [segment for segment in segments if segment[0] == MATCH]
+        blocks = [segment for segment in segments if segment[0] == CMATCH]
         for offset in low:
             for _, ref_pos, query, length in blocks:
                 if query <= offset < query + length:

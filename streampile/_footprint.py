@@ -2,15 +2,14 @@ from array import array
 from typing import Final
 from typing import final
 
+from pysam import CDEL
+from pysam import CDIFF
+from pysam import CEQUAL
+from pysam import CINS
+from pysam import CMATCH
+from pysam import CREF_SKIP
+from pysam import CSOFT_CLIP
 from pysam import AlignedSegment
-
-MATCH: Final[int] = 0
-INSERTION: Final[int] = 1
-DELETION: Final[int] = 2
-SKIP: Final[int] = 3
-SOFT_CLIP: Final[int] = 4
-SEQUENCE_MATCH: Final[int] = 7
-SEQUENCE_MISMATCH: Final[int] = 8
 
 SKIPPED: Final[int] = -1
 """The offset of a reference position that the read skips over with an `N` operator."""
@@ -18,13 +17,7 @@ SKIPPED: Final[int] = -1
 DELETED_AT_END: Final[int] = -2
 """The offset of a deleted reference position that no base of the read follows."""
 
-REFERENCE_OPERATORS: Final[frozenset[int]] = frozenset({
-    MATCH,
-    DELETION,
-    SKIP,
-    SEQUENCE_MATCH,
-    SEQUENCE_MISMATCH,
-})
+REFERENCE_OPERATORS: Final[frozenset[int]] = frozenset({CMATCH, CDEL, CREF_SKIP, CEQUAL, CDIFF})
 """The CIGAR operators that consume the reference: M, D, N, =, and X."""
 
 
@@ -58,11 +51,11 @@ class Footprint:
         query = 0
         position = start
         for operator, length in record.cigartuples or ():
-            if operator == MATCH or operator == SEQUENCE_MATCH or operator == SEQUENCE_MISMATCH:
+            if operator == CMATCH or operator == CEQUAL or operator == CDIFF:
                 offsets.extend(range(query, query + length))
                 query += length
                 position += length
-            elif operator == INSERTION:
+            elif operator == CINS:
                 anchor = position - 1
                 previous = insertions.get(anchor)
                 if previous is not None and previous[0] + previous[1] == query:
@@ -70,13 +63,13 @@ class Footprint:
                 else:
                     insertions[anchor] = (query, length)
                 query += length
-            elif operator == DELETION:
+            elif operator == CDEL:
                 offsets.extend([-query - 3 if query < query_length else DELETED_AT_END] * length)
                 position += length
-            elif operator == SKIP:
+            elif operator == CREF_SKIP:
                 offsets.extend([SKIPPED] * length)
                 position += length
-            elif operator == SOFT_CLIP:
+            elif operator == CSOFT_CLIP:
                 query += length
         self.record: AlignedSegment = record
         self.reference_id: int = record.reference_id
