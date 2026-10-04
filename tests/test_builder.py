@@ -1,4 +1,5 @@
 import weakref
+from collections import Counter
 from collections import deque
 from collections.abc import Iterator
 from pathlib import Path
@@ -117,6 +118,105 @@ def test_builder_piles_up_a_deletion() -> None:
     )
     assert entries(builder.pileup("chr1", 13)) == [("r", "deletion", None, 2, None)]
     assert entries(builder.pileup("chr1", 14)) == [("r", "base", 2, 2, None)]
+
+
+def test_builder_piles_up_a_deletion_no_base_follows() -> None:
+    reads = [record("r", 10, "3M2D", "ACG"), record("s", 10, "4M", "ACGT")]
+    builder = StreamingPileupBuilder(reads, min_base_quality=0)
+    pileup = builder.pileup("chr1", 13)
+    assert entries(pileup) == [("r", "deletion", None, None, None), ("s", "base", 3, 3, None)]
+    assert pileup.pileups[0].qual is None
+    assert (pileup.unfiltered_depth, pileup.filtered_depth) == (2, 1)
+    assert entries(builder.pileup("chr1", 14)) == [("r", "deletion", None, None, None)]
+    assert entries(builder.pileup("chr1", 15)) == []
+
+
+@pytest.mark.parametrize(
+    "cigar,bases,expected",
+    [
+        ("1D3M", "ACG", [("r", "deletion", None, 0, None)]),
+        ("3D4M", "ACGT", [("r", "deletion", None, 0, None)]),
+        (
+            "1D1I3M",
+            "TACG",
+            [("r", "deletion", None, 0, None), ("r", "insertion", None, None, "T")],
+        ),
+    ],
+)
+def test_builder_piles_up_a_read_that_opens_with_a_deletion(
+    cigar: str, bases: str, expected: list[tuple[str, str, int | None, int | None, str | None]]
+) -> None:
+    read = record("r", 10, cigar, bases, quals=[25] + [40] * (len(bases) - 1))
+    builder = StreamingPileupBuilder([read])
+    assert entries(builder.pileup("chr1", 9)) == []
+    pileup = builder.pileup("chr1", 10)
+    assert entries(pileup) == expected
+    assert pileup.pileups[0].qual == 25
+
+
+def test_builder_piles_up_an_opening_insertion_after_a_hard_clip() -> None:
+    builder = StreamingPileupBuilder([record("r", 10, "4H1I3M", "TACG")])
+    assert entries(builder.pileup("chr1", 9)) == [("r", "insertion", None, None, "T")]
+    assert entries(builder.pileup("chr1", 10)) == [("r", "base", 1, 1, None)]
+
+
+def test_builder_counts_a_column_of_every_kind_of_entry() -> None:
+    reads = [
+        record("base", 10, "4M", "ACGT"),
+        record("lowdel", 10, "2M1D2M", "ACTA", quals=[40, 40, 5, 40]),
+        record("del", 10, "2M1D2M", "ACTA"),
+        record("closes", 10, "3M1I1M", "ACGTA"),
+        record("opens", 13, "1I3M", "TACG"),
+    ]
+    pileup = StreamingPileupBuilder(reads).pileup("chr1", 12)
+    assert entries(pileup) == [
+        ("base", "base", 2, 2, None),
+        ("lowdel", "deletion", None, 2, None),
+        ("del", "deletion", None, 2, None),
+        ("closes", "base", 2, 2, None),
+        ("closes", "insertion", None, None, "T"),
+        ("opens", "insertion", None, None, "T"),
+    ]
+    assert (len(pileup.pileups), pileup.unfiltered_depth, pileup.filtered_depth) == (6, 4, 3)
+    assert pileup.get_query_sequences == ["G", "G"]
+
+
+def test_builder_floor_leaves_bases_under_it_out_of_the_views_only() -> None:
+    reads = [
+        record(f"q{quality}", 100, "50M", "A" * 50, quals=[quality] * 50)
+        for quality in (19, 20, 21)
+    ]
+    pileup = StreamingPileupBuilder(reads, min_base_quality=20).pileup("chr1", 104)
+    assert (pileup.filtered_depth, pileup.get_query_qualities) == (2, [20, 21])
+    assert pileup.get_query_sequences == ["A", "A"]
+    assert [entry.alignment.query_name for entry in pileup.pileups] == ["q19", "q20", "q21"]
+    assert pileup.unfiltered_depth == 3
+
+
+def test_builder_piles_up_a_crowd_of_reads_at_one_start() -> None:
+    reads = [
+        record(f"{base}{index}", 5, "10M", base * 10)
+        for base, count in (("A", 5), ("C", 4), ("G", 3), ("T", 2), ("N", 1))
+        for index in range(count)
+    ]
+    pileup = StreamingPileupBuilder(reads).pileup("chr1", 5)
+    assert Counter(pileup.get_query_sequences) == {"A": 5, "C": 4, "G": 3, "T": 2, "N": 1}
+    assert pileup.unfiltered_depth == 15
+    assert [entry.alignment.query_name for entry in pileup.pileups] == [
+        read.query_name for read in reads
+    ]
+
+
+def test_builder_piles_up_read_through_pairs_and_reverse_reads_as_aligned() -> None:
+    reads = [
+        record("pair", 99, "10M", "ACGTACGTAC", flag=83, quals=[35] * 10),
+        record("pair", 100, "10M", "CGTACGTACG", flag=163, quals=[35] * 10),
+    ]
+    columns = StreamingPileupBuilder(reads).columns("chr1", 98, 111)
+    assert [pileup.unfiltered_depth for pileup in columns] == [0, 1] + [2] * 9 + [1, 0]
+    reverse = StreamingPileupBuilder(reads).pileup("chr1", 103).pileups[0]
+    assert reverse.alignment.is_reverse
+    assert (reverse.query_position, reverse.base, reverse.qual) == (4, "A", 35)
 
 
 def test_builder_piles_up_insertions_at_read_starts_and_ends() -> None:
@@ -329,6 +429,30 @@ def counted(reads: list[AlignedSegment], pulled: list[str]) -> Iterator[AlignedS
         yield read
 
 
+def test_builder_taps_a_read_once_it_has_passed_the_read_and_every_one_before() -> None:
+    reads = [
+        record("first", 10, "4M", "ACGT"),
+        record("unmapped", 10, "*", "ACGT", flag=4),
+        record("second", 12, "4M", "ACGT"),
+    ]
+    evicted: list[AlignedSegment] = []
+    builder = StreamingPileupBuilder(reads, tap=evicted.append)
+    pileup = builder.pileup("chr1", 13)
+    assert [entry.alignment.query_name for entry in pileup.pileups] == ["first", "second"]
+    assert evicted == []
+    builder.pileup("chr1", 14)
+    assert [read.query_name for read in evicted] == ["first", "unmapped"]
+
+
+def test_builder_taps_every_read_when_its_block_raises() -> None:
+    reads = [record(f"r{start}", start, "4M", "ACGT") for start in (10, 20, 30)]
+    evicted: list[AlignedSegment] = []
+    with pytest.raises(RuntimeError), StreamingPileupBuilder(reads, tap=evicted.append) as builder:
+        builder.pileup("chr1", 10)
+        raise RuntimeError
+    assert evicted == reads
+
+
 @pytest.mark.parametrize("tapped", [False, True])
 def test_closing_reads_the_rest_of_the_input_only_for_a_tap(tapped: bool) -> None:
     reads = [record(f"r{start}", start, "4M", "ACGT") for start in range(10, 60, 10)]
@@ -388,7 +512,8 @@ def test_columns_agree_with_pileups_at_every_position() -> None:
         record("c", 9, "2I8M", "TTACGTACGT"),
         record("d", 10, "3M4N3M", "ACGTAC"),
         record("e", 12, "8M", "ACGTACGT", flag=1024),
-        record("f", 30, "5M", "ACGTA", contig="chr2"),
+        record("f", 14, "3M2D", "ACG"),
+        record("g", 30, "5M", "ACGTA", contig="chr2"),
     ]
     swept = [
         entries(pileup)

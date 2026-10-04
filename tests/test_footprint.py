@@ -32,6 +32,12 @@ def next_after(offset: int) -> int:
         ("3M2D1M", "*", [0, 1, 2, next_after(3), next_after(3), 3], {}, 10, 16),
         ("3M2D", "*", [0, 1, 2, DELETED_AT_END, DELETED_AT_END], {}, 10, 15),
         ("1=1X2M", "ACGT", [0, 1, 2, 3], {}, 10, 14),
+        ("1D3M", "ACG", [next_after(0), 0, 1, 2], {}, 10, 14),
+        ("3D4M", "ACGT", [next_after(0)] * 3 + [0, 1, 2, 3], {}, 10, 17),
+        ("1D1I3M", "ACGT", [next_after(0), 1, 2, 3], {10: (0, 1)}, 10, 14),
+        ("4H1I3M", "ACGT", [1, 2, 3], {9: (0, 1)}, 9, 13),
+        ("4M4D", "ACGT", [0, 1, 2, 3] + [DELETED_AT_END] * 4, {}, 10, 18),
+        ("2M1I1P1I2M", "ACGTAC", [0, 1, 4, 5], {11: (2, 2)}, 10, 14),
     ],
 )
 def test_footprint_walks_the_cigar_once(
