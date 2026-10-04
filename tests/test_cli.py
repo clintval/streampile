@@ -122,7 +122,7 @@ def test_a_region_of_an_indexed_table_reads_back_as_typed_rows(tmp_path: Path, i
 
 
 def test_tabulate_refuses_an_index_on_a_plain_table(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="An index and threads need a BGZF path ending in .gz,"):
+    with pytest.raises(ValueError, match="An index needs a BGZF path ending in .gz,"):
         run(tmp_path / "counts.tsv", "--index", "tbi")
     assert not (tmp_path / "counts.tsv").exists()
 

@@ -88,6 +88,11 @@ def test_a_table_round_trips_with_empty_alleles(tmp_path: Path) -> None:
     assert list(TabulationReader.from_path(tmp_path / "bases.tsv")) == BASES
 
 
+def test_a_plain_table_is_written_whatever_the_threads(tmp_path: Path) -> None:
+    write(tmp_path / "bases.tsv", BASES, threads=2)
+    assert list(TabulationReader.from_path(tmp_path / "bases.tsv")) == BASES
+
+
 @pytest.mark.parametrize("suffix", [".gz", ".bgz", ".bgzf"])
 def test_a_compressed_table_is_bgzf_with_an_end_of_file_block(tmp_path: Path, suffix: str) -> None:
     path = tmp_path / f"bases.tsv{suffix}"
@@ -167,8 +172,8 @@ def test_a_reader_refuses_another_format_version(tmp_path: Path) -> None:
 
 
 def test_the_writer_refuses_bad_options_before_opening_a_file(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="An index and threads need a BGZF path"):
-        TabulationWriter.from_path(tmp_path / "bases.tsv", threads=2)
+    with pytest.raises(ValueError, match="An index needs a BGZF path"):
+        TabulationWriter.from_path(tmp_path / "bases.tsv", index=IndexFormat.TBI)
     with pytest.raises(ValueError, match="An index_path needs an index"):
         TabulationWriter.from_path(tmp_path / "bases.tsv.gz", index_path=tmp_path / "bases.csi")
     with pytest.raises(ValueError):
