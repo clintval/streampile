@@ -10,6 +10,7 @@ from typing import Final
 from typing import TextIO
 
 import pybgzf
+from pybgzf import BGZF_SUFFIXES
 from pybgzf import Columns
 from pybgzf import IndexFormat
 from typeline import Codecs
@@ -108,9 +109,6 @@ TABULATION_RENAME: Final[Mapping[str, str]] = MappingProxyType({"contig": "#cont
 
 METADATA_PREFIX: Final[str] = "##"
 """The prefix of the metadata lines before the header, `##key=value`."""
-
-BGZF_SUFFIXES: Final[tuple[str, ...]] = (".bgz", ".gz")
-"""The file extensions written as BGZF, which is also valid gzip."""
 
 STREAMPILE_VERSION: Final[str] = version("streampile")
 """The version of streampile, written in the metadata of every table."""
@@ -252,13 +250,12 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
     ) -> Self:
         """Construct a writer of tabulated bases from a file path.
 
-        A path ending in `.gz` or `.bgz` is written as BGZF, which any gzip reader can read, and
-        can be indexed with tabix or CSI as it is written, on as many threads as given.
-        Rows must then be sorted by position within each contig, and each contig must be
-        contiguous, as `tabulate` writes them. The index skips the metadata and header lines,
-        which start with `#`. Other paths are written as UTF-8, and compressed when they end in
-        `.bz2` or `.xz`. The writer is checked before the file is opened, so a refused writer
-        leaves a file alone.
+        A path ending in `.gz`, `.bgz`, or `.bgzf` is written as BGZF, which any gzip reader can
+        read, and can be indexed with tabix or CSI as it is written, on as many threads as given.
+        Rows must then be sorted by position within each contig, and each contig must be contiguous,
+        as `tabulate` writes them. The index skips the metadata and header lines, which start with
+        `#`. Other paths are written as UTF-8, and compressed when they end in `.bz2` or `.xz`. The
+        writer is checked before the file is opened, so a refused writer leaves a file alone.
 
         Args:
             path: the path to the file to write the table to.
@@ -273,7 +270,8 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
         if path.suffix not in BGZF_SUFFIXES:
             if index is not None or index_path is not None or threads != 1:
                 raise ValueError(
-                    f"An index and threads need a BGZF path ending in .gz or .bgz, not: {path}"
+                    "An index and threads need a BGZF path ending in .gz, .bgz, or .bgzf, not:"
+                    + f" {path}"
                 )
             plain: Self = unwrap(super().from_path)(cls, path, metadata=metadata, **options)
             return plain

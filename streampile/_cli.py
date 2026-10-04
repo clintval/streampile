@@ -8,12 +8,12 @@ from pathlib import Path
 from bedspec import Bed3N
 from bedspec import BedReader
 from bedspec import Territory
+from pybgzf import BGZF_SUFFIXES
 from pybgzf import IndexFormat
 from pysam import AlignmentFile
 from pysam import FastaFile
 
 from streampile._pileup import DEFAULT_EXCLUDE_FLAGS
-from streampile._table import BGZF_SUFFIXES
 from streampile._table import TabulationWriter
 from streampile._tabulate import tabulate
 
@@ -136,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         "--out",
         type=Path,
         required=True,
-        help="the table to write, as BGZF if it ends in .gz or .bgz",
+        help="the table to write, as BGZF if it ends in .gz, .bgz, or .bgzf",
     )
     tabulate_parser.set_defaults(run=_tabulate)
     args = parser.parse_args(argv)

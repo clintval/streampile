@@ -152,7 +152,7 @@ chr1	23	C	4	0	3	2	1	CA	C	1	0	1
 chr1	24	A	4	0	3	2	1					
 ```
 
-A table whose path ends in `.gz` or `.bgz` is written as BGZF with [pybgzf](https://github.com/clintval/pybgzf), and `--index tbi` or `--index csi` indexes it by contig and position as it is written.
+A table whose path ends in `.gz`, `.bgz`, or `.bgzf` is written as BGZF with [pybgzf](https://github.com/clintval/pybgzf), and `--index tbi` or `--index csi` indexes it by contig and position as it is written.
 `TabulationReader.query` reads the rows of a region of an indexed table, 0-based and half-open as in BED, back into typed records:
 
 ```python

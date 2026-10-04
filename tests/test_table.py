@@ -89,7 +89,7 @@ def test_a_table_round_trips_with_empty_alleles(tmp_path: Path) -> None:
     assert list(TabulationReader.from_path(tmp_path / "bases.tsv")) == BASES
 
 
-@pytest.mark.parametrize("suffix", [".gz", ".bgz"])
+@pytest.mark.parametrize("suffix", [".gz", ".bgz", ".bgzf"])
 def test_a_compressed_table_is_bgzf_with_an_end_of_file_block(tmp_path: Path, suffix: str) -> None:
     path = tmp_path / f"bases.tsv{suffix}"
     write(path, BASES, threads=2)

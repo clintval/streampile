@@ -98,9 +98,12 @@ def test_tabulate_reads_a_bed_territory(tmp_path: Path) -> None:
     assert not (tmp_path / "bad.tsv").exists()
 
 
-def test_tabulate_indexes_a_bgzf_table(tmp_path: Path) -> None:
-    assert run(tmp_path / "counts.tsv.gz", "--index", "csi") == 0
-    assert (tmp_path / "counts.tsv.gz.csi").is_file()
+@pytest.mark.parametrize("suffix", [".gz", ".bgz", ".bgzf"])
+def test_tabulate_indexes_a_bgzf_table(tmp_path: Path, suffix: str) -> None:
+    out = tmp_path / f"counts.tsv{suffix}"
+    assert run(out, "--index", "csi") == 0
+    assert Path(f"{out}.csi").is_file()
+    assert out.read_bytes()[12:16] == b"BC\x02\x00"
 
 
 @pytest.mark.parametrize("index", ["tbi", "csi"])
@@ -119,7 +122,7 @@ def test_a_region_of_an_indexed_table_reads_back_as_typed_rows(tmp_path: Path, i
 
 
 def test_tabulate_refuses_an_index_on_a_plain_table(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="An index and threads need a BGZF path"):
+    with pytest.raises(ValueError, match="An index and threads need a BGZF path ending in .gz,"):
         run(tmp_path / "counts.tsv", "--index", "tbi")
     assert not (tmp_path / "counts.tsv").exists()
 
