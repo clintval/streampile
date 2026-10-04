@@ -116,12 +116,19 @@ class StreamingPileupBuilder:
         self.close()
 
     def close(self) -> None:
-        """Hand every read not yet handed to `tap`, in input order, and stop."""
-        while self._waiting:
-            self._evict(self._waiting.popleft()[0])
-        while self._next is not None:
-            self._evict(self._next)
-            self._next = next(self._records, None)
+        """Stop, first handing every read not yet handed to `tap` to it, in input order.
+
+        With a `tap`, the rest of the input is read to the end, so an output written by `tap` is
+        complete. Without one, no more of the input is read.
+        """
+        if self.tap is not None:
+            while self._waiting:
+                self._evict(self._waiting.popleft()[0])
+            while self._next is not None:
+                self._evict(self._next)
+                self._next = next(self._records, None)
+        self._waiting.clear()
+        self._next = None
         self._active = []
 
     def accepts(self, record: AlignedSegment) -> bool:

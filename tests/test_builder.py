@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -204,6 +205,26 @@ def test_builder_taps_every_read_once_in_input_order() -> None:
         builder.pileup("chr1", 200)
         assert [read.query_name for read in evicted] == ["long", "short", "filtered"]
     assert evicted == reads
+
+
+def counted(reads: list[AlignedSegment], pulled: list[str]) -> Iterator[AlignedSegment]:
+    """Yield reads, noting the name of each one as it is read."""
+    for read in reads:
+        pulled.append(read.query_name or "")
+        yield read
+
+
+@pytest.mark.parametrize("tapped", [False, True])
+def test_closing_reads_the_rest_of_the_input_only_for_a_tap(tapped: bool) -> None:
+    reads = [record(f"r{start}", start, "4M", "ACGT") for start in range(10, 60, 10)]
+    pulled: list[str] = []
+    evicted: list[AlignedSegment] = []
+    tap = evicted.append if tapped else None
+    with StreamingPileupBuilder(counted(reads, pulled), tap=tap) as builder:
+        builder.pileup("chr1", 10)
+        assert pulled == ["r10", "r20"]
+    assert pulled == (["r10", "r20", "r30", "r40", "r50"] if tapped else ["r10", "r20"])
+    assert evicted == (reads if tapped else [])
 
 
 def test_builder_lets_reads_be_changed_before_they_are_written(tmp_path: Path) -> None:
