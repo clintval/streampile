@@ -28,23 +28,30 @@ REFERENCE_PADDING: Final[int] = 10_000
 
 @final
 class _Reference:
-    """A sliding window over one contig of an indexed FASTA, upper-cased."""
+    """Two sliding windows over one contig of an indexed FASTA, upper-cased.
+
+    A read with a long reference skip reads two far-apart stretches, so the window used last is
+    kept beside the other, and neither is fetched again for the next read.
+    """
 
     def __init__(self, fasta: FastaFile, contig: str) -> None:
         self.fasta: FastaFile = fasta
         self.contig: str = contig
         self.length: int = fasta.get_reference_length(contig)
-        self.start: int = 0
-        self.end: int = 0
-        self.sequence: str = ""
+        self.windows: list[tuple[int, int, str]] = []
 
     def get(self, start: int, end: int) -> str:
         start, end = max(start, 0), min(end, self.length)
-        if start < self.start or end > self.end:
-            self.start = max(start - REFERENCE_PADDING, 0)
-            self.end = min(max(end, start) + 10 * REFERENCE_PADDING, self.length)
-            self.sequence = self.fasta.fetch(self.contig, self.start, self.end).upper()
-        return self.sequence[start - self.start : end - self.start]
+        for index, (low, high, sequence) in enumerate(self.windows):
+            if low <= start and end <= high:
+                if index:
+                    self.windows.reverse()
+                return sequence[start - low : end - low]
+        low = max(start - REFERENCE_PADDING, 0)
+        high = min(max(end, start) + 10 * REFERENCE_PADDING, self.length)
+        sequence = self.fasta.fetch(self.contig, low, high).upper()
+        self.windows = [(low, high, sequence), *self.windows[:1]]
+        return sequence[start - low : end - low]
 
 
 @final

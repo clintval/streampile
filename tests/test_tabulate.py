@@ -449,3 +449,32 @@ def test_a_deletion_is_judged_by_the_base_after_it_as_in_pileups(
         deleted = StreamingPileupBuilder(alignments, min_base_quality=20).pileup("chr1", 5)
     assert sites[5].depth == deleted.filtered_depth == int(counted)
     assert alleles(sites[4]) == ({"AG>A": 1} if counted else {})
+
+
+def test_tabulate_reads_both_ends_of_reads_with_long_skips(tmp_path: Path) -> None:
+    rng = random.Random(7)
+    chr1 = "".join(rng.choice("ACGT") for _ in range(300_000))
+    header = header_of({"chr1": chr1})
+    far = 150_110
+    mismatch = "A" if chr1[far + 10] != "A" else "C"
+    reads = [
+        record("a", 100, "10M150000N10M", chr1[100:110] + chr1[far : far + 10], header=header),
+        record(
+            "b",
+            105,
+            "10M150000N10M",
+            chr1[105:115] + chr1[far + 5 : far + 10] + mismatch + chr1[far + 11 : far + 15],
+            header=header,
+        ),
+    ]
+    fasta = write_fasta(tmp_path / "reference.fa", {"chr1": chr1})
+    path = write_bam(tmp_path / "reads.bam", reads, header=header)
+    with AlignmentFile(str(path)) as alignments, FastaFile(str(fasta)) as reference:
+        spans = territory(("chr1", 100, 120), ("chr1", far - 10, far + 20))
+        sites = list(tabulate(alignments, reference, spans))
+    depths = [1, 2, 1, 0] + [0, 0, 1, 2, 1, 0]
+    assert [site.depth for site in sites] == [depth for depth in depths for _ in range(5)]
+    assert [(site.pos, alleles(site)) for site in sites if site.alts] == [
+        (far + 11, {f"{chr1[far + 10]}>{mismatch}": 1})
+    ]
+    assert all(site.ref == chr1[site.pos - 1] for site in sites)
