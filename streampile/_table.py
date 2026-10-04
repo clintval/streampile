@@ -181,9 +181,6 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
         handle = pybgzf.writer(
             path, columns=columns, index=index, index_path=index_path, newline="", threads=threads
         )
-        if index is not None:
-            # Hand each line to the indexer as it is written, so a row out of order fails there.
-            handle.reconfigure(write_through=True)
         try:
             writer = cls(handle, **options)
         except BaseException:
