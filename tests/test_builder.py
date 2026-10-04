@@ -91,10 +91,33 @@ def test_builder_returns_the_same_pileup_for_a_repeated_position() -> None:
     assert pileup == Pileup("chr1", 101, [PileupRead(read, 1, 1, BASE)])
 
 
-def test_builder_with_no_records_builds_empty_pileups() -> None:
+def test_builder_with_no_records_or_header_is_still_forward_only() -> None:
     with StreamingPileupBuilder([]) as builder:
-        assert builder.pileup("chr1", 100) == Pileup("chr1", 100, [])
         assert builder.header is None
+        assert builder.pileup("chr2", 50) == Pileup("chr2", 50, [])
+        assert builder.pileup("chr1", 10) == Pileup("chr1", 10, [])
+        with pytest.raises(ValueError, match="Attempted to advance to chr1:5 from chr1:10."):
+            builder.pileup("chr1", 5)
+        with pytest.raises(ValueError, match="Attempted to advance to chr2:60 from chr1:10."):
+            builder.pileup("chr2", 60)
+
+
+def test_builder_checks_the_header_of_an_empty_alignment_file(tmp_path: Path) -> None:
+    path = write_bam(tmp_path / "empty.bam", [])
+    with AlignmentFile(str(path)) as reads, StreamingPileupBuilder(reads) as builder:
+        assert builder.header is reads.header
+        assert builder.pileup("chr2", 5) == Pileup("chr2", 5, [])
+        with pytest.raises(ValueError, match="Contig chr3 is not in the header."):
+            builder.pileup("chr3", 1)
+        with pytest.raises(ValueError, match="Attempted to advance to chr1:5 from chr2:5."):
+            builder.pileup("chr1", 5)
+    header = AlignmentHeader.from_text("@HD\tVN:1.6\tSO:queryname\n@SQ\tSN:chr1\tLN:100\n")
+    path = write_bam(tmp_path / "queryname.bam", [], header=header)
+    with (
+        AlignmentFile(str(path)) as reads,
+        pytest.raises(ValueError, match="Records must be coordinate sorted."),
+    ):
+        StreamingPileupBuilder(reads)
 
 
 def test_builder_piles_up_a_deletion() -> None:

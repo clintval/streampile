@@ -70,6 +70,11 @@ class StreamingPileupBuilder:
     ) -> None:
         """Start a builder over coordinate-sorted reads.
 
+        The header is the `header` of `records` when it has one, such as an `AlignmentFile`, or
+        else the first read's, so an empty `AlignmentFile` is checked too. With no header at all,
+        e.g. from an empty list, every pileup is empty, and contigs are ordered as they are first
+        asked for.
+
         Args:
             records: coordinate-sorted reads, such as an open `AlignmentFile`.
             min_mapq: the lowest mapping quality of a read to pile up.
@@ -82,11 +87,16 @@ class StreamingPileupBuilder:
             tap: a function given every read once the builder has moved past it.
 
         Raises:
-            ValueError: if the header of the first read does not declare coordinate order.
+            ValueError: if the header does not declare coordinate order.
         """
+        source_header: object = getattr(records, "header", None)
         self._records: Iterator[AlignedSegment] = iter(records)
         self._next: AlignedSegment | None = next(self._records, None)
-        self.header: AlignmentHeader | None = None if self._next is None else self._next.header
+        self.header: AlignmentHeader | None = None
+        if isinstance(source_header, AlignmentHeader):
+            self.header = source_header
+        elif self._next is not None:
+            self.header = self._next.header
         if self.header is not None:
             sort_order = SORT_ORDER.search(str(self.header))
             if sort_order is None or sort_order.group(1) != "coordinate":
@@ -105,6 +115,7 @@ class StreamingPileupBuilder:
         self._active_reference_id: int = -1
         self._last_key: tuple[int, int] = (-1, -1)
         self._at: tuple[int, int] | None = None
+        self._contigs_asked: dict[str, int] = {}
         self._closed: bool = False
 
     def __enter__(self) -> Self:
@@ -176,18 +187,21 @@ class StreamingPileupBuilder:
         if pos < 0:
             raise ValueError(f"Position must be non-negative, found: {pos}")
         if self.header is None:
-            pileup = Pileup(contig, pos, [], self.min_base_quality)
-            self.previous_pileup = pileup
-            return pileup
-        reference_id = self.header.get_tid(contig)
-        if reference_id < 0:
-            raise ValueError(f"Contig {contig} is not in the header.")
+            reference_id = self._contigs_asked.setdefault(contig, len(self._contigs_asked))
+        else:
+            reference_id = self.header.get_tid(contig)
+            if reference_id < 0:
+                raise ValueError(f"Contig {contig} is not in the header.")
         if self._at is not None and (reference_id, pos) < self._at:
             at = "" if previous is None else f"{previous.reference_name}:{previous.reference_pos}"
             raise ValueError(f"Attempted to advance to {contig}:{pos} from {at}.")
         self._at = (reference_id, pos)
-        self._advance(reference_id, pos)
-        pileup = Pileup(contig, pos, self._entries(pos), self.min_base_quality)
+        if self.header is None:
+            entries: list[PileupRead] = []
+        else:
+            self._advance(reference_id, pos)
+            entries = self._entries(pos)
+        pileup = Pileup(contig, pos, entries, self.min_base_quality)
         self.previous_pileup = pileup
         return pileup
 
