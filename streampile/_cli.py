@@ -45,7 +45,9 @@ def _tabulate(args: argparse.Namespace) -> int:
         territory = Territory(features)
     index = None if args.index is None else IndexFormat[args.index.upper()]
     with (
-        AlignmentFile(str(args.bam), threads=args.threads) as alignments,
+        AlignmentFile(
+            str(args.bam), reference_filename=str(args.ref), threads=args.threads
+        ) as alignments,
         FastaFile(str(args.ref)) as reference,
     ):
         bases = tabulate(

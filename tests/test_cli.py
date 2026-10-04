@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pysam
 import pytest
 from pysam import AlignmentFile
 from pysam import FastaFile
@@ -83,6 +84,35 @@ def test_tabulate_refuses_an_index_on_a_plain_table(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="An index and threads need a BGZF path"):
         run(tmp_path / "counts.tsv", "--index", "tbi")
     assert not (tmp_path / "counts.tsv").exists()
+
+
+def test_tabulate_reads_a_cram_with_the_reference_it_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    with FastaFile(str(DATA / "reference.fa")) as reference:
+        contigs = {name: reference.fetch(name) for name in reference.references}
+    fasta = write_fasta(elsewhere / "reference.fa", contigs)
+    cram = tmp_path / "reads.cram"
+    with (
+        AlignmentFile(str(DATA / "reads.bam")) as reads,
+        AlignmentFile(str(cram), "wc", template=reads, reference_filename=str(fasta)) as sink,
+    ):
+        for read in reads:
+            sink.write(read)
+    pysam.index(str(cram))
+    moved = write_fasta(tmp_path / "moved.fa", contigs)
+    for path in (fasta, Path(f"{fasta}.fai")):
+        path.unlink()
+    monkeypatch.setenv("REF_PATH", f"{tmp_path / 'no-cache'}/%s")
+    monkeypatch.setenv("REF_CACHE", f"{tmp_path / 'no-cache'}/%s")
+    out = tmp_path / "counts.tsv"
+    assert (
+        run(out, "--min-base-quality", "30", "--min-mapping-quality", "20", bam=cram, ref=moved)
+        == 0
+    )
+    assert out.read_text() == (DATA / "counts.tsv").read_text()
 
 
 def test_tabulate_writes_nothing_for_a_territory_it_refuses(tmp_path: Path) -> None:
