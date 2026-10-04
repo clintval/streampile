@@ -133,7 +133,15 @@ streampile tabulate \
 ```
 
 ```text
-contig	pos	ref	depth	ref_reads	alt_refs	alts	alt_reads
+##streampile-tabulation=1
+##streampile-version=0.1.0
+##bam=tests/data/reads.bam
+##reference=tests/data/reference.fa
+##territory=tests/data/territory.bed
+##min_base_quality=30
+##min_mapping_quality=20
+##exclude_flags=0xf00
+#contig	pos	ref	depth	ref_reads	alt_refs	alts	alt_reads
 chr1	21	T	5	5			
 chr1	22	G	5	5			
 chr1	23	C	4	3	CA	C	1
@@ -141,6 +149,11 @@ chr1	24	A	4	3
 ```
 
 A table whose path ends in `.gz` or `.bgz` is written as BGZF with [pybgzf](https://github.com/clintval/pybgzf), and `--index tbi` or `--index csi` indexes it by contig and position as it is written.
+
+A table describes itself.
+It opens with `##key=value` lines: its format version, `streampile-tabulation`, the streampile version that wrote it, and every parameter it was tabulated with.
+A header line starting `#contig` follows, as VCF's starts `#CHROM`, so an index skips every line before the rows by their `#`.
+`TabulationReader` holds the `##` lines in its `metadata` and refuses a table of another format version.
 
 ## Development and Testing
 

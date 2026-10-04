@@ -58,11 +58,19 @@ def _tabulate(args: argparse.Namespace) -> int:
             min_mapping_quality=args.min_mapping_quality,
             exclude_flags=args.exclude_flags,
         )
+        metadata = {
+            "bam": args.bam,
+            "reference": args.ref,
+            "territory": args.intervals,
+            "min_base_quality": args.min_base_quality,
+            "min_mapping_quality": args.min_mapping_quality,
+            "exclude_flags": f"{args.exclude_flags:#x}",
+        }
         bgzf = args.out.suffix in BGZF_SUFFIXES
         with (
             _staged(args.out, index) as out,
             TabulationWriter.from_path(
-                out, index=index, threads=args.threads if bgzf else 1
+                out, index=index, threads=args.threads if bgzf else 1, metadata=metadata
             ) as writer,
         ):
             writer.write_header()

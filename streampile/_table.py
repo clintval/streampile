@@ -1,7 +1,10 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib.metadata import version
 from inspect import unwrap
 from io import StringIO
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 from typing import TextIO
 
@@ -67,73 +70,135 @@ TABULATION_CODECS: Final[Codecs] = {
 }
 """How the allele fields of a `TabulatedBase` are read and written, comma-separated."""
 
+TABULATION_FORMAT: Final[str] = "1"
+"""The version of the table's format, within which columns are only ever appended."""
+
 TABULATION_COLUMNS: Final[Columns] = Columns(
-    refname=1, start=2, end=None, zero_based=False, meta_char="#", skip_lines=1
+    refname=1, start=2, end=None, zero_based=False, meta_char="#"
 )
-"""Where an index finds each row: the contig and 1-based position, after the header line."""
+"""Where an index finds each row: the contig and 1-based position, past the `#` lines."""
+
+TABULATION_RENAME: Final[Mapping[str, str]] = MappingProxyType({"contig": "#contig"})
+"""The header names its first column `#contig`, so an index and a VCF-minded reader skip it."""
+
+METADATA_PREFIX: Final[str] = "##"
+"""The prefix of the metadata lines before the header, `##key=value`."""
 
 BGZF_SUFFIXES: Final[tuple[str, ...]] = (".bgz", ".gz")
 """The file extensions written as BGZF, which is also valid gzip."""
 
+STREAMPILE_VERSION: Final[str] = version("streampile")
+"""The version of streampile, written in the metadata of every table."""
+
 
 class TabulationReader(TsvReader[TabulatedBase], FixedRecordType):
-    """A reader of tabulated bases, from a TSV with a header, gzipped or BGZF or not."""
+    """A reader of tabulated bases, from a TSV with a header, gzipped or BGZF or not.
+
+    Attributes:
+        metadata: the `##key=value` lines before the header, such as the table's format version
+            under `streampile-tabulation` and the parameters it was tabulated with.
+    """
 
     @override
     def __init__(self, handle: TextIO, /, **options: Unpack[ReaderOptions]) -> None:
-        """Start a reader with the tabulation's codecs unless others are given.
+        """Start a reader with the tabulation's codecs and header unless others are given.
 
         Args:
             handle: a file-like object to read the table from.
             options: the options of the reader, with tabulation defaults for any not given.
+
+        Raises:
+            ValueError: if the table declares a format version other than this reader's.
         """
         _ = options.setdefault("codecs", TABULATION_CODECS)
         _ = options.setdefault("quoting", False)
+        _ = options.setdefault("rename", TABULATION_RENAME)
+        _ = options.setdefault("comment_prefixes", (METADATA_PREFIX,))
+        self.metadata: dict[str, str] = {}
+        forward = options.get("on_comment")
+        reading_metadata = True
+
+        def on_comment(comment: Comment) -> None:
+            key, found, value = comment.text.removeprefix(METADATA_PREFIX).partition("=")
+            if reading_metadata and found:
+                self.metadata[key] = value
+            if forward is not None:
+                forward(comment)
+
+        options["on_comment"] = on_comment
         super().__init__(handle, **options)
+        reading_metadata = False
+        found_format = self.metadata.get("streampile-tabulation", TABULATION_FORMAT)
+        if found_format != TABULATION_FORMAT:
+            self.close()
+            raise ValueError(
+                f"The table is in format version {found_format}, but this reader reads version"
+                + f" {TABULATION_FORMAT}."
+            )
 
 
 class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
-    """A writer of tabulated bases, to a TSV."""
+    """A writer of tabulated bases, to a TSV that describes itself.
+
+    A table opens with `##key=value` metadata lines: its format version, under
+    `streampile-tabulation`, the streampile version that wrote it, under `streampile-version`,
+    and any metadata given, such as the parameters it was tabulated with. A header line follows,
+    whose first column is `#contig`, then one row per base. The metadata and the header are
+    written once, before the first row or comment, or when `write_header` is first called.
+
+    Attributes:
+        metadata: the metadata lines to write, in order.
+    """
 
     @override
-    def __init__(self, handle: TextIO, /, **options: Unpack[WriterOptions]) -> None:
-        """Start a writer with the tabulation's codecs unless others are given.
+    def __init__(
+        self,
+        handle: TextIO,
+        /,
+        *,
+        metadata: Mapping[str, object] | None = None,
+        **options: Unpack[WriterOptions],
+    ) -> None:
+        """Start a writer with the tabulation's codecs and header unless others are given.
 
         Args:
             handle: a file-like object to write the table to.
+            metadata: more `##key=value` lines to write after the versions, in order.
             options: the options of the writer, with tabulation defaults for any not given.
         """
         _ = options.setdefault("codecs", TABULATION_CODECS)
         _ = options.setdefault("quoting", False)
+        _ = options.setdefault("rename", TABULATION_RENAME)
+        _ = options.setdefault("comment_prefixes", (METADATA_PREFIX,))
         super().__init__(handle, **options)
-        self._indexed: bool = False
+        self.metadata: dict[str, str] = {
+            "streampile-tabulation": TABULATION_FORMAT,
+            "streampile-version": STREAMPILE_VERSION,
+            **{key: str(value) for key, value in (metadata or {}).items()},
+        }
         self._headed: bool = False
 
     @override
     def write_header(self) -> None:
-        """Write the header line."""
-        super().write_header()
+        """Write the metadata lines and the header line, unless they are written already."""
+        if self._headed:
+            return
         self._headed = True
+        for key, value in self.metadata.items():
+            super().write_comment(f"{METADATA_PREFIX}{key}={value}")
+        super().write_header()
 
     @override
     def write(self, record: TabulatedBase) -> None:
-        """Write a row, refusing it before the header when the table is being indexed."""
-        self._check_headed("a row")
+        """Write a row, after the metadata and header if they are not written yet."""
+        self.write_header()
         super().write(record)
 
     @override
     def write_comment(self, comment: str | Comment) -> None:
-        """Write a comment, refusing it before the header when the table is being indexed."""
-        self._check_headed("a comment")
+        """Write a comment, after the metadata and header if they are not written yet."""
+        self.write_header()
         super().write_comment(comment)
-
-    def _check_headed(self, what: str) -> None:
-        """Refuse a line before the header of an indexed table."""
-        if self._indexed and not self._headed:
-            raise ValueError(
-                f"Cannot write {what} to an indexed table before its header, which the index"
-                + " skips as the first line! Call write_header() first."
-            )
 
     @SubscriptableClassmethod
     @classmethod
@@ -145,6 +210,7 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
         index: IndexFormat | None = None,
         index_path: Path | str | None = None,
         threads: int = 1,
+        metadata: Mapping[str, object] | None = None,
         **options: Unpack[WriterOptions],
     ) -> Self:
         """Construct a writer of tabulated bases from a file path.
@@ -152,11 +218,10 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
         A path ending in `.gz` or `.bgz` is written as BGZF, which any gzip reader can read, and
         can be indexed with tabix or CSI as it is written, on as many threads as given.
         Rows must then be sorted by position within each contig, and each contig must be
-        contiguous, as `tabulate` writes them. The header must also come first, since the index
-        skips the first line: without it the index would skip the first row, and after a comment
-        it would read the header as a row, so rows and comments are refused until it is written.
-        Other paths are written as UTF-8, and compressed when they end in `.bz2` or `.xz`.
-        The writer is checked before the file is opened, so a refused writer leaves a file alone.
+        contiguous, as `tabulate` writes them. The index skips the metadata and header lines,
+        which start with `#`. Other paths are written as UTF-8, and compressed when they end in
+        `.bz2` or `.xz`. The writer is checked before the file is opened, so a refused writer
+        leaves a file alone.
 
         Args:
             path: the path to the file to write the table to.
@@ -164,6 +229,7 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
             index_path: where to write the index, instead of beside the file; required when the
                 file is not a regular file, such as a FIFO.
             threads: the number of threads compressing a BGZF file.
+            metadata: more `##key=value` lines to write after the versions, in order.
             options: the options of the writer, with tabulation defaults for any not given.
         """
         path = Path(path).expanduser()
@@ -172,7 +238,7 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
                 raise ValueError(
                     f"An index and threads need a BGZF path ending in .gz or .bgz, not: {path}"
                 )
-            plain: Self = unwrap(super().from_path)(cls, path, **options)
+            plain: Self = unwrap(super().from_path)(cls, path, metadata=metadata, **options)
             return plain
         if index is None and index_path is not None:
             raise ValueError(f"An index_path needs an index, but none was asked for: {index_path}")
@@ -182,9 +248,7 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
             path, columns=columns, index=index, index_path=index_path, newline="", threads=threads
         )
         try:
-            writer = cls(handle, **options)
+            return cls(handle, metadata=metadata, **options)
         except BaseException:
             handle.close()
             raise
-        writer._indexed = index is not None
-        return writer

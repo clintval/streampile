@@ -1,4 +1,12 @@
-contig	pos	ref	depth	ref_reads	alt_refs	alts	alt_reads
+##streampile-tabulation=1
+##streampile-version=0.1.0
+##bam=tests/data/reads.bam
+##reference=tests/data/reference.fa
+##territory=tests/data/territory.bed
+##min_base_quality=30
+##min_mapping_quality=20
+##exclude_flags=0xf00
+#contig	pos	ref	depth	ref_reads	alt_refs	alts	alt_reads
 chr1	21	T	5	5			
 chr1	22	G	5	5			
 chr1	23	C	4	3	CA	C	1

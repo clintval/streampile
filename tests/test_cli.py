@@ -1,5 +1,6 @@
 import re
 from collections.abc import Iterator
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,9 @@ from .records import DATA
 from .records import territory
 from .records import write_fasta
 
-README = Path(__file__).parent.parent / "README.md"
+ROOT = Path(__file__).parent.parent
+
+README = ROOT / "README.md"
 
 
 def run(
@@ -41,12 +44,33 @@ def run(
     ])
 
 
-def test_tabulate_writes_the_table_shown_in_the_readme(tmp_path: Path) -> None:
-    out = tmp_path / "counts.tsv"
-    assert run(out, "--min-base-quality", "30", "--min-mapping-quality", "20") == 0
-    shown = re.search(r"```text\n(contig.*?)```", README.read_text(), re.DOTALL)
+def rows(path: Path) -> list[str]:
+    """The rows of a plain table, without its metadata and header lines."""
+    return [line for line in path.read_text().splitlines() if not line.startswith("#")]
+
+
+def without_version(table: str) -> str:
+    """A table without the line naming the streampile version that wrote it."""
+    return re.sub(r"^##streampile-version=.*\n", "", table, flags=re.MULTILINE)
+
+
+def test_tabulate_writes_the_table_shown_in_the_readme(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(ROOT)
+    shown = re.search(
+        r"```console\n(streampile tabulate.*?)```\n\n```text\n(.*?)```",
+        README.read_text(),
+        re.DOTALL,
+    )
     assert shown is not None
-    assert out.read_text() == shown.group(1) == (DATA / "counts.tsv").read_text()
+    command = shown.group(1).replace("\\\n", " ").split()[1:]
+    out = tmp_path / "counts.tsv"
+    assert main([*command[: command.index("--out")], "--out", str(out)]) == 0
+    written = out.read_text()
+    assert f"##streampile-version={version('streampile')}\n" in written
+    assert without_version(written) == without_version(shown.group(2))
+    assert without_version(written) == without_version((DATA / "counts.tsv").read_text())
 
 
 @pytest.mark.parametrize("name", ["counts.tsv", "counts.tsv.gz"])
@@ -67,8 +91,7 @@ def test_tabulate_reads_a_bed_territory(tmp_path: Path) -> None:
     bed = tmp_path / "territory.bed"
     bed.write_text("track name=x\n# comment\nchr1\t22\t24\tgene\nchr1\t5\t5\nchr1\t20\t22\n")
     assert run(tmp_path / "counts.tsv", intervals=bed) == 0
-    rows = (tmp_path / "counts.tsv").read_text().splitlines()[1:]
-    assert [row.split("\t")[1] for row in rows] == ["21", "22", "23", "24"]
+    assert [row.split("\t")[1] for row in rows(tmp_path / "counts.tsv")] == ["21", "22", "23", "24"]
     bed.write_text("chr1\t20\t24\nchr1\t30\t25\n")
     with pytest.raises(ValueError, match="on line 2"):
         run(tmp_path / "bad.tsv", intervals=bed)
@@ -112,7 +135,7 @@ def test_tabulate_reads_a_cram_with_the_reference_it_is_given(
         run(out, "--min-base-quality", "30", "--min-mapping-quality", "20", bam=cram, ref=moved)
         == 0
     )
-    assert out.read_text() == (DATA / "counts.tsv").read_text()
+    assert rows(out) == rows(DATA / "counts.tsv")
 
 
 def test_tabulate_writes_nothing_for_a_territory_it_refuses(tmp_path: Path) -> None:
@@ -151,7 +174,7 @@ def test_tabulate_writes_to_a_path_that_is_not_a_regular_file() -> None:
 def test_tabulate_reads_flags_in_any_base(tmp_path: Path) -> None:
     out = tmp_path / "counts.tsv"
     assert run(out, "--exclude-flags", "0x0") == 0
-    assert out.read_text().splitlines()[1] == "chr1\t21\tT\t5\t5\t\t\t"
+    assert rows(out)[0] == "chr1\t21\tT\t5\t5\t\t\t"
 
 
 def test_a_command_is_required(capsys: pytest.CaptureFixture[str]) -> None:

@@ -1,13 +1,17 @@
 import gzip
+from importlib.metadata import version
 from pathlib import Path
 
 import pybgzf
 import pytest
 from pybgzf import IndexFormat
+from typeline import Comment
 
 from streampile import TabulatedBase
 from streampile import TabulationReader
 from streampile import TabulationWriter
+
+VERSION = version("streampile")
 
 BASES = [
     TabulatedBase(contig="chr1", pos=1, ref="A", depth=0, ref_reads=0),
@@ -47,9 +51,10 @@ def write(
 def test_a_table_round_trips_with_empty_alleles(tmp_path: Path) -> None:
     write(tmp_path / "bases.tsv", BASES)
     lines = (tmp_path / "bases.tsv").read_text().splitlines()
-    assert lines[0] == "contig\tpos\tref\tdepth\tref_reads\talt_refs\talts\talt_reads"
-    assert lines[1] == "chr1\t1\tA\t0\t0\t\t\t"
-    assert lines[2] == "chr1\t2\tC\t9\t5\tC,CA\tT,C\t3,1"
+    assert lines[:2] == ["##streampile-tabulation=1", f"##streampile-version={VERSION}"]
+    assert lines[2] == "#contig\tpos\tref\tdepth\tref_reads\talt_refs\talts\talt_reads"
+    assert lines[3] == "chr1\t1\tA\t0\t0\t\t\t"
+    assert lines[4] == "chr1\t2\tC\t9\t5\tC,CA\tT,C\t3,1"
     assert list(TabulationReader.from_path(tmp_path / "bases.tsv")) == BASES
 
 
@@ -61,7 +66,7 @@ def test_a_compressed_table_is_bgzf_with_an_end_of_file_block(tmp_path: Path, su
     assert raw[12:16] == b"BC\x02\x00"
     assert raw.endswith(bytes.fromhex("1f8b08040000000000ff0600424302001b0003000000000000000000"))
     with gzip.open(path, "rt") as handle:
-        assert handle.readline().startswith("contig\tpos")
+        assert handle.readline() == "##streampile-tabulation=1\n"
     assert list(TabulationReader.from_path(path)) == BASES
 
 
@@ -82,31 +87,53 @@ def test_an_indexed_table_refuses_rows_out_of_order(tmp_path: Path) -> None:
         write(tmp_path / "bases.tsv.gz", [BASES[2], BASES[0]], index=IndexFormat.TBI)
 
 
-@pytest.mark.parametrize("index", [IndexFormat.TBI, IndexFormat.CSI])
-def test_an_indexed_table_refuses_rows_and_comments_before_its_header(
-    tmp_path: Path, index: IndexFormat
+@pytest.mark.parametrize("index", [None, IndexFormat.TBI, IndexFormat.CSI])
+def test_the_metadata_and_header_come_first_and_once(
+    tmp_path: Path, index: IndexFormat | None
 ) -> None:
     path = tmp_path / "bases.tsv.gz"
-    with TabulationWriter.from_path(path, index=index) as writer:
-        with pytest.raises(ValueError, match="Cannot write a row to an indexed table before"):
-            writer.write(BASES[0])
-        with pytest.raises(ValueError, match="Cannot write a comment to an indexed table before"):
-            writer.write_comment("made by streampile")
-        writer.write_header()
+    metadata = {"min_base_quality": 30, "territory": "territory.bed"}
+    with TabulationWriter.from_path(path, index=index, metadata=metadata) as writer:
         writer.write_comment("made by streampile")
-        for base in BASES:
+        writer.write_header()
+        writer.write(BASES[0])
+        writer.write_header()
+        for base in BASES[1:]:
             writer.write(base)
-    with pybgzf.IndexedReader(path) as reader:
-        assert list(reader.query("chr1", 0, 1)) == ["chr1\t1\tA\t0\t0\t\t\t"]
-    assert list(TabulationReader.from_path(path)) == BASES
+    with gzip.open(path, "rt") as handle:
+        lines = handle.read().splitlines()
+    assert lines[:6] == [
+        "##streampile-tabulation=1",
+        f"##streampile-version={VERSION}",
+        "##min_base_quality=30",
+        "##territory=territory.bed",
+        "#contig\tpos\tref\tdepth\tref_reads\talt_refs\talts\talt_reads",
+        "## made by streampile",
+    ]
+    assert len(lines) == 6 + len(BASES)
+    if index is not None:
+        with pybgzf.IndexedReader(path) as reader:
+            assert list(reader.query("chr1", 0, 1)) == ["chr1\t1\tA\t0\t0\t\t\t"]
+    comments: list[Comment] = []
+    table = TabulationReader.from_path(path, on_comment=comments.append)
+    assert table.metadata == {
+        "streampile-tabulation": "1",
+        "streampile-version": VERSION,
+        "min_base_quality": "30",
+        "territory": "territory.bed",
+    }
+    assert list(table) == BASES
+    assert [comment.text for comment in comments][-1] == "## made by streampile"
 
 
-def test_a_table_with_no_index_may_go_without_a_header(tmp_path: Path) -> None:
-    for name in ("bases.tsv", "bases.tsv.gz"):
-        with TabulationWriter.from_path(tmp_path / name) as writer:
-            writer.write_comment("made by streampile")
-            writer.write(BASES[0])
-    assert (tmp_path / "bases.tsv").read_text() == "# made by streampile\nchr1\t1\tA\t0\t0\t\t\t\n"
+def test_a_reader_refuses_another_format_version(tmp_path: Path) -> None:
+    path = tmp_path / "bases.tsv"
+    write(path, BASES)
+    path.write_text(
+        path.read_text().replace("##streampile-tabulation=1", "##streampile-tabulation=2")
+    )
+    with pytest.raises(ValueError, match="in format version 2, but this reader reads version 1"):
+        TabulationReader.from_path(path)
 
 
 def test_the_writer_refuses_bad_options_before_opening_a_file(tmp_path: Path) -> None:
