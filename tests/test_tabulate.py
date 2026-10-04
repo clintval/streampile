@@ -238,7 +238,7 @@ def test_tabulate_agrees_with_counting_bases_in_pileups(
     ):
         columns = list(builder.columns("chr1", 0, 40))
     for site, column in zip(sites, columns, strict=True):
-        bases = Counter(column.get_query_sequences)
+        bases = Counter(column.bases)
         assert site.depth == bases.total()
         assert site.ref_reads == bases[site.ref]
         assert alleles(site) == {

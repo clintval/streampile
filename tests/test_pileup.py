@@ -83,41 +83,41 @@ def test_depths_count_bases_deletions_and_skips_but_not_insertions() -> None:
     }
 
 
-def test_get_query_qualities_of_one_read() -> None:
+def test_qualities_of_one_read() -> None:
     reads = [record("r", 1, "4M", "ACGT", quals=[20, 21, 22, 23])]
-    assert [pileup.get_query_qualities for pileup in columns(reads, range(1, 5))] == [
+    assert [pileup.qualities for pileup in columns(reads, range(1, 5))] == [
         [20],
         [21],
         [22],
         [23],
     ]
     floored = columns(reads, range(1, 5), min_base_quality=22)
-    assert [pileup.get_query_qualities for pileup in floored] == [[], [], [22], [23]]
+    assert [pileup.qualities for pileup in floored] == [[], [], [22], [23]]
 
 
-def test_get_query_qualities_leave_out_deletions_and_insertions() -> None:
+def test_qualities_leave_out_deletions_and_insertions() -> None:
     deleted = columns([record("r", 1, "2M1D1M", "ACG", quals=[20, 21, 22])], range(1, 5))
-    assert [pileup.get_query_qualities for pileup in deleted] == [[20], [21], [], [22]]
+    assert [pileup.qualities for pileup in deleted] == [[20], [21], [], [22]]
     assert deleted[2].filtered_depth == 1
     inserted = columns([record("r", 1, "1M3I1M", "AGGGT", quals=[31, 32, 33, 34, 35])], range(1, 4))
-    assert [pileup.get_query_qualities for pileup in inserted] == [[31], [35], []]
+    assert [pileup.qualities for pileup in inserted] == [[31], [35], []]
     assert entries(inserted[0])[1] == ("r", "insertion", None, None, "GGG")
 
 
-def test_get_query_qualities_of_overlapping_reads() -> None:
+def test_qualities_of_overlapping_reads() -> None:
     reads = [
         record("one", 1, "4M", "ACGT", quals=[20, 21, 22, 23]),
         record("two", 3, "4M", "TGCA", quals=[30, 31, 32, 33]),
     ]
-    assert [pileup.get_query_qualities for pileup in columns(reads, range(3, 5))] == [
+    assert [pileup.qualities for pileup in columns(reads, range(3, 5))] == [
         [22, 30],
         [23, 31],
     ]
 
 
-def test_get_query_sequences_of_one_read() -> None:
+def test_bases_of_one_read() -> None:
     reads = [record("r", 1, "4M", "ACGT", quals=[12, 13, 25, 30])]
-    assert [pileup.get_query_sequences for pileup in columns(reads, range(0, 6))] == [
+    assert [pileup.bases for pileup in columns(reads, range(0, 6))] == [
         [],
         [],
         ["C"],
@@ -126,19 +126,19 @@ def test_get_query_sequences_of_one_read() -> None:
         [],
     ]
     unfloored = columns(reads, range(1, 2), min_base_quality=0)
-    assert unfloored[0].get_query_sequences == ["A"]
+    assert unfloored[0].bases == ["A"]
 
 
-def test_get_query_sequences_leave_out_deletions_and_insertions() -> None:
+def test_bases_leave_out_deletions_and_insertions() -> None:
     deleted = columns([record("r", 1, "2M1D1M", "ACG")], range(1, 5))
-    assert [pileup.get_query_sequences for pileup in deleted] == [["A"], ["C"], [], ["G"]]
+    assert [pileup.bases for pileup in deleted] == [["A"], ["C"], [], ["G"]]
     inserted = columns([record("r", 1, "1M3I1M", "AGGGT")], range(1, 4))
-    assert [pileup.get_query_sequences for pileup in inserted] == [["A"], ["T"], []]
+    assert [pileup.bases for pileup in inserted] == [["A"], ["T"], []]
 
 
-def test_get_query_sequences_of_overlapping_reads() -> None:
+def test_bases_of_overlapping_reads() -> None:
     reads = [record("one", 1, "4M", "ACGT"), record("two", 3, "4M", "TGCA")]
-    assert [pileup.get_query_sequences for pileup in columns(reads, range(3, 5))] == [
+    assert [pileup.bases for pileup in columns(reads, range(3, 5))] == [
         ["G", "T"],
         ["T", "G"],
     ]
@@ -147,13 +147,13 @@ def test_get_query_sequences_of_overlapping_reads() -> None:
 def test_views_of_reads_with_no_stored_bases_or_no_cigar_are_empty() -> None:
     no_bases = columns([record("r", 0, "4M", "*")], range(0, 1), min_base_quality=0)[0]
     assert (no_bases.unfiltered_depth, no_bases.filtered_depth) == (1, 0)
-    assert (no_bases.get_query_sequences, no_bases.get_query_qualities) == ([], [])
+    assert (no_bases.bases, no_bases.qualities) == ([], [])
     no_cigar = AlignedSegment(HEADER)
     no_cigar.reference_name = "chr1"
     no_cigar.reference_start = 0
     no_cigar.query_sequence = None
     unplaced = Pileup.from_alignments([no_cigar], "chr1", 0)
-    assert (unplaced.pileups, unplaced.get_query_sequences, unplaced.get_query_qualities) == (
+    assert (unplaced.pileups, unplaced.bases, unplaced.qualities) == (
         [],
         [],
         [],
@@ -177,7 +177,7 @@ def test_without_overlaps_keeps_the_first_read_of_each_template() -> None:
         ("q2", 147),
         ("q3", 147),
     ]
-    assert kept.get_query_sequences == ["C", "G", "T"]
+    assert kept.bases == ["C", "G", "T"]
 
 
 def test_without_overlaps_keeps_every_entry_of_the_kept_read() -> None:

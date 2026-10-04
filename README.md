@@ -38,15 +38,16 @@ It filters reads as `tabulate` does, by `min_mapping_quality` and `exclude_flags
 ...     first = builder.pileup("chr1", 10)
 ...     second = builder.pileup("chr1", 12)
 >>>
->>> first.filtered_depth, first.get_query_sequences
+>>> first.filtered_depth, first.bases
 (4, ['A', 'T', 'G', 'A'])
->>> second.filtered_depth, second.get_query_sequences
+>>> second.filtered_depth, second.bases
 (3, ['G', 'G', 'G'])
 
 ```
 
 Each entry of `pileup.pileups` holds a read and its base, deletion, reference skip (`N`), or insertion at the position.
-A skip holds no base or quality: it counts in `unfiltered_depth`, as in htslib, but never in `filtered_depth` or the bases and qualities of a pileup.
+A skip holds no base or quality: it counts in `unfiltered_depth`, as in htslib, but never in `filtered_depth`, `bases`, or `qualities`.
+`bases` and `qualities` list only the bases at the quality floor, in the same order, where pysam's `get_query_sequences()` and `get_query_qualities()` list every entry.
 An insertion is reported at the position before it, at either end of an alignment: one that opens it, before the first aligned base, and one that closes it, at the last; htslib reports only the closing one, and fgbio only the opening one.
 Each read's CIGAR is walked once, when the builder first reaches it, so a pileup costs one lookup per read.
 Pass `tap`, e.g. `tap=writer.write`, to be handed every record, in input order, once the builder has moved past it.

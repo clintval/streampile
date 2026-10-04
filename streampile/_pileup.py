@@ -181,7 +181,7 @@ class Pileup:
         reference_pos: the 0-based position on the contig.
         pileups: the entries of the reads at this position.
         min_base_quality: the base quality below which bases are left out of `filtered_depth`,
-            `get_query_qualities`, and `get_query_sequences`.
+            `bases`, and `qualities`.
     """
 
     reference_name: str
@@ -214,26 +214,35 @@ class Pileup:
         )
 
     @property
-    def get_query_qualities(self) -> list[int]:
-        """The base qualities of the bases at this position at the quality floor."""
-        floor = self.min_base_quality
-        return [
-            quality
-            for read in self.pileups
-            if read.pileup_type is PileupReadType.base
-            and (quality := read.qual) is not None
-            and quality >= floor
-        ]
+    def bases(self) -> list[str]:
+        """The upper-cased bases at this position at the quality floor, in the order of `pileups`.
 
-    @property
-    def get_query_sequences(self) -> list[str]:
-        """The upper-cased bases at this position at the quality floor."""
+        Only base entries at `min_base_quality` are listed, so the list lines up with `qualities`.
+        pysam's `get_query_sequences()`, by contrast, lists every entry, with an empty string for a
+        deletion or a skip.
+        """
         floor = self.min_base_quality
         return [
             base
             for read in self.pileups
             if read.pileup_type is PileupReadType.base
             and (base := read.base) is not None
+            and (quality := read.qual) is not None
+            and quality >= floor
+        ]
+
+    @property
+    def qualities(self) -> list[int]:
+        """The base qualities of the bases at this position at the quality floor, as in `bases`.
+
+        pysam's `get_query_qualities()`, by contrast, lists every entry, with the quality of the
+        read's next base for a deletion or a skip.
+        """
+        floor = self.min_base_quality
+        return [
+            quality
+            for read in self.pileups
+            if read.pileup_type is PileupReadType.base
             and (quality := read.qual) is not None
             and quality >= floor
         ]

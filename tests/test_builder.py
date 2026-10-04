@@ -178,7 +178,7 @@ def test_builder_counts_a_column_of_every_kind_of_entry() -> None:
         ("opens", "insertion", None, None, "T"),
     ]
     assert (len(pileup.pileups), pileup.unfiltered_depth, pileup.filtered_depth) == (6, 4, 3)
-    assert pileup.get_query_sequences == ["G", "G"]
+    assert pileup.bases == ["G", "G"]
 
 
 def test_builder_floor_leaves_bases_under_it_out_of_the_views_only() -> None:
@@ -187,8 +187,8 @@ def test_builder_floor_leaves_bases_under_it_out_of_the_views_only() -> None:
         for quality in (19, 20, 21)
     ]
     pileup = StreamingPileupBuilder(reads, min_base_quality=20).pileup("chr1", 104)
-    assert (pileup.filtered_depth, pileup.get_query_qualities) == (2, [20, 21])
-    assert pileup.get_query_sequences == ["A", "A"]
+    assert (pileup.filtered_depth, pileup.qualities) == (2, [20, 21])
+    assert pileup.bases == ["A", "A"]
     assert [entry.alignment.query_name for entry in pileup.pileups] == ["q19", "q20", "q21"]
     assert pileup.unfiltered_depth == 3
 
@@ -200,7 +200,7 @@ def test_builder_piles_up_a_crowd_of_reads_at_one_start() -> None:
         for index in range(count)
     ]
     pileup = StreamingPileupBuilder(reads).pileup("chr1", 5)
-    assert Counter(pileup.get_query_sequences) == {"A": 5, "C": 4, "G": 3, "T": 2, "N": 1}
+    assert Counter(pileup.bases) == {"A": 5, "C": 4, "G": 3, "T": 2, "N": 1}
     assert pileup.unfiltered_depth == 15
     assert [entry.alignment.query_name for entry in pileup.pileups] == [
         read.query_name for read in reads
@@ -253,8 +253,8 @@ def test_reads_with_no_stored_qualities_pass_every_floor() -> None:
         [record("r", 10, "2M1D1M2I", "ACGTT", quals="*")], min_base_quality=60
     )
     at_base = builder.pileup("chr1", 11)
-    assert at_base.get_query_sequences == ["C"]
-    assert (at_base.get_query_qualities, at_base.filtered_depth) == ([255], 1)
+    assert at_base.bases == ["C"]
+    assert (at_base.qualities, at_base.filtered_depth) == ([255], 1)
     at_deletion = builder.pileup("chr1", 12)
     assert (at_deletion.pileups[0].qual, at_deletion.filtered_depth) == (255, 1)
     at_insertion = builder.pileup("chr1", 13)
@@ -271,7 +271,7 @@ def test_reads_with_no_stored_bases_hold_no_base_or_quality() -> None:
     assert [(entry.base, entry.qual) for entry in pileup.pileups] == [(None, None), (None, None)]
     assert pileup.pileups[1].inserted_qualities is None
     assert (pileup.unfiltered_depth, pileup.filtered_depth) == (1, 0)
-    assert (pileup.get_query_sequences, pileup.get_query_qualities) == ([], [])
+    assert (pileup.bases, pileup.qualities) == ([], [])
 
 
 def test_builder_leaves_out_reads_with_no_reference_consuming_operator() -> None:
@@ -287,7 +287,7 @@ def test_builder_skips_soft_and_hard_clips() -> None:
     builder = StreamingPileupBuilder([record("r", 10, "5H2S3M1S", "TTACGA")])
     assert entries(builder.pileup("chr1", 9)) == []
     assert entries(builder.pileup("chr1", 10)) == [("r", "base", 2, 2, None)]
-    assert builder.pileup("chr1", 10).get_query_sequences == ["A"]
+    assert builder.pileup("chr1", 10).bases == ["A"]
     assert entries(builder.pileup("chr1", 12)) == [("r", "base", 4, 4, None)]
     assert entries(builder.pileup("chr1", 13)) == []
 
@@ -310,7 +310,7 @@ def test_builder_piles_up_reference_skips() -> None:
     skip = columns[2].pileups[0]
     assert skip.is_refskip and not skip.is_del and not skip.is_ins
     assert (skip.base, skip.qual) == (None, None)
-    assert (columns[2].get_query_sequences, columns[2].get_query_qualities) == ([], [])
+    assert (columns[2].bases, columns[2].qualities) == ([], [])
 
 
 def test_builder_piles_up_an_insertion_after_a_reference_skip() -> None:
@@ -331,15 +331,15 @@ def test_builder_piles_up_both_overlapping_mates() -> None:
         (99, 4),
         (147, 1),
     ]
-    assert pileup.get_query_sequences == ["A", "A"]
+    assert pileup.bases == ["A", "A"]
 
 
 def test_builder_moves_across_contigs() -> None:
     reads = [record("one", 10, "4M", "ACGT"), record("two", 10, "4M", "TTTT", contig="chr2")]
     evicted: list[AlignedSegment] = []
     builder = StreamingPileupBuilder(reads, tap=evicted.append)
-    assert builder.pileup("chr1", 11).get_query_sequences == ["C"]
-    assert builder.pileup("chr2", 11).get_query_sequences == ["T"]
+    assert builder.pileup("chr1", 11).bases == ["C"]
+    assert builder.pileup("chr2", 11).bases == ["T"]
     assert [read.query_name for read in evicted] == ["one"]
     builder.close()
     assert [read.query_name for read in evicted] == ["one", "two"]
@@ -353,7 +353,7 @@ def test_builder_floors_bases_at_13_and_leaves_out_qc_fail_reads_by_default() ->
     ]
     pileup = StreamingPileupBuilder(reads).pileup("chr1", 10)
     assert [entry.alignment.query_name for entry in pileup.pileups] == ["q12", "q13"]
-    assert (pileup.filtered_depth, pileup.get_query_qualities) == (1, [13])
+    assert (pileup.filtered_depth, pileup.qualities) == (1, [13])
 
 
 @pytest.mark.parametrize(
@@ -545,7 +545,7 @@ def test_builder_reads_an_alignment_file(tmp_path: Path) -> None:
         tmp_path / "in.bam", [record("r", 10, "4M", "ACGT"), unmapped("u")], header=HEADER
     )
     with AlignmentFile(str(source)) as reads, StreamingPileupBuilder(reads) as builder:
-        assert [pileup.get_query_sequences for pileup in builder.columns("chr1", 9, 15)] == [
+        assert [pileup.bases for pileup in builder.columns("chr1", 9, 15)] == [
             [],
             ["A"],
             ["C"],
