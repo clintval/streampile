@@ -67,19 +67,23 @@ Overlapping mates are both piled up; `pileup.without_overlaps()` keeps one read 
 ### Tabulating Alleles
 
 `tabulate` counts the reads of every allele at every base of a territory, one `TabulatedBase` per base, covered or not.
+The territory is a [bedspec](https://github.com/clintval/bedspec) `Territory`, e.g. `Territory(BedReader.from_path[Bed3N]("territory.bed"))`, whose overlapping and abutting spans are joined, and its bases come in the order of the alignment header's contigs.
 Within a read, adjacent mismatches are grouped into one MNV, and indels are anchored, trimmed, and left-aligned as normalized VCF alleles.
 Positions are 1-based, as in VCF, so alleles can be matched to a VCF by `CHROM`, `POS`, `REF`, and `ALT`.
 Like the builder, it leaves out secondary, supplementary, duplicate, and QC-fail reads by default, but it counts bases of any quality unless given a `min_base_quality`, where the builder's floor is 13.
 
 ```pycon
+>>> from bedspec import Bed3
+>>> from bedspec import Territory
 >>> from pysam import FastaFile
 >>> from streampile import tabulate
 >>>
+>>> territory = Territory([Bed3("chr1", start=9, end=12)])
 >>> with (
 ...     AlignmentFile("tests/data/reads.bam") as reads,
 ...     FastaFile("tests/data/reference.fa") as reference,
 ... ):
-...     bases = list(tabulate(reads, reference, [("chr1", 9, 12)], min_base_quality=30))
+...     bases = list(tabulate(reads, reference, territory, min_base_quality=30))
 >>>
 >>> for base in bases:
 ...     print(base.pos, base.ref, base.depth, base.ref_reads, base.alt_refs, base.alts, base.alt_reads)

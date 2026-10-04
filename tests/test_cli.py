@@ -10,11 +10,12 @@ from streampile import tabulate
 from streampile._cli import main
 
 from .records import DATA
+from .records import territory
 
 README = Path(__file__).parent.parent / "README.md"
 
 
-def run(out: Path, *extra: str) -> int:
+def run(out: Path, *extra: str, intervals: Path = DATA / "territory.bed") -> int:
     return main([
         "tabulate",
         "--bam",
@@ -22,7 +23,7 @@ def run(out: Path, *extra: str) -> int:
         "--ref",
         str(DATA / "reference.fa"),
         "--intervals",
-        str(DATA / "territory.bed"),
+        str(intervals),
         *extra,
         "--out",
         str(out),
@@ -45,8 +46,22 @@ def test_a_written_table_reads_back_record_for_record(tmp_path: Path, name: str)
         AlignmentFile(str(DATA / "reads.bam")) as reads,
         FastaFile(str(DATA / "reference.fa")) as reference,
     ):
-        expected = list(tabulate(reads, reference, [("chr1", 20, 24)], min_base_quality=30))
+        expected = list(
+            tabulate(reads, reference, territory(("chr1", 20, 24)), min_base_quality=30)
+        )
     assert list(TabulationReader.from_path(out)) == expected
+
+
+def test_tabulate_reads_a_bed_territory(tmp_path: Path) -> None:
+    bed = tmp_path / "territory.bed"
+    bed.write_text("track name=x\n# comment\nchr1\t22\t24\tgene\nchr1\t5\t5\nchr1\t20\t22\n")
+    assert run(tmp_path / "counts.tsv", intervals=bed) == 0
+    rows = (tmp_path / "counts.tsv").read_text().splitlines()[1:]
+    assert [row.split("\t")[1] for row in rows] == ["21", "22", "23", "24"]
+    bed.write_text("chr1\t20\t24\nchr1\t30\t25\n")
+    with pytest.raises(ValueError, match="on line 2"):
+        run(tmp_path / "bad.tsv", intervals=bed)
+    assert not (tmp_path / "bad.tsv").exists()
 
 
 def test_tabulate_indexes_a_bgzf_table(tmp_path: Path) -> None:

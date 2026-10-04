@@ -12,11 +12,11 @@ from streampile import TabulationReader
 from streampile import TabulationWriter
 from streampile import Tabulator
 from streampile import normalize
-from streampile import read_intervals
 from streampile import tabulate
 
 from .records import DATA
 from .records import record
+from .records import territory
 from .records import unmapped
 from .records import write_bam
 
@@ -39,14 +39,15 @@ def alleles(base: TabulatedBase) -> dict[str, int]:
 
 
 def sites_of(
-    intervals: list[tuple[str, int, int]], **options: int
+    spans: list[tuple[str, int, int]], **options: int
 ) -> dict[tuple[str, int], TabulatedBase]:
     with (
         AlignmentFile(str(DATA / "reads.bam")) as reads,
         FastaFile(str(DATA / "reference.fa")) as fasta,
     ):
         return {
-            (site.contig, site.pos): site for site in tabulate(reads, fasta, intervals, **options)
+            (site.contig, site.pos): site
+            for site in tabulate(reads, fasta, territory(*spans), **options)
         }
 
 
@@ -154,7 +155,7 @@ def test_tabulate_leaves_out_reads_by_flag_and_mapping_quality() -> None:
     )
 
 
-def test_tabulate_merges_intervals_and_writes_zero_depth_bases() -> None:
+def test_tabulate_joins_spans_and_writes_zero_depth_bases_in_header_order() -> None:
     sites = sites_of([("chr2", 30, 38), ("chr2", 0, 5), ("chr2", 3, 8), ("chr1", 58, 60)])
     assert list(sites) == [("chr1", 59), ("chr1", 60)] + [("chr2", pos) for pos in range(1, 9)] + [
         ("chr2", pos) for pos in range(31, 39)
@@ -162,21 +163,20 @@ def test_tabulate_merges_intervals_and_writes_zero_depth_bases() -> None:
     assert [sites["chr2", pos].depth for pos in range(4, 9)] == [0, 0, 1, 1, 1]
 
 
-def test_tabulate_refuses_bad_intervals() -> None:
+def test_tabulate_refuses_a_contig_not_in_the_header_and_skips_empty_spans() -> None:
     with pytest.raises(ValueError, match="Contig chr3 is not in the alignment header."):
-        sites_of([("chr3", 0, 10)])
-    with pytest.raises(ValueError, match="is empty or starts before 0"):
-        sites_of([("chr1", 10, 10)])
+        sites_of([("chr1", 0, 10), ("chr3", 0, 10)])
+    assert sites_of([("chr1", 10, 10)]) == {}
 
 
-def test_tabulate_counts_reads_spanning_several_intervals(
-    tmp_path: Path, reference: FastaFile
-) -> None:
+def test_tabulate_counts_reads_spanning_several_spans(tmp_path: Path, reference: FastaFile) -> None:
     reads = [record("long", 0, "30M", CHR1[0:10] + "T" + CHR1[11:30], header=HEADER)]
     path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
     with AlignmentFile(str(path)) as alignments:
         sites = list(
-            tabulate(alignments, reference, [("chr1", 0, 5), ("chr1", 8, 12), ("chr1", 25, 28)])
+            tabulate(
+                alignments, reference, territory(("chr1", 0, 5), ("chr1", 8, 12), ("chr1", 25, 28))
+            )
         )
     assert [site.depth for site in sites] == [1] * 12
     assert [site.pos for site in sites if site.alts] == [11]
@@ -191,7 +191,7 @@ def test_tabulate_counts_bases_of_any_quality_but_not_qc_fail_reads_by_default(
     ]
     path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
     with AlignmentFile(str(path)) as alignments:
-        sites = list(tabulate(alignments, reference, [("chr1", 0, 4)]))
+        sites = list(tabulate(alignments, reference, territory(("chr1", 0, 4))))
     assert [(site.depth, site.ref_reads) for site in sites] == [(1, 1)] * 4
 
 
@@ -204,7 +204,9 @@ def test_tabulate_counts_reads_with_no_stored_qualities_at_every_floor(
     ]
     path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
     with AlignmentFile(str(path)) as alignments:
-        sites = list(tabulate(alignments, reference, [("chr1", 0, 10)], min_base_quality=60))
+        sites = list(
+            tabulate(alignments, reference, territory(("chr1", 0, 10)), min_base_quality=60)
+        )
     assert [site.depth for site in sites] == [1] * 10
     assert [(site.pos, alleles(site)) for site in sites if site.alts] == [(6, {"G>T": 1})]
 
@@ -227,7 +229,9 @@ def test_tabulate_agrees_with_counting_bases_in_pileups(
     ]
     path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
     with AlignmentFile(str(path)) as alignments:
-        sites = list(tabulate(alignments, reference, [("chr1", 0, 40)], min_base_quality=30))
+        sites = list(
+            tabulate(alignments, reference, territory(("chr1", 0, 40)), min_base_quality=30)
+        )
     with (
         AlignmentFile(str(path)) as alignments,
         StreamingPileupBuilder(alignments, min_base_quality=30) as builder,
@@ -250,11 +254,3 @@ def test_bases_round_trip_through_a_table(tmp_path: Path) -> None:
             writer.write(base)
     assert list(TabulationReader.from_path(tmp_path / "bases.tsv.gz")) == bases
     assert any(base.alts for base in bases) and any(not base.alts for base in bases)
-
-
-def test_read_intervals(tmp_path: Path) -> None:
-    path = tmp_path / "territory.bed"
-    path.write_text(
-        "track name=x\n# comment\nbrowser position chr1\n\nchr1\t0\t10\tgene\nchr2\t5\t9\r\n"
-    )
-    assert read_intervals(path) == [("chr1", 0, 10), ("chr2", 5, 9)]

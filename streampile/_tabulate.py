@@ -1,12 +1,11 @@
 from bisect import bisect_right
 from collections.abc import Callable
-from collections.abc import Iterable
 from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Final
 from typing import final
 
+from bedspec import Territory
 from pysam import AlignedSegment
 from pysam import AlignmentFile
 from pysam import FastaFile
@@ -317,22 +316,19 @@ class Tabulator:
             and bool(record.cigartuples)
         )
 
-    def tabulate(
-        self, alignments: AlignmentFile, intervals: Iterable[tuple[str, int, int]]
-    ) -> Iterator[TabulatedBase]:
-        """Yield every base of the intervals, covered or not.
+    def tabulate(self, alignments: AlignmentFile, territory: Territory) -> Iterator[TabulatedBase]:
+        """Yield every base of a territory, covered or not.
 
-        Overlapping and adjacent intervals are merged, and bases come in the order of the
-        alignment header's contigs, then by position.
+        Bases come in the order of the alignment header's contigs, then by position.
 
         Args:
             alignments: an indexed, coordinate-sorted alignment file.
-            intervals: the territory, as 0-based half-open `(contig, start, end)` spans.
+            territory: the bases to tabulate.
 
         Raises:
-            ValueError: if an interval's contig is not in the alignment header.
+            ValueError: if a contig of the territory is not in the alignment header.
         """
-        for contig, spans in merge_intervals(alignments, intervals):
+        for contig, spans in _by_header(alignments, territory):
             yield from self._tabulate_contig(alignments, contig, spans)
 
     def alleles(self, record: AlignedSegment) -> tuple[list[Allele], list[tuple[int, int]]]:
@@ -508,50 +504,26 @@ def _add(ledgers: list[_Ledger], start: int, end: int, *, ref: bool) -> None:
         ledger.add(start, end, ref=ref)
 
 
-def merge_intervals(
-    alignments: AlignmentFile, intervals: Iterable[tuple[str, int, int]]
+def _by_header(
+    alignments: AlignmentFile, territory: Territory
 ) -> list[tuple[str, list[tuple[int, int]]]]:
-    """Group intervals by contig in header order, then sort and merge overlapping or adjacent ones.
+    """The spans of a territory, grouped by contig in the order of the alignment header.
 
     Raises:
-        ValueError: if an interval's contig is not in the alignment header, or an interval is
-            empty or has a negative start.
+        ValueError: if a contig of the territory is not in the alignment header.
     """
     by_contig: dict[str, list[tuple[int, int]]] = {}
-    for contig, start, end in intervals:
-        if alignments.get_tid(contig) < 0:
-            raise ValueError(f"Contig {contig} is not in the alignment header.")
-        if start < 0 or end <= start:
-            raise ValueError(f"Interval {contig}:{start}-{end} is empty or starts before 0.")
-        by_contig.setdefault(contig, []).append((start, end))
-    merged: list[tuple[str, list[tuple[int, int]]]] = []
-    for contig in sorted(by_contig, key=alignments.get_tid):
-        spans: list[tuple[int, int]] = []
-        for start, end in sorted(by_contig[contig]):
-            if spans and start <= spans[-1][1]:
-                spans[-1] = (spans[-1][0], max(spans[-1][1], end))
-            else:
-                spans.append((start, end))
-        merged.append((contig, spans))
-    return merged
-
-
-def read_intervals(path: Path | str) -> list[tuple[str, int, int]]:
-    """The first three columns of each record of a BED file, skipping headers and blank lines."""
-    intervals: list[tuple[str, int, int]] = []
-    with Path(path).open() as handle:
-        for line in handle:
-            if not line.strip() or line.startswith(("#", "track", "browser")):
-                continue
-            fields = line.rstrip("\r\n").split("\t")
-            intervals.append((fields[0], int(fields[1]), int(fields[2])))
-    return intervals
+    for span in territory:
+        if span.refname not in by_contig and alignments.get_tid(span.refname) < 0:
+            raise ValueError(f"Contig {span.refname} is not in the alignment header.")
+        by_contig.setdefault(span.refname, []).append((span.start, span.end))
+    return sorted(by_contig.items(), key=lambda contig: alignments.get_tid(contig[0]))
 
 
 def tabulate(
     alignments: AlignmentFile,
     reference: FastaFile,
-    intervals: Iterable[tuple[str, int, int]],
+    territory: Territory,
     *,
     min_base_quality: int = 0,
     min_mapping_quality: int = 0,
@@ -559,12 +531,13 @@ def tabulate(
 ) -> Iterator[TabulatedBase]:
     """Yield every base of a territory with its depth and the reads of each allele.
 
-    See `Tabulator` for which reads count where.
+    See `Tabulator` for which reads count where. Bases come in the order of the alignment
+    header's contigs, then by position.
 
     Args:
         alignments: an indexed, coordinate-sorted alignment file.
         reference: the indexed reference the reads are aligned to.
-        intervals: the territory, as 0-based half-open `(contig, start, end)` spans.
+        territory: the bases to tabulate, e.g. `Territory(BedReader.from_path[Bed3N](path))`.
         min_base_quality: the lowest base quality of an informative base: 0 by default, where a
             `StreamingPileupBuilder` filters at 13 by default, as htslib does.
         min_mapping_quality: the lowest mapping quality of a counted read.
@@ -577,4 +550,4 @@ def tabulate(
         min_mapping_quality=min_mapping_quality,
         exclude_flags=exclude_flags,
     )
-    yield from tabulator.tabulate(alignments, intervals)
+    yield from tabulator.tabulate(alignments, territory)

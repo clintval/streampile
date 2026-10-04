@@ -13,7 +13,6 @@ from streampile._tabulate import DEFAULT_EXCLUDE_FLAGS
 from streampile._tabulate import Allele
 from streampile._tabulate import Tabulator
 from streampile._tabulate import normalize
-from streampile._tabulate import read_intervals
 from streampile._tabulate import tabulate
 
 __all__ = [
@@ -30,6 +29,5 @@ __all__ = [
     "TabulationWriter",
     "Tabulator",
     "normalize",
-    "read_intervals",
     "tabulate",
 ]

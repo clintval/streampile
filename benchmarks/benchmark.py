@@ -15,22 +15,34 @@ from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 
+from bedspec import Bed3
+from bedspec import Bed3N
+from bedspec import BedReader
+from bedspec import Territory
 from pysam import AlignmentFile
 from pysam import FastaFile
 
 from streampile import StreamingPileupBuilder
-from streampile import read_intervals
 from streampile import tabulate
-from streampile._tabulate import merge_intervals
 
 MIN_BASE_QUALITY = 30
 MIN_MAPPING_QUALITY = 20
 EXCLUDE_FLAGS = 0xF04
 
-Spans = list[tuple[str, list[tuple[int, int]]]]
+
+def read_territory(bed: Path) -> Territory:
+    """The territory of a BED file."""
+    with BedReader.from_path[Bed3N](bed) as features:
+        return Territory(features)
 
 
-def streampile_counts(bam: Path, spans: Spans) -> Iterator[Counter[str]]:
+def spans_in_header_order(bam: Path, territory: Territory) -> list[Bed3]:
+    """The spans of a territory in the order of the BAM header's contigs, as `tabulate` walks."""
+    with AlignmentFile(str(bam)) as reads:
+        return sorted(territory, key=lambda span: (reads.get_tid(span.refname), span.start))
+
+
+def streampile_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
     """Count each column of the territory from one forward sweep of the reads."""
     with (
         AlignmentFile(str(bam)) as reads,
@@ -38,80 +50,73 @@ def streampile_counts(bam: Path, spans: Spans) -> Iterator[Counter[str]]:
             reads, min_mapq=MIN_MAPPING_QUALITY, include_qcfail=False
         ) as builder,
     ):
-        for contig, contig_spans in spans:
-            for start, end in contig_spans:
-                for pileup in builder.columns(contig, start, end):
-                    counts: Counter[str] = Counter()
-                    for entry in pileup.pileups:
-                        if entry.is_ins:
-                            counts["+"] += 1
-                            continue
-                        quality = entry.qual
-                        if quality is None or quality < MIN_BASE_QUALITY:
-                            continue
-                        counts["-" if entry.is_del else entry.base or "N"] += 1
-                    yield counts
+        for span in spans:
+            for pileup in builder.columns(span.refname, span.start, span.end):
+                counts: Counter[str] = Counter()
+                for entry in pileup.pileups:
+                    if entry.is_ins:
+                        counts["+"] += 1
+                        continue
+                    quality = entry.qual
+                    if quality is None or quality < MIN_BASE_QUALITY:
+                        continue
+                    counts["-" if entry.is_del else entry.base or "N"] += 1
+                yield counts
 
 
-def htslib_counts(bam: Path, spans: Spans) -> Iterator[Counter[str]]:
+def htslib_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
     """Count each column of the territory with pysam's pileup over each span.
 
     The "all" stepper drops reads by flag in htslib, but only the "samtools" stepper applies
     `min_mapping_quality`, so mapping quality is checked here.
     """
     with AlignmentFile(str(bam)) as reads:
-        for contig, contig_spans in spans:
-            for start, end in contig_spans:
-                columns = reads.pileup(
-                    contig,
-                    start,
-                    end,
-                    truncate=True,
-                    stepper="all",
-                    flag_filter=EXCLUDE_FLAGS,
-                    min_mapping_quality=MIN_MAPPING_QUALITY,
-                    min_base_quality=0,
-                    max_depth=10_000_000,
-                    ignore_overlaps=False,
-                    ignore_orphans=False,
-                )
-                expected = start
-                for column in columns:
-                    for _ in range(expected, column.reference_pos):
-                        yield Counter()
-                    expected = column.reference_pos + 1
-                    counts: Counter[str] = Counter()
-                    for entry in column.pileups:
-                        if entry.alignment.mapping_quality < MIN_MAPPING_QUALITY:
-                            continue
-                        if entry.indel > 0:
-                            counts["+"] += 1
-                        if entry.is_refskip:
-                            continue
-                        position = entry.query_position_or_next
-                        qualities = entry.alignment.query_qualities_str
-                        if qualities is None or position >= len(qualities):
-                            continue
-                        if ord(qualities[position]) - 33 < MIN_BASE_QUALITY:
-                            continue
-                        if entry.is_del or entry.query_position is None:
-                            counts["-"] += 1
-                        else:
-                            sequence = entry.alignment.query_sequence or ""
-                            counts[sequence[entry.query_position].upper()] += 1
-                    yield counts
-                for _ in range(expected, end):
+        for span in spans:
+            columns = reads.pileup(
+                span.refname,
+                span.start,
+                span.end,
+                truncate=True,
+                stepper="all",
+                flag_filter=EXCLUDE_FLAGS,
+                min_mapping_quality=MIN_MAPPING_QUALITY,
+                min_base_quality=0,
+                max_depth=10_000_000,
+                ignore_overlaps=False,
+                ignore_orphans=False,
+            )
+            expected = span.start
+            for column in columns:
+                for _ in range(expected, column.reference_pos):
                     yield Counter()
+                expected = column.reference_pos + 1
+                counts: Counter[str] = Counter()
+                for entry in column.pileups:
+                    if entry.alignment.mapping_quality < MIN_MAPPING_QUALITY:
+                        continue
+                    if entry.indel > 0:
+                        counts["+"] += 1
+                    if entry.is_refskip:
+                        continue
+                    position = entry.query_position_or_next
+                    qualities = entry.alignment.query_qualities_str
+                    if qualities is None or position >= len(qualities):
+                        continue
+                    if ord(qualities[position]) - 33 < MIN_BASE_QUALITY:
+                        continue
+                    if entry.is_del or entry.query_position is None:
+                        counts["-"] += 1
+                    else:
+                        sequence = entry.alignment.query_sequence or ""
+                        counts[sequence[entry.query_position].upper()] += 1
+                yield counts
+            for _ in range(expected, span.end):
+                yield Counter()
 
 
-def rebuilt_counts(bam: Path, spans: Spans, limit: int) -> Iterator[Counter[str]]:
+def rebuilt_counts(bam: Path, spans: list[Bed3], limit: int) -> Iterator[Counter[str]]:
     """Count evenly spaced columns, each rebuilt from every overlapping read's aligned pairs."""
-    positions = [
-        (contig, pos)
-        for contig, ranges in spans
-        for start, end in ranges
-        for pos in range(start, end)
-    ]
+    positions = [(span.refname, pos) for span in spans for pos in range(span.start, span.end)]
     step = max(len(positions) // limit, 1)
     with AlignmentFile(str(bam)) as reads:
         for contig, pos in positions[::step][:limit]:
@@ -128,13 +133,13 @@ def rebuilt_counts(bam: Path, spans: Spans, limit: int) -> Iterator[Counter[str]
             yield counts
 
 
-def tabulate_rows(bam: Path, reference: Path, bed: Path) -> Iterator[str]:
+def tabulate_rows(bam: Path, reference: Path, territory: Territory) -> Iterator[str]:
     """Tabulate the territory, as `streampile tabulate` does, without writing a table."""
     with AlignmentFile(str(bam)) as reads, FastaFile(str(reference)) as fasta:
         for base in tabulate(
             reads,
             fasta,
-            read_intervals(bed),
+            territory,
             min_base_quality=MIN_BASE_QUALITY,
             min_mapping_quality=MIN_MAPPING_QUALITY,
         ):
@@ -149,13 +154,13 @@ def peak_megabytes() -> float:
 
 def run(engine: str, bam: Path, reference: Path, bed: Path, rebuild_columns: int) -> None:
     """Run one engine and print its time, peak memory, columns, and a digest of its counts."""
-    with AlignmentFile(str(bam)) as reads:
-        spans = merge_intervals(reads, read_intervals(bed))
+    territory = read_territory(bed)
+    spans = spans_in_header_order(bam, territory)
     started = time.perf_counter()
     digest = hashlib.sha256()
     columns = 0
     if engine == "tabulate":
-        for row in tabulate_rows(bam, reference, bed):
+        for row in tabulate_rows(bam, reference, territory):
             digest.update(row.encode())
             columns += 1
     else:

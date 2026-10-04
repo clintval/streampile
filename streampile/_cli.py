@@ -2,6 +2,9 @@ import argparse
 import sys
 from pathlib import Path
 
+from bedspec import Bed3N
+from bedspec import BedReader
+from bedspec import Territory
 from pybgzf import IndexFormat
 from pysam import AlignmentFile
 from pysam import FastaFile
@@ -9,11 +12,12 @@ from pysam import FastaFile
 from streampile._table import BGZF_SUFFIXES
 from streampile._table import TabulationWriter
 from streampile._tabulate import DEFAULT_EXCLUDE_FLAGS
-from streampile._tabulate import read_intervals
 from streampile._tabulate import tabulate
 
 
 def _tabulate(args: argparse.Namespace) -> int:
+    with BedReader.from_path[Bed3N](args.intervals) as features:
+        territory = Territory(features)
     with (
         AlignmentFile(str(args.bam), threads=args.threads) as alignments,
         FastaFile(str(args.ref)) as reference,
@@ -21,7 +25,7 @@ def _tabulate(args: argparse.Namespace) -> int:
         bases = tabulate(
             alignments,
             reference,
-            read_intervals(args.intervals),
+            territory,
             min_base_quality=args.min_base_quality,
             min_mapping_quality=args.min_mapping_quality,
             exclude_flags=args.exclude_flags,

@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Literal
 
 import pysam
+from bedspec import Bed3
+from bedspec import Territory
 from pysam import AlignedSegment
 from pysam import AlignmentFile
 from pysam import AlignmentHeader
@@ -54,6 +56,11 @@ def unmapped(name: str, bases: str = "ACGT", header: AlignmentHeader = HEADER) -
     read.query_sequence = bases
     read.query_qualities = array("B", [40] * len(bases))
     return read
+
+
+def territory(*spans: tuple[str, int, int]) -> Territory:
+    """The territory of 0-based half-open `(contig, start, end)` spans."""
+    return Territory(Bed3(contig, start=start, end=end) for contig, start, end in spans)
 
 
 def write_bam(
