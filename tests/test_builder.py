@@ -186,6 +186,15 @@ def test_reads_with_no_stored_bases_hold_no_base_or_quality() -> None:
     assert (pileup.get_query_sequences, pileup.get_query_qualities) == ([], [])
 
 
+def test_builder_leaves_out_reads_with_no_reference_consuming_operator() -> None:
+    reads = [record("clipped", 10, "2S2I", "ACGT"), record("inserted", 10, "4I", "ACGT")]
+    evicted: list[AlignedSegment] = []
+    with StreamingPileupBuilder(reads, tap=evicted.append) as builder:
+        assert [len(pileup.pileups) for pileup in builder.columns("chr1", 8, 12)] == [0, 0, 0, 0]
+    assert evicted == reads
+    assert Pileup.from_alignments(reads, "chr1", 9).pileups == []
+
+
 def test_builder_skips_soft_and_hard_clips() -> None:
     builder = StreamingPileupBuilder([record("r", 10, "5H2S3M1S", "TTACGA")])
     assert entries(builder.pileup("chr1", 9)) == []

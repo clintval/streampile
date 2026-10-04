@@ -18,6 +18,15 @@ SKIPPED: Final[int] = -1
 DELETED_AT_END: Final[int] = -2
 """The offset of a deleted reference position that no base of the read follows."""
 
+REFERENCE_OPERATORS: Final[frozenset[int]] = frozenset({
+    MATCH,
+    DELETION,
+    SKIP,
+    SEQUENCE_MATCH,
+    SEQUENCE_MISMATCH,
+})
+"""The CIGAR operators that consume the reference: M, D, N, =, and X."""
+
 
 @final
 class Footprint:
@@ -79,10 +88,13 @@ class Footprint:
 
 
 def is_placed(record: AlignedSegment) -> bool:
-    """Whether a read is mapped and has at least one base on the reference."""
+    """Whether a read is mapped and has a reference-consuming operator: M, D, N, =, or X.
+
+    A read with none, such as `4S`, `4I`, or `2S2I`, is left out, as htslib leaves it out of a
+    pileup, although pysam gives it a `reference_end` one past its start.
+    """
     return (
         not record.is_unmapped
         and record.reference_id >= 0
-        and record.reference_end is not None
-        and record.reference_end > record.reference_start
+        and any(operator in REFERENCE_OPERATORS for operator, _ in record.cigartuples or ())
     )

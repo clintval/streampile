@@ -48,7 +48,27 @@ def test_footprint_walks_the_cigar_once(
     assert footprint.end == end
 
 
-def test_is_placed() -> None:
-    assert is_placed(record("r", 10, "4M", "ACGT"))
+@pytest.mark.parametrize(
+    "cigar,bases,placed",
+    [
+        ("4M", "ACGT", True),
+        ("1D3M", "ACG", True),
+        ("2S2N2M", "ACGT", True),
+        ("1=1X2S", "ACGT", True),
+        ("4D", "*", True),
+        ("4S", "ACGT", False),
+        ("4I", "ACGT", False),
+        ("2S2I", "ACGT", False),
+        ("4H4S", "ACGT", False),
+        ("1S2I1S", "ACGT", False),
+    ],
+)
+def test_is_placed_needs_a_reference_consuming_operator(
+    cigar: str, bases: str, placed: bool
+) -> None:
+    assert is_placed(record("r", 10, cigar, bases)) is placed
+
+
+def test_is_placed_needs_a_mapped_read() -> None:
     assert not is_placed(unmapped("u"))
     assert not is_placed(record("r", 10, "4M", "ACGT", flag=4))
