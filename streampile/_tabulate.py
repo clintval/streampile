@@ -17,6 +17,7 @@ from pysam import AlignedSegment
 from pysam import AlignmentFile
 from pysam import FastaFile
 
+from streampile._footprint import query_qualities
 from streampile._pileup import DEFAULT_EXCLUDE_FLAGS
 from streampile._table import TabulatedBase
 
@@ -299,8 +300,7 @@ class Tabulator:
         self.min_base_quality: int = min_base_quality
         self.min_mapping_quality: int = min_mapping_quality
         self.exclude_flags: int = exclude_flags
-        self._floor: str = chr(min_base_quality + 33)
-        self._low_quality: bytes = bytes(int(code - 33 < min_base_quality) for code in range(256))
+        self._low_quality: bytes = bytes(int(quality < min_base_quality) for quality in range(256))
         self._contigs: dict[str, _Reference] = {}
 
     def accepts(self, record: AlignedSegment) -> bool:
@@ -349,7 +349,7 @@ class Tabulator:
         self, record: AlignedSegment, segments: list[Segment], reference: _Reference
     ) -> tuple[list[Allele], list[tuple[int, int]]]:
         sequence: str = record.query_sequence or ""
-        qualities: str | None = record.query_qualities_str
+        qualities = query_qualities(record) if self.min_base_quality > 0 else None
         counted: list[Allele] = []
         dropped: list[tuple[int, int]] = []
         for run in _runs(segments, sequence, reference):
@@ -365,7 +365,10 @@ class Tabulator:
             alt = sequence[query_start:query_end]
             if (
                 (last.is_indel and last.ref_end > last.ref_start and not run.closed)
-                or (qualities is not None and min(qualities[query_start:query_end]) < self._floor)
+                or (
+                    qualities is not None
+                    and min(qualities[query_start:query_end]) < self.min_base_quality
+                )
                 or "N" in alt
                 or not set(ref) <= ACGT
                 or (
@@ -449,30 +452,28 @@ class Tabulator:
     ) -> Iterator[int]:
         """The aligned positions of a read below the floor, at a read N, or over a non-ACGT base."""
         sequence: str = record.query_sequence or ""
-        qualities: str | None = record.query_qualities_str
-        low: list[int] = []
+        qualities = query_qualities(record)
+        low = None
         if qualities is not None and self.min_base_quality > 0:
-            mask = qualities.encode().translate(self._low_quality)
-            at = mask.find(1)
+            low = bytes(qualities).translate(self._low_quality)
+        for operator, ref_pos, query, length in segments:
+            if operator != CMATCH:
+                continue
+            end = query + length
+            at = sequence.find("N", query, end)
             while at >= 0:
-                low.append(at)
-                at = mask.find(1, at + 1)
-        at = sequence.find("N")
-        while at >= 0:
-            low.append(at)
-            at = sequence.find("N", at + 1)
-        blocks = [segment for segment in segments if segment[0] == CMATCH]
-        for offset in low:
-            for _, ref_pos, query, length in blocks:
-                if query <= offset < query + length:
-                    yield ref_pos + offset - query
-                    break
-        for _, ref_pos, _, length in blocks:
+                yield ref_pos + at - query
+                at = sequence.find("N", at + 1, end)
+            if low is not None:
+                at = low.find(1, query, end)
+                while at >= 0:
+                    yield ref_pos + at - query
+                    at = low.find(1, at + 1, end)
             bases = reference.get(ref_pos, ref_pos + length)
-            if not set(bases) <= ACGT:
-                for offset, base in enumerate(bases):
-                    if base not in ACGT:
-                        yield ref_pos + offset
+            if bases.strip("ACGT"):
+                yield from (
+                    ref_pos + offset for offset, base in enumerate(bases) if base not in ACGT
+                )
 
 
 def _touched(

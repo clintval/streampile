@@ -195,6 +195,19 @@ def test_tabulate_counts_bases_of_any_quality_but_not_qc_fail_reads_by_default(
     assert [(site.depth, site.ref_reads) for site in sites] == [(1, 1)] * 4
 
 
+def test_tabulate_reads_base_qualities_of_95_and_more(tmp_path: Path, reference: FastaFile) -> None:
+    quals = [40, 40, 96, 40, 120, 40, 10, 40]
+    reads = [record("r", 0, "8M", CHR1[0:2] + "T" + CHR1[3:8], quals=quals, header=HEADER)]
+    path = write_bam(tmp_path / "reads.bam", reads, header=HEADER)
+    with AlignmentFile(str(path)) as alignments:
+        sites = list(
+            tabulate(alignments, reference, territory(("chr1", 0, 8)), min_base_quality=30)
+        )
+        assert StreamingPileupBuilder(alignments.fetch("chr1")).pileup("chr1", 2).qualities == [96]
+    assert [site.depth for site in sites] == [1, 1, 1, 1, 1, 1, 0, 1]
+    assert [(site.pos, alleles(site)) for site in sites if site.alts] == [(3, {"G>T": 1})]
+
+
 def test_tabulate_counts_reads_with_no_stored_qualities_at_every_floor(
     tmp_path: Path, reference: FastaFile
 ) -> None:

@@ -1,5 +1,6 @@
 from array import array
 from typing import Final
+from typing import cast
 from typing import final
 
 from pysam import CDEL
@@ -86,3 +87,8 @@ def is_placed(record: AlignedSegment) -> bool:
         and record.reference_id >= 0
         and any(operator in REFERENCE_OPERATORS for operator, _ in record.cigartuples or ())
     )
+
+
+def query_qualities(record: AlignedSegment) -> "array[int] | None":
+    """The base qualities of a read as integers, or `None` for a read with none stored."""
+    return cast("array[int] | None", record.query_qualities)

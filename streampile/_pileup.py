@@ -1,4 +1,3 @@
-from array import array
 from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import replace
@@ -7,7 +6,6 @@ from enum import auto
 from typing import Final
 from typing import NamedTuple
 from typing import Self
-from typing import cast
 
 from pysam import AlignedSegment
 
@@ -15,6 +13,7 @@ from streampile._footprint import DELETED_AT_END
 from streampile._footprint import SKIPPED
 from streampile._footprint import Footprint
 from streampile._footprint import is_placed
+from streampile._footprint import query_qualities
 
 DEFAULT_MIN_BASE_QUALITY: Final[int] = 13
 """The default minimum base quality of a pileup, the same as pysam's."""
@@ -24,10 +23,6 @@ DEFAULT_EXCLUDE_FLAGS: Final[int] = 0xF00
 
 MISSING_BASE_QUALITY: Final[int] = 255
 """The base quality of every base of a read with no stored qualities (QUAL `*`), as in htslib."""
-
-
-def _qualities(record: AlignedSegment) -> "array[int] | None":
-    return cast("array[int] | None", record.query_qualities)
 
 
 class PileupReadType(StrEnum):
@@ -97,7 +92,7 @@ class PileupRead(NamedTuple):
         offset = self.query_position_or_next
         if offset is None:
             return None
-        qualities = _qualities(self.alignment)
+        qualities = query_qualities(self.alignment)
         if qualities is None:
             return MISSING_BASE_QUALITY if offset < self.alignment.query_length else None
         return qualities[offset]
@@ -136,7 +131,7 @@ class PileupRead(NamedTuple):
         offset = self.insertion_offset
         if offset is None:
             return None
-        qualities = _qualities(self.alignment)
+        qualities = query_qualities(self.alignment)
         if qualities is None:
             if not self.alignment.query_length:
                 return None
