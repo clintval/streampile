@@ -71,9 +71,7 @@ def _tabulate(args: argparse.Namespace) -> int:
                 out, index=index, threads=args.threads, metadata=metadata
             ) as writer,
         ):
-            writer.write_header()
-            for base in bases:
-                writer.write(base)
+            writer.write_all(bases)
     return 0
 
 

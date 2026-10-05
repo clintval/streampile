@@ -170,11 +170,11 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
     A table opens with `##key=value` metadata lines: its format version, under
     `streampile-tabulation`, the streampile version that wrote it, under `streampile-version`,
     and any metadata given, such as the parameters it was tabulated with. A header line follows,
-    whose first column is `#contig`, then one row per base. The metadata and the header are
-    written once, before the first row or comment, or when `write_header` is first called.
+    whose first column is `#contig`, then one row per base. The metadata is written as the writer
+    starts, and the header once, before the first row or comment, or alone when the writer closes.
 
     Attributes:
-        metadata: the metadata lines to write, in order.
+        metadata: the metadata lines written, in order.
     """
 
     @override
@@ -192,7 +192,12 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
             handle: a file-like object to write the table to.
             metadata: more `##key=value` lines to write after the versions, in order.
             options: the options of the writer, with tabulation defaults for any not given.
+
+        Raises:
+            ValueError: if `header` is False, since a table always has its header.
         """
+        if not options.setdefault("header", True):
+            raise ValueError("A table always has its header, so header cannot be False!")
         _ = options.setdefault("codecs", TABULATION_CODECS)
         _ = options.setdefault("quoting", False)
         _ = options.setdefault("rename", TABULATION_RENAME)
@@ -203,27 +208,12 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
             "streampile-version": STREAMPILE_VERSION,
             **{key: str(value) for key, value in (metadata or {}).items()},
         }
-        self._headed: bool = False
-
-    @override
-    def write_header(self) -> None:
-        """Write the metadata lines and the header line, unless they are written already."""
-        if self._headed:
-            return
-        self._headed = True
         for key, value in self.metadata.items():
             super().write_comment(f"{METADATA_PREFIX}{key}={value}")
-        super().write_header()
-
-    @override
-    def write(self, record: TabulatedBase) -> None:
-        """Write a row, after the metadata and header if they are not written yet."""
-        self.write_header()
-        super().write(record)
 
     @override
     def write_comment(self, comment: str | Comment) -> None:
-        """Write a comment, after the metadata and header if they are not written yet."""
+        """Write a comment, after the header if it is not written yet."""
         self.write_header()
         super().write_comment(comment)
 

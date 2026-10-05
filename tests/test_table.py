@@ -1,5 +1,6 @@
 import gzip
 from importlib.metadata import version
+from io import StringIO
 from pathlib import Path
 
 import pybgzf
@@ -133,8 +134,7 @@ def test_the_metadata_and_header_come_first_and_once(
         writer.write_header()
         writer.write(BASES[0])
         writer.write_header()
-        for base in BASES[1:]:
-            writer.write(base)
+        writer.write_all(BASES[1:])
     with gzip.open(path, "rt") as handle:
         lines = handle.read().splitlines()
     assert lines[:6] == [
@@ -159,6 +159,23 @@ def test_the_metadata_and_header_come_first_and_once(
     }
     assert list(table) == BASES
     assert [comment.text for comment in comments][-1] == "## made by streampile"
+
+
+def test_a_table_always_has_its_header() -> None:
+    with pytest.raises(ValueError, match="always has its header"):
+        _ = TabulationWriter(StringIO(), header=False)
+
+
+def test_an_empty_table_still_has_its_metadata_and_header(tmp_path: Path) -> None:
+    path = tmp_path / "bases.tsv"
+    with TabulationWriter.from_path(path):
+        pass
+    assert path.read_text().splitlines() == [
+        "##streampile-tabulation=1",
+        f"##streampile-version={VERSION}",
+        HEADER,
+    ]
+    assert list(TabulationReader.from_path(path)) == []
 
 
 def test_a_reader_refuses_another_format_version(tmp_path: Path) -> None:
