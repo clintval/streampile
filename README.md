@@ -2,6 +2,7 @@
 
 [![Build Status](https://github.com/clintval/streampile/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/clintval/streampile/actions/workflows/tests.yml?query=branch%3Amain)
 [![Python Versions](https://img.shields.io/badge/python-3.11_|_3.12_|_3.13_|_3.14-blue)](https://github.com/clintval/streampile)
+[![Language](https://img.shields.io/badge/language-rust-DEA584.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/clintval/streampile/blob/main/LICENSE)
 [![basedpyright](https://img.shields.io/badge/basedpyright-checked-42b983)](https://docs.basedpyright.com/latest/)
 [![mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
@@ -14,6 +15,12 @@ Forward-only pileups streamed from coordinate-sorted BAM and CRAM records, and a
 
 ```console
 pip install streampile
+```
+
+The streaming pileup core is also a Rust crate, which the Python package will build on:
+
+```console
+cargo add streampile
 ```
 
 ## Quickstart
