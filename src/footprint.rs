@@ -231,7 +231,12 @@ pub(crate) fn reference_length_of_text(cigar: &[u8]) -> Result<i64> {
                 return Err(invalid());
             }
             match byte {
-                b'M' | b'D' | b'N' | b'=' | b'X' => length += count,
+                b'M' | b'D' | b'N' | b'=' | b'X' => {
+                    length = length
+                        .checked_add(count)
+                        .filter(|&length| length <= i64::from(u32::MAX))
+                        .ok_or_else(invalid)?;
+                }
                 b'I' | b'S' | b'H' | b'P' => {}
                 _ => return Err(invalid()),
             }

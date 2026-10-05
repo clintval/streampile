@@ -197,7 +197,13 @@ fn test_the_reference_length_of_a_cigar_string() {
         Some(19)
     );
     assert_eq!(reference_length_of_text(b"").ok(), Some(0));
-    for invalid in [&b"M"[..], b"10", b"10Q", b"99999999999999999999M"] {
+    for invalid in [
+        &b"M"[..],
+        b"10",
+        b"10Q",
+        b"99999999999999999999M",
+        b"4294967295M1M",
+    ] {
         assert!(reference_length_of_text(invalid).is_err());
     }
 }
