@@ -1,4 +1,5 @@
 import weakref
+from array import array
 from collections import Counter
 from collections import deque
 from collections.abc import Iterator
@@ -12,6 +13,7 @@ from pysam import AlignmentHeader
 
 from streampile import Pileup
 from streampile import PileupRead
+from streampile import PileupReadType
 from streampile import StreamingPileupBuilder
 from streampile._pileup import BASE
 
@@ -549,3 +551,164 @@ def test_builder_reads_an_alignment_file(tmp_path: Path) -> None:
             ["T"],
             [],
         ]
+
+
+READ_LENGTH = 50
+
+
+def pair(
+    name: str, start1: int, start2: int, *, reverse1: bool = False, reverse2: bool = True
+) -> list[AlignedSegment]:
+    """Two 50-base mates at 0-based starts with mate fields as htsjdk sets them, sorted."""
+
+    def five_prime(start: int, reverse: bool) -> int:
+        return start + READ_LENGTH - 1 if reverse else start
+
+    first, second = five_prime(start1, reverse1), five_prime(start2, reverse2)
+    insert = second - first + (1 if second >= first else -1)
+    reads: list[AlignedSegment] = []
+    for start, mate_start, reverse, mate_reverse, flag, tlen, base in (
+        (start1, start2, reverse1, reverse2, 65, insert, "A"),
+        (start2, start1, reverse2, reverse1, 129, -insert, "C"),
+    ):
+        flag |= (16 if reverse else 0) | (32 if mate_reverse else 0)
+        read = record(name, start, f"{READ_LENGTH}M", base * READ_LENGTH, flag=flag)
+        read.next_reference_id = read.reference_id
+        read.next_reference_start = mate_start
+        read.template_length = tlen
+        reads.append(read)
+    return sorted(reads, key=lambda read: read.reference_start)
+
+
+def test_builder_leaves_out_reads_on_a_previous_contig_or_ending_just_before() -> None:
+    reads = [record("prev-contig", 54, "50M", "A" * 50) for _ in range(5)]
+    reads += [record("abutting", 4, "50M", "A" * 50, contig="chr2") for _ in range(5)]
+    reads += [
+        record("here", 54, "50M", base * 50, contig="chr2")
+        for base, count in (("A", 5), ("C", 4), ("G", 3), ("T", 2), ("N", 1))
+        for _ in range(count)
+    ]
+    pileup = StreamingPileupBuilder(reads).pileup("chr2", 54)
+    assert pileup.unfiltered_depth == 15
+    assert {entry.alignment.query_name for entry in pileup.pileups} == {"here"}
+    assert Counter(pileup.bases) == {"A": 5, "C": 4, "G": 3, "T": 2, "N": 1}
+
+
+def test_builder_piles_up_every_edge_case_of_indels() -> None:
+    reads = [
+        record("q1", 100, "10M2D40M", "A" * 50),
+        record("q2", 100, "10M2I38M", "C" * 50),
+        record("q3", 100, "31M9I10M", "G" * 50),
+        record("q4", 100, "30M9D20M", "T" * 50),
+        record("q5", 140, "10I40M", "N" * 50),
+        record("q6", 200, "47M3S", "N" * 50),
+    ]
+    builder = StreamingPileupBuilder(reads)
+
+    def named(pileup: Pileup, kind: PileupReadType) -> list[str | None]:
+        return [entry.alignment.query_name for entry in pileup.pileups if entry.pileup_type is kind]
+
+    assert len(builder.pileup("chr1", 104).bases) == 4
+    before = builder.pileup("chr1", 109)
+    assert (before.unfiltered_depth, len(before.pileups), sorted(before.bases)) == (
+        4,
+        5,
+        list("ACGT"),
+    )
+    assert named(before, PileupReadType.insertion) == ["q2"]
+    deleted = builder.pileup("chr1", 110)
+    assert (deleted.unfiltered_depth, len(deleted.pileups), sorted(deleted.bases)) == (
+        4,
+        4,
+        list("CGT"),
+    )
+    assert named(deleted, PileupReadType.deletion) == ["q1"]
+    bigger = builder.pileup("chr1", 130)
+    assert (bigger.unfiltered_depth, len(bigger.pileups), sorted(bigger.bases)) == (
+        4,
+        5,
+        list("ACG"),
+    )
+    assert named(bigger, PileupReadType.insertion) == ["q3"]
+    assert named(bigger, PileupReadType.deletion) == ["q4"]
+    leading = builder.pileup("chr1", 139)
+    assert (leading.unfiltered_depth, len(leading.pileups), sorted(leading.bases)) == (
+        4,
+        5,
+        list("ACGT"),
+    )
+    assert named(leading, PileupReadType.insertion) == ["q5"]
+    assert leading.pileups[4].insertion_offset == 0
+    clipped = builder.pileup("chr1", 246)
+    assert (clipped.unfiltered_depth, len(clipped.pileups), clipped.bases) == (1, 1, ["N"])
+    past = builder.pileup("chr1", 247)
+    assert (past.unfiltered_depth, len(past.pileups)) == (0, 0)
+
+
+def test_builder_piles_up_only_reads_of_mapped_pairs_with_a_read_filter() -> None:
+    half_mapped = pair("q2", 100, 100, reverse2=False)
+    half_mapped[0].flag = 1 | 8 | 64
+    half_mapped[1].flag = 1 | 4 | 128
+    reads = [record("q1", 100, "50M", "A" * 50), *half_mapped, *pair("q3", 100, 299)]
+
+    def mapped_pair(read: AlignedSegment) -> bool:
+        return read.is_paired and not read.is_unmapped and not read.mate_is_unmapped
+
+    pileup = StreamingPileupBuilder(reads, read_filter=mapped_pair).pileup("chr1", 104)
+    assert pileup.unfiltered_depth == 1
+    kept = pileup.pileups[0].alignment
+    assert (kept.query_name, kept.is_read1) == ("q3", True)
+
+
+def test_builder_keeps_a_fragment_and_positions_outside_the_insert_of_an_fr_pair() -> None:
+    fragment = StreamingPileupBuilder([record("q1", 99, "50M", "A" * 50)])
+    assert [fragment.pileup("chr1", pos).unfiltered_depth for pos in (99, 148)] == [1, 1]
+    builder = StreamingPileupBuilder(pair("q2", 100, 99))
+    assert [builder.pileup("chr1", pos).unfiltered_depth for pos in (99, 100, 148, 149)] == [
+        1,
+        2,
+        2,
+        1,
+    ]
+
+
+def test_builder_keeps_every_position_of_a_pair_with_the_reverse_read_starting_later() -> None:
+    builder = StreamingPileupBuilder(pair("q2", 100, 99, reverse1=True, reverse2=False))
+    assert [builder.pileup("chr1", pos).unfiltered_depth for pos in (99, 100, 148, 149)] == [
+        1,
+        2,
+        2,
+        1,
+    ]
+
+
+def test_builder_composes_a_read_filter_with_an_entry_filter() -> None:
+    reads = [
+        record(name, start, "50M", "A" * 50)
+        for name, start in (("q1", 100), ("x2", 104), ("q3", 108), ("q4", 112))
+    ]
+
+    def keep(read: AlignedSegment) -> bool:
+        return not (read.query_name or "").startswith("x")
+
+    pileup = StreamingPileupBuilder(reads, read_filter=keep).pileup("chr1", 114)
+    kept = [
+        entry.alignment.query_name
+        for entry in pileup.pileups
+        if entry.query_position is not None and entry.query_position > 5
+    ]
+    assert kept == ["q1", "q3"]
+
+
+def test_entries_report_offsets_in_alignment_order_on_both_strands() -> None:
+    reads = pair("q1", 100, 200)
+    for read in reads:
+        read.query_qualities = array("B", [35] * READ_LENGTH)
+    builder = StreamingPileupBuilder(reads)
+    seen: list[tuple[str | None, int | None, int | None, bool]] = []
+    for pos in (104, 204):
+        pileup = builder.pileup("chr1", pos)
+        assert pileup.unfiltered_depth == 1
+        entry = pileup.pileups[0]
+        seen.append((entry.base, entry.qual, entry.query_position, entry.alignment.is_reverse))
+    assert seen == [("A", 35, 4, False), ("C", 35, 4, True)]
