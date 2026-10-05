@@ -1,4 +1,4 @@
-"""Time piling up every base of a territory with streampile and with pysam's htslib engine.
+"""Time piling up every base of a territory with streampile, its Rust core, and pysam's htslib.
 
 Each engine counts, at every base, the reads holding each base at the quality floor, the reads
 with a deletion there, and the reads with an insertion after it. The pileup engines' counts agree
@@ -14,6 +14,7 @@ import sys
 import time
 from collections import Counter
 from collections.abc import Iterator
+from collections.abc import Mapping
 from pathlib import Path
 
 from bedspec import Bed3
@@ -25,10 +26,12 @@ from pysam import FastaFile
 
 from streampile import StreamingPileupBuilder
 from streampile import tabulate
+from streampile._native import ColumnCounts
 
 MIN_BASE_QUALITY = 30
 MIN_MAPPING_QUALITY = 20
 EXCLUDE_FLAGS = 0xF04
+ENGINES = ("htslib", "streampile", "rust", "tabulate", "rebuild")
 
 
 def read_territory(bed: Path) -> Territory:
@@ -63,6 +66,17 @@ def streampile_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
                         continue
                     counts["-" if entry.is_del else entry.base or "N"] += 1
                 yield counts
+
+
+def rust_counts(bam: Path, spans: list[Bed3]) -> Iterator[dict[str, int]]:
+    """Count each column of the territory from one forward sweep of the Rust builder."""
+    return ColumnCounts(
+        bam,
+        [(span.refname, span.start, span.end) for span in spans],
+        min_mapping_quality=MIN_MAPPING_QUALITY,
+        exclude_flags=EXCLUDE_FLAGS,
+        quality_floor=MIN_BASE_QUALITY,
+    )
 
 
 def htslib_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
@@ -165,10 +179,13 @@ def run(engine: str, bam: Path, reference: Path, bed: Path, rebuild_columns: int
             digest.update(row.encode())
             columns += 1
     else:
+        counts: Iterator[Mapping[str, int]]
         if engine == "rebuild":
             counts = rebuilt_counts(bam, spans, rebuild_columns)
         elif engine == "streampile":
             counts = streampile_counts(bam, spans)
+        elif engine == "rust":
+            counts = rust_counts(bam, spans)
         else:
             counts = htslib_counts(bam, spans)
         for column in counts:
@@ -178,24 +195,37 @@ def run(engine: str, bam: Path, reference: Path, bed: Path, rebuild_columns: int
     print(f"{engine}\t{seconds:.1f}\t{peak_megabytes():.0f}\t{columns}\t{digest.hexdigest()[:12]}")
 
 
+def seconds_of(row: str) -> float:
+    """The seconds an engine took, from the row it printed."""
+    return float(row.split("\t")[1])
+
+
 def main() -> None:
-    """Run every engine in its own process and print a table of the results."""
+    """Run each engine in its own process, best of `--runs`, and print a table of the results."""
     parser = argparse.ArgumentParser(description=__doc__)
+    # fmt: off
     parser.add_argument("--bam", type=Path, required=True)
     parser.add_argument("--ref", type=Path, required=True)
     parser.add_argument("--intervals", type=Path, required=True)
-    parser.add_argument("--engine", choices=["streampile", "htslib", "tabulate", "rebuild"])
+    parser.add_argument("--engine", choices=ENGINES, help="run one engine in this process")
+    parser.add_argument("--engines", choices=ENGINES, nargs="+", default=list(ENGINES))
+    parser.add_argument("--runs", type=int, default=1, help="report the best of this many runs")
     parser.add_argument("--rebuild-columns", type=int, default=2000)
+    # fmt: on
     args = parser.parse_args()
     if args.engine is not None:
         run(args.engine, args.bam, args.ref, args.intervals, args.rebuild_columns)
         return
     print("engine\tseconds\tpeak_mb\tcolumns\tdigest", flush=True)
-    for engine in ("htslib", "streampile", "tabulate", "rebuild"):
+    for engine in args.engines:
         command = [sys.executable, __file__, "--bam", str(args.bam), "--ref", str(args.ref)]
         command += ["--intervals", str(args.intervals), "--engine", engine]
         command += ["--rebuild-columns", str(args.rebuild_columns)]
-        _ = subprocess.run(command, check=True)
+        rows: list[str] = [
+            subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
+            for _ in range(args.runs)
+        ]
+        print(min(rows, key=seconds_of), flush=True)
 
 
 if __name__ == "__main__":
