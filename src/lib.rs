@@ -38,6 +38,8 @@ mod footprint;
 mod pileup;
 #[cfg(feature = "python")]
 mod python;
+#[cfg(test)]
+mod tests;
 
 pub use auxiliary::{ArraySubtype, AuxArray, AuxElement, AuxValue};
 pub use builder::{
