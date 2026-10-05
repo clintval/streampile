@@ -1,6 +1,6 @@
 [project]
 name = "streampile"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Forward-only pileups streamed from coordinate-sorted SAM, BAM, and CRAM records."
 authors = [{ name = "Clint Valentine", email = "valentine.clint@gmail.com" }]
 license = "MIT"
@@ -26,6 +26,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
@@ -42,6 +43,7 @@ streampile = "streampile._cli:main"
 [dependency-groups]
 dev = [
     "basedpyright ~=1.40",
+    "maturin ~=1.15",
     "mypy ~=2.3",
     "poethepoet ~=0.48",
     "pytest ~=9.1",
@@ -53,11 +55,20 @@ dev = [
 ]
 
 [build-system]
-requires      = ["hatchling"]
-build-backend = "hatchling.build"
+requires      = ["maturin>=1.15,<2"]
+build-backend = "maturin"
 
-[tool.hatch.build.targets.sdist]
-only-include = ["streampile", "tests", "README.md", "CONTRIBUTING.md", "LICENSE", "NOTICE"]
+[tool.maturin]
+python-source = "python"
+module-name   = "streampile._native"
+features      = ["python"]
+include       = [
+    { path = "CONTRIBUTING.md", format = "sdist" },
+    { path = "tests/**/*", format = "sdist" },
+]
+exclude       = [
+    { path = "tests/**/__pycache__/**/*", format = "sdist" },
+]
 
 [tool.uv]
 # Ignore releases younger than a week, so a compromised publish has time to be
@@ -66,13 +77,20 @@ only-include = ["streampile", "tests", "README.md", "CONTRIBUTING.md", "LICENSE"
 exclude-newer = "1 week"
 # bedspec, pybgzf, superintervals and typeline are released alongside streampile, so their new releases are allowed right away.
 exclude-newer-package = { bedspec = false, pybgzf = false, superintervals = false, typeline = false }
+cache-keys            = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "src/**/*.rs" },
+]
 
 [tool.poe.tasks]
 fix-format = "ruff format"
 fix-lint   = "ruff check --fix"
+fix-rust   = "cargo fmt"
 
 fix-all.ignore_fail = "return_non_zero"
-fix-all.sequence    = ["fix-format", "fix-lint"]
+fix-all.sequence    = ["fix-format", "fix-lint", "fix-rust"]
 
 check-lock      = "uv lock --check"
 check-pyproject = "validate-pyproject pyproject.toml"
@@ -85,6 +103,11 @@ _check-pyright = "basedpyright"
 _check-ty      = "ty check"
 check-typing.sequence = ["_check-mypy", "_check-pyright", "_check-ty"]
 
+_check-rust-format = "cargo fmt --check"
+_check-rust-lint   = "cargo clippy --all-targets --all-features --locked -- -D warnings"
+_check-rust-tests  = "cargo test --locked"
+check-rust.sequence = ["_check-rust-format", "_check-rust-lint", "_check-rust-tests"]
+
 check-all.ignore_fail = "return_non_zero"
 check-all.sequence    = [
     "check-lock",
@@ -93,6 +116,7 @@ check-all.sequence    = [
     "check-lint",
     "check-tests",
     "check-typing",
+    "check-rust",
 ]
 
 fix-and-check-all.ignore_fail = "return_non_zero"
@@ -119,7 +143,7 @@ doctest_optionflags = [
 ]
 
 [tool.mypy]
-files                       = ["streampile/", "tests/", "benchmarks/"]
+files                       = ["python/", "tests/", "benchmarks/"]
 strict                      = true
 warn_unreachable            = true
 enable_error_code           = [
@@ -128,7 +152,7 @@ enable_error_code           = [
 ]
 
 [tool.pyright]
-include                            = ["streampile/", "tests/", "benchmarks/"]
+include                            = ["python/", "tests/", "benchmarks/"]
 enableTypeIgnoreComments           = false
 reportUnnecessaryTypeIgnoreComment = "error"
 reportImportCycles                 = false
@@ -139,7 +163,7 @@ reportUnusedCallResult             = false
 pythonVersion                      = "3.11"
 
 [tool.ty.src]
-include = ["streampile/", "tests/", "benchmarks/"]
+include = ["python/", "tests/", "benchmarks/"]
 
 [tool.ty.analysis]
 respect-type-ignore-comments = false
@@ -148,7 +172,7 @@ respect-type-ignore-comments = false
 unused-ignore-comment = "error"
 
 [tool.ruff]
-include        = ["streampile/**/*.py", "tests/**/*.py", "benchmarks/**/*.py"]
+include        = ["python/**/*.py", "tests/**/*.py", "benchmarks/**/*.py"]
 line-length    = 100
 target-version = "py311"
 output-format  = "full"
