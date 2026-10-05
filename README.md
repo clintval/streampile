@@ -148,4 +148,5 @@ for base in TabulationReader.query("counts.tsv.gz", "chr1", 20, 24):
 
 See the [contributing guide](https://github.com/clintval/streampile/blob/main/CONTRIBUTING.md) for more information.
 
-The streaming design follows the `StreamingPileupBuilder` of [fgbio](https://github.com/fulcrumgenomics/fgbio); see [NOTICE](https://github.com/clintval/streampile/blob/main/NOTICE).
+The streaming design follows the `StreamingPileupBuilder` of [fgbio](https://github.com/fulcrumgenomics/fgbio) of which I was also the author.
+See [NOTICE](https://github.com/clintval/streampile/blob/main/NOTICE) for official attribution.
