@@ -173,6 +173,7 @@ unused-ignore-comment = "error"
 
 [tool.ruff]
 include        = ["python/**/*.py", "tests/**/*.py", "benchmarks/**/*.py"]
+src            = [".", "python"]
 line-length    = 100
 target-version = "py311"
 output-format  = "full"
