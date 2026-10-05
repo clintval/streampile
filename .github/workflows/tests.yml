@@ -17,18 +17,98 @@ concurrency:
 
 env:
   UV_VERSION: 0.12.20
+  CARGO_TERM_COLOR: always
 
 jobs:
-  tests:
-    name: tests (${{ matrix.python-version }})
+  rust:
+    name: rust
     # Branches of this repository are tested when pushed, so only pull requests from forks run here.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read  # to check out the repository
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the stable Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+
+      - name: Check the Rust formatting
+        run: cargo fmt --check
+
+      - name: Lint the Rust code
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+
+      - name: Test the Rust code
+        run: cargo test --locked
+
+      - name: Package the crate as crates.io would publish it
+        run: cargo publish --dry-run --locked
+
+  msrv:
+    name: msrv
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # to check out the repository
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the Rust toolchain of the crate's rust-version
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["rust-version"])')
+          rustup toolchain install "$version" --profile minimal
+          rustup default "$version"
+
+      - name: Test the Rust code with the oldest supported toolchain
+        run: cargo test --locked
+
+  lint:
+    name: lint
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # to check out the repository
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python 3.11
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.11"
+          enable-cache: "false"
+
+      - name: Check the lockfile, project metadata, formatting, lint, and types
+        run: |
+          uv run --locked poe check-lock
+          uv run --locked poe check-pyproject
+          uv run --locked poe check-format
+          uv run --locked poe check-lint
+          uv run --locked poe check-typing
+
+  unit-tests:
+    name: unit-tests (${{ matrix.os }}, ${{ matrix.python-version }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read  # to check out the repository
     strategy:
       fail-fast: false
       matrix:
+        # pysam publishes no Windows wheels, so streampile is tested where pysam installs.
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - name: Check out the repository
@@ -43,5 +123,5 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: "false"
 
-      - name: Check the lockfile, project metadata, formatting, lint, tests, and types
-        run: uv run --locked poe check-all
+      - name: Build the extension and test the library
+        run: uv run --locked poe check-tests
