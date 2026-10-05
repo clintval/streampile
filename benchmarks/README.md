@@ -15,15 +15,16 @@ The engines are:
 - `tabulate`: `streampile.tabulate`, which also groups MNVs and normalizes indels.
 - `rebuild`: building each column from scratch from every overlapping read's aligned pairs, on `--rebuild-columns` evenly spaced columns (2,000 by default; 500 in the results below).
 
-Results on an Apple M3 Max, for a coordinate-sorted, overlap-clipped duplex consensus BAM of 1.43 million reads over a 123 kb territory, about 750 reads deep:
+Results on an Apple M3 Max, for a coordinate-sorted, overlap-clipped duplex consensus BAM of 1.43 million reads over a 123 kb territory, about 750 reads deep, the best of three or more runs on a machine busy with other work (load averages of 12 to 70 on 16 cores):
 
 | Engine       | Columns | Seconds | Peak MB |
 |--------------|--------:|--------:|--------:|
-| `htslib`     | 123,256 |    63.1 |      54 |
-| `streampile` | 123,256 |    60.3 |      47 |
-| `tabulate`   | 123,256 |    10.4 |      38 |
-| `rebuild`    |     500 |     5.6 |      48 |
+| `htslib`     | 123,256 |    68.0 |      55 |
+| `streampile` | 123,256 |    66.0 |      43 |
+| `tabulate`   | 123,256 |    10.0 |      40 |
+| `rebuild`    |     500 |     5.8 |      49 |
 
 Both pileup engines spend most of their time in Python, touching each entry: pysam's htslib engine builds columns in C, but counting the same entries in Python costs as much as the builder's per-read lookups.
-Counting with `PileupColumn.get_query_sequences`, which stays in C, takes the htslib engine 6.1 seconds.
-Rebuilding each column from aligned pairs costs about 11 ms a column, or about 23 minutes for this territory.
+Counting with `PileupColumn.get_query_sequences`, which stays in C, takes the htslib engine 6.4 seconds.
+Rebuilding each column from aligned pairs costs about 12 ms a column, or about 24 minutes for this territory.
+`streampile tabulate` writes the whole table, BGZF with a tabix index, in 10.6 seconds at 41 MB peak resident memory.
