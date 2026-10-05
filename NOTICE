@@ -1,0 +1,12 @@
+streampile
+Copyright © 2026 Clint Valentine
+
+The forward-only, coordinate-advancing design of StreamingPileupBuilder follows
+StreamingPileupBuilder in fgbio (https://github.com/fulcrumgenomics/fgbio), which
+is distributed under the MIT License:
+
+  Copyright (c) 2015-2026 Fulcrum Genomics LLC
+
+Pileup entries follow the conventions of htslib (https://github.com/samtools/htslib)
+and pysam (https://github.com/pysam-developers/pysam), both distributed under the
+MIT License.
