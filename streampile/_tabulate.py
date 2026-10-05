@@ -1,7 +1,6 @@
 from bisect import bisect_right
 from collections.abc import Callable
 from collections.abc import Iterator
-from dataclasses import dataclass
 from typing import Final
 from typing import final
 
@@ -18,6 +17,7 @@ from pysam import AlignmentFile
 from pysam import FastaFile
 
 from streampile._footprint import query_qualities
+from streampile._frozen import frozen
 from streampile._pileup import DEFAULT_EXCLUDE_FLAGS
 from streampile._table import TabulatedBase
 
@@ -132,7 +132,7 @@ def _by_reads(item: tuple[tuple[str, str], list[int]]) -> tuple[int, str, str]:
     return -sum(item[1]), item[0][0], item[0][1]
 
 
-@dataclass(frozen=True, slots=True)
+@frozen(slots=True)
 class _Event:
     """A difference from the reference within one read, in reference and query coordinates."""
 
@@ -143,7 +143,7 @@ class _Event:
     is_indel: bool
 
 
-@dataclass(frozen=True, slots=True)
+@frozen(slots=True)
 class _Run:
     """Adjacent differences of one read, and whether a matching aligned base borders each end.
 
@@ -157,7 +157,7 @@ class _Run:
     floor: int
 
 
-@dataclass(frozen=True, slots=True)
+@frozen(slots=True)
 class Allele:
     """A normalized VCF allele seen in one read, and the reference stretch it accounts for.
 

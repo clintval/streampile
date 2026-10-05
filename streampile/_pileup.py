@@ -1,5 +1,4 @@
 from collections.abc import Iterable
-from dataclasses import dataclass
 from dataclasses import replace
 from enum import StrEnum
 from enum import auto
@@ -14,6 +13,7 @@ from streampile._footprint import SKIPPED
 from streampile._footprint import Footprint
 from streampile._footprint import is_placed
 from streampile._footprint import query_qualities
+from streampile._frozen import frozen
 
 DEFAULT_MIN_BASE_QUALITY: Final[int] = 13
 """The default minimum base quality of a pileup, as in pysam's `pileup()` and `samtools mpileup`."""
@@ -170,7 +170,7 @@ def pileup_entries(footprints: Iterable[Footprint], pos: int) -> tuple[PileupRea
     return tuple(entries)
 
 
-@dataclass(frozen=True)
+@frozen()
 class Pileup:
     """The reads at one reference position.
 

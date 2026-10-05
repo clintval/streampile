@@ -1,6 +1,5 @@
 from collections.abc import Iterator
 from collections.abc import Mapping
-from dataclasses import dataclass
 from importlib.metadata import version
 from inspect import unwrap
 from io import StringIO
@@ -26,8 +25,10 @@ from typing_extensions import Self
 from typing_extensions import Unpack
 from typing_extensions import override
 
+from streampile._frozen import frozen
 
-@dataclass(frozen=True, kw_only=True)
+
+@frozen(kw_only=True)
 class TabulatedBase:
     """The reads at one reference base, one row of a tabulation.
 

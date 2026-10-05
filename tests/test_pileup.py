@@ -1,4 +1,5 @@
 from array import array
+from dataclasses import replace
 
 import pytest
 from pysam import AlignedSegment
@@ -233,3 +234,10 @@ def test_from_alignments_drops_reads_on_other_contigs() -> None:
         pileup = Pileup.from_alignments(reads, contig, 11)
         assert [entry.alignment.query_name for entry in pileup.pileups] == [name]
         assert pileup.bases == [base]
+
+
+def test_a_pileup_is_frozen_to_type_checkers_and_hashed_by_its_fields() -> None:
+    pileup = Pileup("chr1", 10, ())
+    assert hash(pileup) == hash(replace(pileup))
+    # Each checker fails on an unused ignore, so all three must reject this assignment.
+    pileup.reference_pos = 11  # type: ignore[misc]  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[invalid-assignment]

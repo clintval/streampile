@@ -1,4 +1,5 @@
 import gzip
+from dataclasses import replace
 from importlib.metadata import version
 from io import StringIO
 from pathlib import Path
@@ -196,3 +197,10 @@ def test_the_writer_refuses_bad_options_before_opening_a_file(tmp_path: Path) ->
     with pytest.raises(ValueError):
         TabulationWriter.from_path(tmp_path / "bases.tsv.gz", rename={"nothing": "x"})
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_tabulated_base_is_frozen_to_type_checkers_and_hashed_by_its_fields() -> None:
+    base = replace(BASES[1])
+    assert base == BASES[1] and hash(base) == hash(BASES[1])
+    # Each checker fails on an unused ignore, so all three must reject this assignment.
+    base.depth = 0  # type: ignore[misc]  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[invalid-assignment]

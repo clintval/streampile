@@ -1,6 +1,7 @@
 import random
 from collections import Counter
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from pysam import AlignmentFile
 from pysam import AlignmentHeader
 from pysam import FastaFile
 
+from streampile import Allele
 from streampile import StreamingPileupBuilder
 from streampile import TabulatedBase
 from streampile import TabulationReader
@@ -521,3 +523,10 @@ def test_tabulate_reads_a_soft_masked_reference_as_upper_case(tmp_path: Path) ->
         (5, {"AG>A": 1}),
         (9, {"T>A": 1}),
     ]
+
+
+def test_an_allele_is_frozen_to_type_checkers_and_hashed_by_its_fields() -> None:
+    allele = Allele(pos=1, ref="A", alt="T", start=1, end=2)
+    assert hash(allele) == hash(replace(allele))
+    # Each checker fails on an unused ignore, so all three must reject this assignment.
+    allele.pos = 2  # type: ignore[misc]  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[invalid-assignment]
