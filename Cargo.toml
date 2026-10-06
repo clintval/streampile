@@ -26,17 +26,19 @@ include = [
 name = "streampile"
 
 [features]
-default = []
+default = ["libdeflate"]
+libdeflate = ["noodles-bgzf/libdeflate"]
 python = ["dep:pyo3"]
 
 [dependencies]
 bstr = "1.12"
-noodles = { version = "0.115.0", features = ["bam", "bgzf", "core", "sam"] }
-noodles-bgzf = { version = "0.51.0", features = ["libdeflate"] }
+noodles = { version = "0.115.0", features = ["bam", "sam"] }
+noodles-bgzf = "0.51.0"
 pyo3 = { version = "0.29", features = ["abi3-py311"], optional = true }
 thiserror = "2"
 
 [dev-dependencies]
+noodles = { version = "0.115.0", features = ["bgzf"] }
 sha2 = "0.10"
 
 [lints.clippy]

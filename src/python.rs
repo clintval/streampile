@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use bstr::ByteSlice;
 use noodles::bam;
-use noodles::bgzf;
 use noodles::sam::alignment::record::Flags;
+use noodles_bgzf as bgzf;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;

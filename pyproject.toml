@@ -62,6 +62,7 @@ build-backend = "maturin"
 python-source = "python"
 module-name   = "streampile._native"
 features      = ["python"]
+no-default-features = true
 include       = [
     { path = "CONTRIBUTING.md", format = "sdist" },
     { path = "tests/**/*", format = "sdist" },
