@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::num::NonZeroUsize;
-use std::sync::{Arc, LazyLock, Mutex, PoisonError};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 
 use noodles::bam;
 use noodles::sam::{
@@ -14,7 +14,9 @@ use noodles::sam::{
         map::{ReferenceSequence, header::tag::SORT_ORDER},
     },
 };
+use pyo3::PyTraverseError;
 use pyo3::exceptions::{PyAttributeError, PyValueError};
+use pyo3::gc::PyVisit;
 use pyo3::prelude::*;
 use pyo3::types::{PyIterator, PyString};
 
@@ -57,10 +59,44 @@ impl AlignmentRecord for PyRecord {
     }
 }
 
+/// A Python object held by the builder's class and shared with the source and the callbacks it
+/// gives the Rust builder, so that the garbage collector sees the one reference and can clear it.
+struct Shared<T = PyAny>(Arc<Mutex<Option<Py<T>>>>);
+
+impl<T> Shared<T> {
+    fn new(object: Option<Py<T>>) -> Self {
+        Self(Arc::new(Mutex::new(object)))
+    }
+
+    fn share(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+
+    fn get(&self, py: Python<'_>) -> Option<Py<T>> {
+        self.lock().as_ref().map(|object| object.clone_ref(py))
+    }
+
+    fn take(&self) -> Option<Py<T>> {
+        self.lock().take()
+    }
+
+    /// Visits the object, unless another thread is reading it, as the garbage collector asks.
+    fn visit(&self, visit: &PyVisit<'_>) -> Result<(), PyTraverseError> {
+        match self.0.try_lock() {
+            Ok(object) => visit.call(object.as_ref()),
+            Err(_) => Ok(()),
+        }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Option<Py<T>>> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
 /// The records of a Python iterable, and the first one, read already to find the header.
 struct PySource {
-    records: Py<PyIterator>,
-    first: Option<Py<PyAny>>,
+    records: Shared<PyIterator>,
+    first: Shared,
 }
 
 impl RecordSource for PySource {
@@ -68,12 +104,13 @@ impl RecordSource for PySource {
 
     fn read_record(&mut self, record: &mut PyRecord) -> io::Result<bool> {
         Python::attach(|py| {
-            let object = match self.first.take() {
-                Some(object) => object.into_bound(py),
-                None => match self.records.bind(py).clone().next() {
+            let object = match (self.first.take(), self.records.get(py)) {
+                (Some(object), _) => object.into_bound(py),
+                (None, Some(records)) => match records.into_bound(py).next() {
                     Some(object) => object.map_err(io::Error::other)?,
                     None => return Ok(false),
                 },
+                (None, None) => return Ok(false),
             };
             let mut bam = bam::Record::default();
             bridge::read(&object, &mut bam).map_err(io::Error::other)?;
@@ -130,8 +167,10 @@ pub(crate) struct StreamingPileupBuilder {
     exclude_flags: u16,
     min_base_quality: u8,
     proper_pairs_only: bool,
-    read_filter: Option<Py<PyAny>>,
-    tap: Option<Py<PyAny>>,
+    records: Shared<PyIterator>,
+    first: Shared,
+    read_filter: Shared,
+    tap: Shared,
     previous: Option<Py<Pileup>>,
     asked: Option<(usize, i64)>,
     closed: bool,
@@ -227,9 +266,11 @@ impl StreamingPileupBuilder {
                 .add_reference_sequence(name.as_bytes(), Map::<ReferenceSequence>::new(length));
             ids.entry(name).or_insert(id);
         }
+        let records = Shared::new(Some(iterator.unbind()));
+        let first = Shared::new(first.map(Bound::unbind));
         let source = PySource {
-            records: iterator.unbind(),
-            first: first.map(Bound::unbind),
+            records: records.share(),
+            first: first.share(),
         };
         let mut inner = Builder::new(source, &sam_header.build())
             .map_err(to_python)?
@@ -237,26 +278,31 @@ impl StreamingPileupBuilder {
             .exclude_flags(Flags::from_bits_retain(exclude_flags))
             .min_base_quality(min_base_quality)
             .proper_pairs_only(proper_pairs_only);
-        if let Some(read_filter) = &read_filter {
-            let read_filter = read_filter.clone_ref(py);
+        let read_filter = Shared::new(read_filter);
+        let tap = Shared::new(tap);
+        if read_filter.lock().is_some() {
+            let read_filter = read_filter.share();
             inner = inner.try_read_filter(move |record: &PyRecord| {
-                Python::attach(|py| {
-                    read_filter
+                Python::attach(|py| match read_filter.get(py) {
+                    Some(read_filter) => read_filter
                         .bind(py)
                         .call1((record.object(py),))
                         .and_then(|kept| kept.is_truthy())
-                        .map_err(io::Error::other)
+                        .map_err(io::Error::other),
+                    None => Ok(true),
                 })
             });
         }
-        if let Some(tap) = &tap {
-            let tap = tap.clone_ref(py);
+        if tap.lock().is_some() {
+            let tap = tap.share();
             inner = inner.tap(move |record: PyRecord| {
-                Python::attach(|py| {
-                    tap.bind(py)
+                Python::attach(|py| match tap.get(py) {
+                    Some(tap) => tap
+                        .bind(py)
                         .call1((record.object(py),))
                         .map(drop)
-                        .map_err(io::Error::other)
+                        .map_err(io::Error::other),
+                    None => Ok(()),
                 })
             });
         }
@@ -269,6 +315,8 @@ impl StreamingPileupBuilder {
             exclude_flags,
             min_base_quality,
             proper_pairs_only,
+            records,
+            first,
             read_filter,
             tap,
             previous: None,
@@ -279,6 +327,26 @@ impl StreamingPileupBuilder {
 
     fn __enter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        visit.call(&self.header)?;
+        visit.call(&self.previous)?;
+        self.records.visit(&visit)?;
+        self.first.visit(&visit)?;
+        self.read_filter.visit(&visit)?;
+        self.tap.visit(&visit)
+    }
+
+    fn __clear__(&mut self) {
+        exclusive(&mut self.inner).abandon();
+        self.header = None;
+        self.previous = None;
+        self.records.take();
+        self.first.take();
+        self.read_filter.take();
+        self.tap.take();
     }
 
     #[pyo3(signature = (*_exception))]
@@ -424,13 +492,13 @@ impl StreamingPileupBuilder {
     /// The function that keeps a read for pileups, if any.
     #[getter]
     fn read_filter(&self, py: Python<'_>) -> Option<Py<PyAny>> {
-        self.read_filter.as_ref().map(|filter| filter.clone_ref(py))
+        self.read_filter.get(py)
     }
 
     /// The function given every read once the builder has moved past it, if any.
     #[getter]
     fn tap(&self, py: Python<'_>) -> Option<Py<PyAny>> {
-        self.tap.as_ref().map(|tap| tap.clone_ref(py))
+        self.tap.get(py)
     }
 
     /// The last pileup built, which a repeated position returns again.

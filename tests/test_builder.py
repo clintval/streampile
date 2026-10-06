@@ -1,3 +1,4 @@
+import gc
 import weakref
 from array import array
 from collections import Counter
@@ -981,3 +982,33 @@ def test_a_tap_asking_its_builder_for_a_pileup_raises_a_runtime_error(asked: str
     with pytest.raises(RuntimeError, match="Already borrowed"):
         for _ in builders[0].columns("chr1", 0, 20):
             pass
+
+
+@pytest.mark.parametrize("through", ["callbacks", "records"])
+def test_a_reference_cycle_through_a_builder_is_collected(through: str) -> None:
+    class Owner:
+        def __init__(self, reads: list[AlignedSegment]) -> None:
+            self.reads = iter(reads)
+            if through == "callbacks":
+                self.builder = StreamingPileupBuilder(reads, read_filter=self.keep, tap=self.write)
+            else:
+                self.builder = StreamingPileupBuilder(self)
+
+        def __iter__(self) -> "Owner":
+            return self
+
+        def __next__(self) -> AlignedSegment:
+            return next(self.reads)
+
+        def keep(self, _read: AlignedSegment) -> bool:
+            return True
+
+        def write(self, _read: AlignedSegment) -> None:
+            pass
+
+    owner = Owner([record("r", 0, "5M", "ACGTA"), record("s", 10, "5M", "ACGTA")])
+    assert owner.builder.pileup("chr1", 2).bases == ["G"]
+    alive = weakref.ref(owner)
+    del owner
+    gc.collect()
+    assert alive() is None
