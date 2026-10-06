@@ -267,7 +267,7 @@ This writes the table compressed with BGZF and its tabix index, `counts.tsv.gz.t
 
 ```text
 ##streampile-tabulation=1
-##streampile-version=0.1.0
+##streampile-version=0.2.0
 ##bam=tests/data/reads.bam
 ##reference=tests/data/reference.fa
 ##territory=tests/data/territory.bed
