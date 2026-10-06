@@ -1,4 +1,7 @@
+import gzip
+import os
 import re
+import sys
 from collections.abc import Iterator
 from importlib.metadata import version
 from pathlib import Path
@@ -12,6 +15,8 @@ from pysam import FastaFile
 from streampile import TabulatedBase
 from streampile import TabulationReader
 from streampile import tabulate
+from streampile._cli import MAX_DEFAULT_THREADS
+from streampile._cli import default_threads
 from streampile._cli import main
 
 from .records import DATA
@@ -59,15 +64,17 @@ def test_tabulate_writes_the_table_shown_in_the_readme(
 ) -> None:
     monkeypatch.chdir(ROOT)
     shown = re.search(
-        r"```console\n(streampile tabulate.*?)```\n\n```text\n(.*?)```",
+        r"```console\n(streampile tabulate.*?)```\n\n.*?```text\n(.*?)```",
         README.read_text(),
         re.DOTALL,
     )
     assert shown is not None
     command = shown.group(1).replace("\\\n", " ").split()[1:]
-    out = tmp_path / "counts.tsv"
-    assert main([*command[: command.index("--out")], "--out", str(out)]) == 0
-    written = out.read_text()
+    out = tmp_path / command[command.index("--out") + 1]
+    command[command.index("--out") + 1] = str(out)
+    assert main(command) == 0
+    assert out.with_name(f"{out.name}.tbi").is_file()
+    written = gzip.decompress(out.read_bytes()).decode()
     assert f"##streampile-version={version('streampile')}\n" in written
     assert without_version(written) == without_version(shown.group(2))
     assert without_version(written) == without_version((DATA / "counts.tsv").read_text())
@@ -205,3 +212,40 @@ def test_a_command_is_required(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit):
         main([])
     assert "required" in capsys.readouterr().err
+
+
+def test_default_threads_are_the_cpus_available_up_to_a_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    for cpus, expected in ((None, 1), (1, 1), (4, 4), (64, MAX_DEFAULT_THREADS)):
+        monkeypatch.setattr(os, "cpu_count", lambda cpus=cpus: cpus)
+        assert default_threads() == expected
+
+
+def test_default_threads_follow_the_cpu_affinity_on_linux(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    def affinity(_: int) -> set[int]:
+        return {0, 1, 2}
+
+    monkeypatch.setattr(os, "sched_getaffinity", affinity, raising=False)
+    assert default_threads() == 3
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "error"),
+    [
+        ("--min-base-quality", "256", "must be from 0 to 255, found: 256"),
+        ("--min-mapping-quality", "-1", "must be from 0 to 255, found: -1"),
+        ("--exclude-flags", "0x10000", "must be from 0 to 65535, found: 0x10000"),
+        ("--min-base-quality", "1.5", "not an integer: 1.5"),
+    ],
+)
+def test_tabulate_refuses_options_out_of_range_with_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], option: str, value: str, error: str
+) -> None:
+    with pytest.raises(SystemExit) as exited:
+        run(tmp_path / "counts.tsv", option, value)
+    assert exited.value.code == 2
+    assert f"argument {option}: {error}" in capsys.readouterr().err

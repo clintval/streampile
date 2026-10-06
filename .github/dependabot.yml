@@ -16,6 +16,21 @@ updates:
       prefix: "chore"
       include: "scope"
 
+  # Rust dependencies, from Cargo.toml and Cargo.lock.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      rust:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
   # Python dependencies, from pyproject.toml and uv.lock.
   - package-ecosystem: "uv"
     directory: "/"

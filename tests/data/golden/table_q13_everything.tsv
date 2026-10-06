@@ -1,0 +1,109 @@
+##streampile-tabulation=1
+##streampile-version=0.1.0
+##bam=tests/data/reads.bam
+##reference=tests/data/reference.fa
+##territory=territory.bed
+##min_base_quality=13
+##min_mapping_quality=0
+##exclude_flags=0x0
+#contig	pos	ref	depth	no_calls	ref_reads	ref_fwd	ref_rev	alt_refs	alts	alt_reads	alt_fwd	alt_rev
+chr1	1	A	1	0	1	1	0					
+chr1	2	C	1	0	1	1	0					
+chr1	3	G	2	0	2	2	0					
+chr1	4	T	2	0	2	2	0					
+chr1	5	A	3	0	3	2	1					
+chr1	6	G	4	0	4	3	1					
+chr1	7	G	4	0	4	3	1					
+chr1	8	C	4	0	4	3	1					
+chr1	9	T	4	0	4	3	1					
+chr1	10	A	4	0	4	3	1					
+chr1	11	A	4	0	2	2	0	A,AC	T,GG	1,1	1,0	0,1
+chr1	12	C	4	0	3	3	0					
+chr1	13	G	3	0	3	2	1					
+chr1	14	T	4	0	4	3	1					
+chr1	15	T	4	0	4	3	1					
+chr1	16	A	4	0	4	3	1					
+chr1	17	G	5	0	5	3	2					
+chr1	18	C	5	0	5	3	2					
+chr1	19	C	5	0	5	3	2					
+chr1	20	A	5	0	5	3	2					
+chr1	21	T	5	0	5	3	2					
+chr1	22	G	5	0	5	3	2					
+chr1	23	C	4	0	3	2	1	CA	C	1	0	1
+chr1	24	A	4	0	3	2	1					
+chr1	25	A	3	0	3	2	1					
+chr1	26	A	2	0	2	1	1					
+chr1	27	A	3	0	3	2	1					
+chr1	28	A	3	0	3	2	1					
+chr1	29	G	3	0	3	2	1					
+chr1	30	T	3	0	3	2	1					
+chr1	31	C	4	0	4	3	1					
+chr1	32	C	4	0	4	3	1					
+chr1	33	A	5	0	4	3	1	A	ATT	1	1	0
+chr1	34	T	5	0	5	4	1					
+chr1	35	G	5	0	5	4	1					
+chr1	36	A	4	0	4	3	1					
+chr1	37	C	3	0	3	2	1					
+chr1	38	G	3	0	3	2	1					
+chr1	39	T	2	0	2	2	0					
+chr1	40	C	2	0	2	2	0					
+chr1	41	G	3	0	3	3	0					
+chr1	42	A	3	0	3	3	0					
+chr1	43	T	2	0	2	2	0					
+chr1	44	C	2	0	2	2	0					
+chr1	45	G	1	0	1	1	0					
+chr1	46	G	3	0	3	2	1					
+chr1	47	A	3	0	3	2	1					
+chr1	48	T	3	0	3	2	1					
+chr1	49	C	3	0	3	2	1					
+chr1	50	C	3	0	3	2	1					
+chr1	51	T	2	0	2	1	1					
+chr1	52	A	2	0	2	1	1					
+chr1	53	G	2	0	1	1	0	G	A	1	0	1
+chr1	54	G	2	0	2	1	1					
+chr1	55	C	2	0	2	1	1					
+chr1	56	T	1	0	1	0	1					
+chr1	57	A	1	0	1	0	1					
+chr1	58	G	1	0	1	0	1					
+chr1	59	C	1	0	1	0	1					
+chr1	60	T	1	0	1	0	1					
+chr2	1	T	0	0	0	0	0					
+chr2	2	T	0	0	0	0	0					
+chr2	3	G	0	0	0	0	0					
+chr2	4	A	0	0	0	0	0					
+chr2	5	C	0	0	0	0	0					
+chr2	6	C	1	0	1	1	0					
+chr2	7	G	1	0	1	1	0					
+chr2	8	A	1	0	1	1	0					
+chr2	9	T	1	0	1	1	0					
+chr2	10	A	1	0	1	1	0					
+chr2	11	G	1	0	1	1	0					
+chr2	12	C	1	0	1	1	0					
+chr2	13	T	1	0	1	1	0					
+chr2	14	A	1	0	1	1	0					
+chr2	15	G	1	0	1	1	0					
+chr2	16	G	1	0	1	1	0					
+chr2	17	C	1	0	1	1	0					
+chr2	18	A	1	0	1	1	0					
+chr2	19	T	1	0	1	1	0					
+chr2	20	C	1	0	1	1	0					
+chr2	21	G	1	0	1	1	0					
+chr2	22	A	1	0	1	1	0					
+chr2	23	T	1	0	1	1	0					
+chr2	24	C	1	0	1	1	0					
+chr2	25	G	1	0	1	1	0					
+chr2	26	T	0	0	0	0	0					
+chr2	27	A	0	0	0	0	0					
+chr2	28	C	0	0	0	0	0					
+chr2	29	G	0	0	0	0	0					
+chr2	30	A	0	0	0	0	0					
+chr2	31	T	0	0	0	0	0					
+chr2	32	C	0	0	0	0	0					
+chr2	33	G	0	0	0	0	0					
+chr2	34	G	0	0	0	0	0					
+chr2	35	A	0	0	0	0	0					
+chr2	36	T	0	0	0	0	0					
+chr2	37	A	0	0	0	0	0					
+chr2	38	G	0	0	0	0	0					
+chr2	39	C	0	0	0	0	0					
+chr2	40	A	0	0	0	0	0					

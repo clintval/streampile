@@ -1,6 +1,7 @@
 import random
 from collections import Counter
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
@@ -136,6 +137,13 @@ def test_normalize_returns_at_once_for_an_allele_that_changes_nothing() -> None:
     assert asked == []
 
 
+def test_normalize_refuses_an_allele_or_a_reference_without_bases() -> None:
+    with pytest.raises(ValueError, match="An allele needs a reference and an alternate base."):
+        normalize(5, "", "A", lambda start, end: CHR1[start:end])
+    with pytest.raises(ValueError, match="The reference has no base at position 1."):
+        normalize(2, "A", "AA", lambda _start, _end: "")
+
+
 def test_alleles_of_one_read(reference: FastaFile) -> None:
     tabulator = Tabulator(reference, min_base_quality=30)
     assert alleles_of(tabulator, 0, "20M", CHR1[0:20]) == []
@@ -165,6 +173,9 @@ def test_reads_are_not_counted_for_alleles_they_cannot_place(reference: FastaFil
 def test_alleles_need_a_mapped_read(reference: FastaFile) -> None:
     with pytest.raises(ValueError, match="Read u is not mapped."):
         Tabulator(reference).alleles(unmapped("u", header=HEADER))
+    placed = record("p", 10, "4M", "ACGT", flag=4, header=HEADER)
+    with pytest.raises(ValueError, match="Read p is not mapped."):
+        Tabulator(reference).alleles(placed)
 
 
 def test_tabulate_the_fixture_by_hand() -> None:
@@ -530,3 +541,63 @@ def test_an_allele_is_frozen_to_type_checkers_and_hashed_by_its_fields() -> None
     assert hash(allele) == hash(replace(allele))
     # Each checker fails on an unused ignore, so all three must reject this assignment.
     allele.pos = 2  # type: ignore[misc]  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[invalid-assignment]
+
+
+def test_a_tabulator_and_its_rows_are_used_on_other_threads(reference: FastaFile) -> None:
+    tabulator = Tabulator(reference)
+    spans = territory(("chr1", 0, 60))
+
+    def depth() -> int:
+        with AlignmentFile(str(DATA / "reads.bam")) as alignments:
+            return sum(base.depth for base in tabulator.tabulate(alignments, spans))
+
+    with (
+        AlignmentFile(str(DATA / "reads.bam")) as alignments,
+        ThreadPoolExecutor(1) as pool,
+    ):
+        rows = tabulator.tabulate(alignments, spans)
+        assert pool.submit(lambda: sum(base.depth for base in rows)).result() == depth()
+        assert pool.submit(depth).result() == depth()
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "most"),
+    [
+        ("min_base_quality", -1, 255),
+        ("min_mapping_quality", 256, 255),
+        ("exclude_flags", 0x10000, 65535),
+    ],
+)
+def test_a_tabulator_refuses_options_out_of_range(
+    reference: FastaFile, option: str, value: int, most: int
+) -> None:
+    with pytest.raises(ValueError, match=rf"^{option} must be from 0 to {most}, found: {value}$"):
+        Tabulator(reference, **{option: value})
+
+
+def test_a_base_written_as_equals_is_the_reference_base(tmp_path: Path) -> None:
+    chr1 = "ACGTACGTACGTACGTACGT"
+    header = header_of({"chr1": chr1})
+    reads = [record("eq", 0, "10M", "====T=====", header=header)]
+    sites = tabulated(tmp_path, chr1, reads, ("chr1", 0, 10))
+    assert [(site.pos, alleles(site)) for site in sites if site.alts] == [(5, {"A>T": 1})]
+    assert [site.depth for site in sites] == [1] * 10
+    with FastaFile(str(tmp_path / "reference.fa")) as fasta:
+        assert Tabulator(fasta).alleles(reads[0]) == (
+            [Allele(pos=4, ref="A", alt="T", start=4, end=5)],
+            [],
+        )
+
+
+def test_a_tabulator_reads_back_its_reference_and_options(reference: FastaFile) -> None:
+    tabulator = Tabulator(reference, min_base_quality=20, min_mapping_quality=5, exclude_flags=4)
+    options = (tabulator.min_base_quality, tabulator.min_mapping_quality, tabulator.exclude_flags)
+    assert (tabulator.reference, options) == (reference, (20, 5, 4))
+    assert tabulator.accepts(record("kept", 10, "4M", "ACGT", header=HEADER))
+    assert not tabulator.accepts(record("low", 10, "4M", "ACGT", mapq=4, header=HEADER))
+
+
+def test_a_read_with_no_stored_bases_is_piled_up_but_not_tabulated(reference: FastaFile) -> None:
+    read = record("bare", 10, "4M", "*", header=HEADER)
+    assert StreamingPileupBuilder([]).accepts(read)
+    assert not Tabulator(reference).accepts(read)

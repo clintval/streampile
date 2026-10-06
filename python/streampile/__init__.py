@@ -1,10 +1,13 @@
 """Forward-only pileups streamed from coordinate-sorted alignment records."""
 
-from streampile._builder import StreamingPileupBuilder
+from streampile._native import Pileup
+from streampile._native import PileupRead
+from streampile._native import PileupTemplate
+from streampile._native import StreamingPileupBuilder
 from streampile._pileup import DEFAULT_EXCLUDE_FLAGS
 from streampile._pileup import DEFAULT_MIN_BASE_QUALITY
-from streampile._pileup import Pileup
-from streampile._pileup import PileupRead
+from streampile._pileup import AgreementStrategy
+from streampile._pileup import DisagreementStrategy
 from streampile._pileup import PileupReadType
 from streampile._table import TABULATION_CODECS
 from streampile._table import TabulatedBase
@@ -19,10 +22,13 @@ __all__ = [
     "DEFAULT_EXCLUDE_FLAGS",
     "DEFAULT_MIN_BASE_QUALITY",
     "TABULATION_CODECS",
+    "AgreementStrategy",
     "Allele",
+    "DisagreementStrategy",
     "Pileup",
     "PileupRead",
     "PileupReadType",
+    "PileupTemplate",
     "StreamingPileupBuilder",
     "TabulatedBase",
     "TabulationReader",
