@@ -1,3 +1,8 @@
+import copy
+import dataclasses
+import pickle
+import weakref
+
 import pytest
 from pysam import AlignedSegment
 
@@ -472,3 +477,60 @@ def test_replacing_fields_but_not_the_alignment_keeps_the_read_as_it_was_piled_u
     assert (moved.five_prime_distance, moved.qual) == (deletion.five_prime_distance, 40) == (2, 40)
     based = deletion._replace(query_position=2, pileup_type=BASE)
     assert (based.base, based.five_prime_distance) == ("G", 1)
+
+
+def test_a_pileup_read_matches_copies_and_pickles_as_its_named_tuple_did() -> None:
+    read = record("r", 10, "2M1D2M", "ACGT", flag=16)
+    (entry,) = StreamingPileupBuilder([read]).pileup("chr1", 12).pileups
+    fields = (read, None, 2, DELETION, None, 0)
+    assert PileupRead.__match_args__ == PileupRead._fields
+    assert PileupRead._field_defaults == {"insertion_offset": None, "insertion_length": 0}
+    match entry:
+        case PileupRead(alignment, None, next_base, kind):
+            assert (alignment, next_base, kind) == (read, 2, DELETION)
+        case _:
+            pytest.fail("a PileupRead matches its fields")
+    assert PileupRead._make(fields) == entry == fields
+    assert (entry.count(None), entry.index(read), read in entry) == (2, 0, True)
+    assert entry + (1,) == (*fields, 1) and (1,) + entry == (1, *fields)
+    assert entry * 2 == fields * 2 == 2 * entry
+    assert entry.__getnewargs__() == fields
+    assert entry.__replace__(query_position_or_next=3).query_position_or_next == 3
+    copied = copy.copy(entry)
+    assert (copied, copied.alignment, copied.five_prime_distance) == (entry, read, 2)
+    deep = copy.deepcopy(entry)
+    assert deep.alignment is not read and deep.alignment.query_name == "r"
+    assert (deep.qual, deep.five_prime_distance, deep.template_end_distance) == (40, 2, None)
+    unpicklable = PileupRead(read, 1, 1, BASE)
+    with pytest.raises(TypeError, match="pickl"):
+        pickle.dumps(unpicklable)
+
+
+def test_a_pileup_matches_copies_and_replaces_as_its_dataclass_did() -> None:
+    read = record("r", 10, "4M", "ACGT")
+    pileup = StreamingPileupBuilder([read]).pileup("chr1", 11)
+    assert Pileup.__match_args__ == (
+        "reference_name",
+        "reference_pos",
+        "pileups",
+        "min_base_quality",
+    )
+    match pileup:
+        case Pileup("chr1", position, (entry,), floor):
+            assert (position, entry.base, floor) == (11, "C", 13)
+        case _:
+            pytest.fail("a Pileup matches its fields")
+    assert dataclasses.is_dataclass(pileup)
+    assert [field.name for field in dataclasses.fields(pileup)] == list(Pileup.__match_args__)
+    assert pileup.__replace__(reference_pos=12).reference_pos == 12
+    moved = dataclasses.replace(pileup, min_base_quality=41)
+    assert (moved.reference_pos, moved.pileups, moved.filtered_depth) == (11, pileup.pileups, 0)
+    assert list(dataclasses.asdict(pileup)) == list(Pileup.__match_args__)
+    assert dataclasses.astuple(pileup)[:2] == ("chr1", 11)
+    assert copy.copy(pileup) == pileup
+    deep = copy.deepcopy(pileup)
+    assert deep == dataclasses.replace(pileup, pileups=deep.pileups)
+    assert deep.pileups[0].alignment is not read and deep.bases == ["C"]
+    empty = Pileup("chr1", 3, ())
+    assert pickle.loads(pickle.dumps(empty)) == empty
+    assert weakref.ref(pileup)() is pileup

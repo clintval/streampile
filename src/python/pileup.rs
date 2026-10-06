@@ -10,7 +10,7 @@ use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pyclass::CompareOp;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyList, PyString, PyTuple, PyType};
+use pyo3::types::{IntoPyDict, PyDict, PyList, PyString, PyTuple, PyType};
 
 use super::builder::Bridged;
 use super::{bridge, to_python};
@@ -34,6 +34,13 @@ const FIELDS: [&str; 6] = [
     "pileup_type",
     "insertion_offset",
     "insertion_length",
+];
+
+const PILEUP_FIELDS: [&str; 4] = [
+    "reference_name",
+    "reference_pos",
+    "pileups",
+    "min_base_quality",
 ];
 
 static PILEUP_READ_TYPES: PyOnceLock<[Py<PyAny>; 4]> = PyOnceLock::new();
@@ -309,6 +316,17 @@ impl TemplateRead for Held {
     }
 }
 
+/// The fields of a `PileupRead`, or a tuple, or `None` for anything else.
+fn as_tuple<'py>(
+    py: Python<'py>,
+    value: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyTuple>>> {
+    if let Ok(read) = value.cast::<PileupRead>() {
+        return read.get().held.fields(py).map(Some);
+    }
+    Ok(value.cast::<PyTuple>().ok().cloned())
+}
+
 /// A pysam record and the BAM record copied from it.
 fn bridged(alignment: &Bound<'_, PyAny>) -> PyResult<Arc<Bridged>> {
     let mut record = bam::Record::default();
@@ -404,10 +422,11 @@ fn optional(value: Option<i64>) -> i64 {
 /// both `is_del` and `is_refskip` and gives it the offset and quality of the read's next base;
 /// here a skip is not a deletion, and has no quality to pass a floor with.
 ///
-/// A `PileupRead` unpacks, indexes, compares, and hashes as the tuple of its six fields, as a
-/// `NamedTuple` does. Its bases and qualities are those of the read as it was when it was piled
-/// up, while `alignment` is the very object given to the builder, so it can be changed, e.g.
-/// tagged, and written on.
+/// A `PileupRead` behaves as the `NamedTuple` of its six fields, though it is not a `tuple`: it
+/// unpacks, indexes, compares, hashes, matches, copies, and pickles as one, and has `_make`,
+/// `_asdict`, and `_replace`. Its bases and qualities are those of the read as it was when it was
+/// piled up, while `alignment` is the very object given to the builder, so it can be changed,
+/// e.g. tagged, and written on.
 ///
 /// Attributes:
 ///     alignment: the read.
@@ -461,6 +480,30 @@ impl PileupRead {
     #[pyo3(name = "_fields")]
     fn field_names(py: Python<'_>) -> PyResult<Bound<'_, PyTuple>> {
         PyTuple::new(py, FIELDS)
+    }
+
+    #[classattr]
+    fn __match_args__(py: Python<'_>) -> PyResult<Bound<'_, PyTuple>> {
+        PyTuple::new(py, FIELDS)
+    }
+
+    #[classattr]
+    #[pyo3(name = "_field_defaults")]
+    fn field_defaults(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+        let defaults = PyDict::new(py);
+        defaults.set_item("insertion_offset", py.None())?;
+        defaults.set_item("insertion_length", 0)?;
+        Ok(defaults)
+    }
+
+    #[classmethod]
+    #[pyo3(name = "_make")]
+    fn make<'py>(
+        cls: &Bound<'py, PyType>,
+        iterable: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let fields = iterable.try_iter()?.collect::<PyResult<Vec<_>>>()?;
+        cls.call1(PyTuple::new(cls.py(), fields)?)
     }
 
     /// The read.
@@ -657,6 +700,87 @@ impl PileupRead {
         Ok(Self { held })
     }
 
+    #[pyo3(signature = (**changes))]
+    fn __replace__(&self, py: Python<'_>, changes: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        self.replace(py, changes)
+    }
+
+    fn count<'py>(
+        &self,
+        py: Python<'py>,
+        value: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.held.fields(py)?.call_method1("count", (value,))
+    }
+
+    #[pyo3(signature = (value, *bounds))]
+    fn index<'py>(
+        &self,
+        py: Python<'py>,
+        value: &Bound<'py, PyAny>,
+        bounds: &Bound<'py, PyTuple>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let arguments: Vec<_> = std::iter::once(value.clone()).chain(bounds).collect();
+        let arguments = PyTuple::new(py, arguments)?;
+        self.held.fields(py)?.call_method1("index", arguments)
+    }
+
+    fn __contains__(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
+        self.held.fields(py)?.contains(value)
+    }
+
+    fn __add__<'py>(&self, py: Python<'py>, other: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
+        let Some(other) = as_tuple(py, other)? else {
+            return Ok(py.NotImplemented());
+        };
+        Ok(self.held.fields(py)?.add(other)?.unbind())
+    }
+
+    fn __radd__<'py>(&self, py: Python<'py>, other: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
+        let Some(other) = as_tuple(py, other)? else {
+            return Ok(py.NotImplemented());
+        };
+        Ok(other.add(self.held.fields(py)?)?.unbind())
+    }
+
+    fn __mul__<'py>(&self, py: Python<'py>, times: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
+        match self.held.fields(py)?.as_any().mul(times) {
+            Ok(repeated) => Ok(repeated.unbind()),
+            Err(_) => Ok(py.NotImplemented()),
+        }
+    }
+
+    fn __rmul__<'py>(&self, py: Python<'py>, times: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
+        self.__mul__(py, times)
+    }
+
+    fn __getnewargs__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        self.held.fields(py)
+    }
+
+    fn __reduce__<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<(Bound<'py, PyType>, Bound<'py, PyTuple>)> {
+        Ok((slf.get_type(), slf.get().held.fields(slf.py())?))
+    }
+
+    fn __copy__(slf: Bound<'_, Self>) -> Bound<'_, Self> {
+        slf
+    }
+
+    fn __deepcopy__(&self, py: Python<'_>, memo: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let alignment = py
+            .import("copy")?
+            .call_method1("deepcopy", (self.held.record.object.bind(py), memo))?;
+        let record = Bridged::new(alignment.unbind(), self.held.record.record.clone());
+        Ok(Self {
+            held: Held {
+                record: Arc::new(record),
+                ..self.held.clone()
+            },
+        })
+    }
+
     #[allow(clippy::unused_self)]
     fn __len__(&self) -> usize {
         FIELDS.len()
@@ -684,11 +808,7 @@ impl PileupRead {
         other: &Bound<'py, PyAny>,
         op: CompareOp,
     ) -> PyResult<Py<PyAny>> {
-        let other = if let Ok(read) = other.cast::<PileupRead>() {
-            read.get().held.fields(py)?.into_any()
-        } else if other.is_instance_of::<PyTuple>() {
-            other.clone()
-        } else {
+        let Some(other) = as_tuple(py, other)? else {
             return Ok(py.NotImplemented());
         };
         Ok(self.held.fields(py)?.rich_compare(other, op)?.unbind())
@@ -709,7 +829,9 @@ impl PileupRead {
 /// Reads with an insertion right after the position are included as insertion entries, so one read
 /// can have two entries. Reads that skip over the position with the CIGAR `N` operator are included
 /// as skip entries. A pileup is a snapshot: it outlives the builder's next move, and its views are
-/// worked out from it in Rust. It compares and hashes by its four fields.
+/// worked out from it in Rust. It behaves as a frozen dataclass of its four fields: it compares,
+/// hashes, matches, copies, and pickles by them, and `dataclasses.replace`, `fields`, `asdict`,
+/// and `astuple` take it.
 ///
 /// Attributes:
 ///     reference_name: the name of the contig.
@@ -717,7 +839,7 @@ impl PileupRead {
 ///     pileups: the entries of the reads at this position.
 ///     min_base_quality: the base quality below which bases are left out of `filtered_depth`,
 ///         `bases`, and `qualities`.
-#[pyclass(module = "streampile", name = "Pileup", frozen)]
+#[pyclass(module = "streampile", name = "Pileup", frozen, weakref)]
 pub(crate) struct Pileup {
     reference_name: Py<PyString>,
     reference_pos: i64,
@@ -1018,6 +1140,82 @@ impl Pileup {
                 pileups: PyOnceLock::new(),
             })
             .collect())
+    }
+
+    #[classattr]
+    fn __match_args__(py: Python<'_>) -> PyResult<Bound<'_, PyTuple>> {
+        PyTuple::new(py, PILEUP_FIELDS)
+    }
+
+    /// The fields of the dataclass a `Pileup` once was, so that `dataclasses.replace`, `fields`,
+    /// `asdict`, and `astuple` take a `Pileup`.
+    #[classattr]
+    fn __dataclass_fields__(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+        let dataclasses = py.import("dataclasses")?;
+        let builtins = py.import("builtins")?;
+        let floor = dataclasses.getattr("field")?.call(
+            (),
+            Some(&[("default", DEFAULT_MIN_BASE_QUALITY)].into_py_dict(py)?),
+        )?;
+        let fields = PyList::new(
+            py,
+            [
+                (PILEUP_FIELDS[0], builtins.getattr("str")?)
+                    .into_pyobject(py)?
+                    .into_any(),
+                (PILEUP_FIELDS[1], builtins.getattr("int")?)
+                    .into_pyobject(py)?
+                    .into_any(),
+                (PILEUP_FIELDS[2], builtins.getattr("tuple")?)
+                    .into_pyobject(py)?
+                    .into_any(),
+                (PILEUP_FIELDS[3], builtins.getattr("int")?, floor)
+                    .into_pyobject(py)?
+                    .into_any(),
+            ],
+        )?;
+        dataclasses
+            .call_method1("make_dataclass", ("Pileup", fields))?
+            .getattr("__dataclass_fields__")
+    }
+
+    #[pyo3(signature = (**changes))]
+    fn __replace__<'py>(
+        slf: &Bound<'py, Self>,
+        changes: Option<&Bound<'py, PyDict>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let py = slf.py();
+        let fields = PyDict::new(py);
+        for (name, value) in PILEUP_FIELDS.iter().zip(slf.get().fields(py)?.iter()) {
+            fields.set_item(name, value)?;
+        }
+        if let Some(changes) = changes {
+            fields.update(changes.as_mapping())?;
+        }
+        slf.get_type().call((), Some(&fields))
+    }
+
+    fn __reduce__<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<(Bound<'py, PyType>, Bound<'py, PyTuple>)> {
+        Ok((slf.get_type(), slf.get().fields(slf.py())?))
+    }
+
+    fn __copy__(slf: Bound<'_, Self>) -> Bound<'_, Self> {
+        slf
+    }
+
+    fn __deepcopy__(&self, py: Python<'_>, memo: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let pileups = py
+            .import("copy")?
+            .call_method1("deepcopy", (self.pileups_of(py)?, memo))?;
+        Self::new(
+            py,
+            self.reference_name.bind(py).clone(),
+            self.reference_pos,
+            &pileups,
+            self.min_base_quality,
+        )
     }
 
     fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {

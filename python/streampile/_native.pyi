@@ -1,10 +1,12 @@
 from collections.abc import Callable
 from collections.abc import Iterable
 from collections.abc import Iterator
+from dataclasses import Field
 from types import TracebackType
 from typing import Any
 from typing import ClassVar
 from typing import Final
+from typing import SupportsIndex
 from typing import final
 
 from pysam import AlignedSegment
@@ -62,6 +64,15 @@ class PileupRead:
     """One read at one pileup position."""
 
     _fields: ClassVar[tuple[str, str, str, str, str, str]]
+    _field_defaults: ClassVar[dict[str, Any]]
+    __match_args__ = (
+        "alignment",
+        "query_position",
+        "query_position_or_next",
+        "pileup_type",
+        "insertion_offset",
+        "insertion_length",
+    )
 
     def __new__(
         cls,
@@ -123,6 +134,8 @@ class PileupRead:
     @property
     def is_fr_pair(self) -> bool:
         """Whether the read is a read of an FR pair, as htsjdk 5.0.0's `getPairOrientation` says."""
+    @classmethod
+    def _make(cls, iterable: Iterable[Any]) -> Self: ...
     def _asdict(self) -> dict[str, Any]: ...
     def _replace(
         self,
@@ -134,6 +147,28 @@ class PileupRead:
         insertion_offset: int | None = ...,
         insertion_length: int = ...,
     ) -> Self: ...
+    def __replace__(
+        self,
+        *,
+        alignment: AlignedSegment = ...,
+        query_position: int | None = ...,
+        query_position_or_next: int | None = ...,
+        pileup_type: PileupReadType = ...,
+        insertion_offset: int | None = ...,
+        insertion_length: int = ...,
+    ) -> Self: ...
+    def count(self, value: Any, /) -> int: ...
+    def index(
+        self, value: Any, start: SupportsIndex = 0, stop: SupportsIndex = ..., /
+    ) -> int: ...
+    def __contains__(self, value: object, /) -> bool: ...
+    def __add__(self, other: tuple[Any, ...] | PileupRead, /) -> tuple[Any, ...]: ...
+    def __radd__(self, other: tuple[Any, ...], /) -> tuple[Any, ...]: ...
+    def __mul__(self, times: SupportsIndex, /) -> tuple[Any, ...]: ...
+    def __rmul__(self, times: SupportsIndex, /) -> tuple[Any, ...]: ...
+    def __getnewargs__(self) -> tuple[Any, ...]: ...
+    def __copy__(self) -> Self: ...
+    def __deepcopy__(self, memo: dict[int, Any], /) -> Self: ...
     def __len__(self) -> int: ...
     def __getitem__(self, index: int) -> Any: ...
     def __iter__(self) -> Iterator[Any]: ...
@@ -188,6 +223,9 @@ class PileupTemplate:
 class Pileup:
     """The reads at one reference position."""
 
+    __match_args__ = ("reference_name", "reference_pos", "pileups", "min_base_quality")
+    __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
+
     def __new__(
         cls,
         reference_name: str,
@@ -235,6 +273,16 @@ class Pileup:
         disagreement: DisagreementStrategy = ...,
     ) -> list[PileupTemplate]:
         """One observation per template at this position, its reads grouped by query name."""
+    def __replace__(
+        self,
+        *,
+        reference_name: str = ...,
+        reference_pos: int = ...,
+        pileups: Iterable[PileupRead] = ...,
+        min_base_quality: int = ...,
+    ) -> Self: ...
+    def __copy__(self) -> Self: ...
+    def __deepcopy__(self, memo: dict[int, Any], /) -> Self: ...
     @override
     def __hash__(self) -> int: ...
     @override
