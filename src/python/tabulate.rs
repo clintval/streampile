@@ -12,6 +12,7 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 
 use super::{Int, bridge};
 use crate::DEFAULT_EXCLUDE_FLAGS;
+use crate::pileup::record_name;
 
 const REFERENCE_PADDING: i64 = 10_000;
 
@@ -755,12 +756,13 @@ impl Tabulation {
         py: Python<'_>,
         record: &Bound<'_, PyAny>,
     ) -> PyResult<(Vec<(i64, String, String, i64, i64)>, Vec<(i64, i64)>)> {
+        let mut bam = bam::Record::default();
+        bridge::read(record, &mut bam)?;
         let contig = record.getattr("reference_name")?;
-        if contig.is_none() {
-            let name: Option<String> = record.getattr("query_name")?.extract()?;
+        if contig.is_none() || bam.flags().is_unmapped() {
             return Err(PyValueError::new_err(format!(
                 "Read {} is not mapped.",
-                name.as_deref().unwrap_or("None")
+                record_name(&bam)
             )));
         }
         let contig = contig.cast_into::<PyString>()?;
@@ -771,8 +773,6 @@ impl Tabulation {
                 entry.insert(Reference::new(self.fasta.bind(py), &contig)?)
             }
         };
-        let mut bam = bam::Record::default();
-        bridge::read(record, &mut bam)?;
         let mut read = Read::default();
         read.fill(py, &bam, reference)?;
         let counted = self.options.alleles(py, &read, reference)?;

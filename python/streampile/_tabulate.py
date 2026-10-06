@@ -182,7 +182,7 @@ class Tabulator:
             alleles it is not counted for, where it is not informative.
 
         Raises:
-            ValueError: if the read is not mapped.
+            ValueError: if the read is flagged unmapped or has no contig.
         """
         counted, dropped = self._tabulation.alleles(record)
         alleles = [

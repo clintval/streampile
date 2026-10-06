@@ -166,6 +166,9 @@ def test_reads_are_not_counted_for_alleles_they_cannot_place(reference: FastaFil
 def test_alleles_need_a_mapped_read(reference: FastaFile) -> None:
     with pytest.raises(ValueError, match="Read u is not mapped."):
         Tabulator(reference).alleles(unmapped("u", header=HEADER))
+    placed = record("p", 10, "4M", "ACGT", flag=4, header=HEADER)
+    with pytest.raises(ValueError, match="Read p is not mapped."):
+        Tabulator(reference).alleles(placed)
 
 
 def test_tabulate_the_fixture_by_hand() -> None:
