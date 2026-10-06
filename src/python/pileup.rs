@@ -14,10 +14,13 @@ use pyo3::types::{PyDict, PyList, PyString, PyTuple, PyType};
 
 use super::builder::Bridged;
 use super::{bridge, to_python};
-use crate::footprint::{Footprint, Located};
-use crate::overlap::{self, AgreementStrategy, DisagreementStrategy, Observation};
+use noodles::sam::alignment::record::Flags;
+
+use crate::footprint::Footprint;
+use crate::overlap::{AgreementStrategy, DisagreementStrategy, Observation};
 use crate::pileup::{
-    EntryKind, MISSING_BASE_QUALITY, NONE, TemplateName, name_hash, name_of, number_templates,
+    EntryKind, MISSING_BASE_QUALITY, NONE, Template, TemplateName, TemplateRead, name_hash,
+    name_of, number_templates, templates,
 };
 use crate::template::from_five_prime;
 use crate::{DEFAULT_MIN_BASE_QUALITY, PileupEntry};
@@ -36,8 +39,8 @@ const FIELDS: [&str; 6] = [
 
 static PILEUP_READ_TYPES: PyOnceLock<[Py<PyAny>; 4]> = PyOnceLock::new();
 
-/// One read at one position: the record, the fields of a `PileupRead`, and what is worked out
-/// about the record once, where a builder made it.
+/// One read at one position: the record, the fields of a `PileupRead`, the position where a
+/// pileup made it, and what is worked out about the record once, where a builder made it.
 #[derive(Clone)]
 pub(crate) struct Held {
     record: Arc<Bridged>,
@@ -46,13 +49,14 @@ pub(crate) struct Held {
     query_position_or_next: i64,
     insertion_offset: i64,
     insertion_length: i64,
+    position: Option<i64>,
     query_length: Option<u32>,
     name_hash: u64,
 }
 
 impl Held {
-    /// The entry of a builder's pileup.
-    pub(crate) fn of(entry: &PileupEntry<'_, super::builder::PyRecord>) -> Self {
+    /// The entry of a builder's pileup at a position.
+    pub(crate) fn of(entry: &PileupEntry<'_, super::builder::PyRecord>, position: i64) -> Self {
         let present = |value: Option<usize>| value.map_or(ABSENT, |value| value as i64);
         let live = entry.live;
         Self {
@@ -62,13 +66,20 @@ impl Held {
             query_position_or_next: present(entry.query_position_or_next()),
             insertion_offset: present(entry.insertion_offset()),
             insertion_length: entry.insertion_length() as i64,
+            position: Some(position),
             query_length: Some(live.footprint.query_length),
             name_hash: live.name_hash,
         }
     }
 
-    /// An entry of a read placed by its footprint, as a builder would make it at a position.
-    fn located(record: &Arc<Bridged>, kind: EntryKind, offset: u32, length: u32) -> Self {
+    /// An entry of a read placed by its footprint at a position, as a builder would make it.
+    fn located(
+        record: &Arc<Bridged>,
+        position: i64,
+        kind: EntryKind,
+        offset: u32,
+        length: u32,
+    ) -> Self {
         let offset = if offset == NONE {
             ABSENT
         } else {
@@ -97,6 +108,7 @@ impl Held {
             } else {
                 0
             },
+            position: Some(position),
             query_length: None,
             name_hash: name_hash(&record.record),
         }
@@ -173,32 +185,28 @@ impl Held {
         Some(qualities[start..end].to_vec())
     }
 
-    fn five_prime_distance(&self) -> Option<i64> {
+    fn five_prime_distance(&self) -> Option<usize> {
         let offset = usize::try_from(self.query_position).ok()?;
         let record = self.bam();
         let length = match self.query_length {
             Some(length) => length as usize,
             None => record.cigar().read_length().ok()?,
         };
-        let reverse = record.flags().is_reverse_complemented();
-        from_five_prime(reverse, length, offset).map(|distance| distance as i64)
+        from_five_prime(record.flags().is_reverse_complemented(), length, offset)
     }
 
-    fn template_end_distance(&self, position: Option<i64>) -> PyResult<Option<i64>> {
-        let Some(position) = position.or_else(|| self.position_of_base()) else {
+    fn template_end_distance(&self) -> crate::Result<Option<usize>> {
+        let Some(position) = self.position.or_else(|| self.position_of_base()) else {
             return Ok(None);
         };
         let Ok(position) = usize::try_from(position) else {
             return Ok(None);
         };
-        let distance =
-            template_end_distance(self.bam(), &noodles::sam::Header::default(), position)
-                .map_err(to_python)?;
-        Ok(distance.map(|distance| distance as i64))
+        template_end_distance(self.bam(), &noodles::sam::Header::default(), position)
     }
 
-    fn is_fr_pair(&self) -> PyResult<bool> {
-        is_fr_pair(self.bam(), &noodles::sam::Header::default()).map_err(to_python)
+    fn is_fr_pair(&self) -> crate::Result<bool> {
+        is_fr_pair(self.bam(), &noodles::sam::Header::default())
     }
 
     /// The reference position of the read's base at the query position, for an entry made by
@@ -236,6 +244,15 @@ impl Held {
         }
     }
 
+    /// What the read holds here, as its template's vote counts it.
+    fn observation(&self) -> PyResult<Observation> {
+        Ok(Observation {
+            kind: self.kind,
+            base: self.base()?,
+            quality: self.quality()?,
+        })
+    }
+
     fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let optional = |value: i64| (value != ABSENT).then_some(value);
         (
@@ -248,6 +265,36 @@ impl Held {
         )
             .into_pyobject(py)
     }
+}
+
+impl TemplateRead for Held {
+    fn flags(&self) -> Flags {
+        self.bam().flags()
+    }
+
+    fn five_prime_distance(&self) -> Option<usize> {
+        Held::five_prime_distance(self)
+    }
+
+    fn template_end_distance(&self) -> crate::Result<Option<usize>> {
+        Held::template_end_distance(self)
+    }
+
+    fn is_fr_pair(&self) -> crate::Result<bool> {
+        Held::is_fr_pair(self)
+    }
+}
+
+/// A tuple of the `PileupRead`s of entries.
+fn reads_of<'a>(
+    py: Python<'_>,
+    entries: impl IntoIterator<Item = &'a Held>,
+) -> PyResult<Py<PyTuple>> {
+    let reads = entries
+        .into_iter()
+        .map(|held| Py::new(py, PileupRead { held: held.clone() }))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(PyTuple::new(py, reads)?.unbind())
 }
 
 /// The index a Python index of a sequence of this length refers to, if any.
@@ -366,7 +413,6 @@ fn disagreement_of(name: &str) -> PyResult<DisagreementStrategy> {
 #[pyclass(module = "streampile", name = "PileupRead", frozen)]
 pub(crate) struct PileupRead {
     held: Held,
-    position: Option<i64>,
 }
 
 #[pymethods]
@@ -402,10 +448,10 @@ impl PileupRead {
                 query_position_or_next: optional(query_position_or_next),
                 insertion_offset: optional(insertion_offset),
                 insertion_length,
+                position: None,
                 query_length: None,
                 name_hash,
             },
-            position: None,
         })
     }
 
@@ -514,7 +560,7 @@ impl PileupRead {
     /// so soft-clipped bases count, and 0 is the first base sequenced: fgbio's
     /// `positionInReadInReadOrder` minus one. It is `None` for an entry with no base.
     #[getter]
-    fn five_prime_distance(&self) -> Option<i64> {
+    fn five_prime_distance(&self) -> Option<usize> {
         self.held.five_prime_distance()
     }
 
@@ -533,8 +579,8 @@ impl PileupRead {
     ///     ValueError: for a read of an FR pair with no `MC` tag, or one that is not a CIGAR
     ///         string spanning at least one base.
     #[getter]
-    fn template_end_distance(&self) -> PyResult<Option<i64>> {
-        self.held.template_end_distance(self.position)
+    fn template_end_distance(&self) -> PyResult<Option<usize>> {
+        self.held.template_end_distance().map_err(to_python)
     }
 
     /// Whether the read is a read of an FR pair, as htsjdk 5.0.0's `getPairOrientation` says.
@@ -549,7 +595,7 @@ impl PileupRead {
     ///         not a CIGAR string.
     #[getter]
     fn is_fr_pair(&self) -> PyResult<bool> {
-        self.held.is_fr_pair()
+        self.held.is_fr_pair().map_err(to_python)
     }
 
     #[pyo3(name = "_asdict")]
@@ -594,10 +640,10 @@ impl PileupRead {
             Self {
                 held: Held {
                     record: Arc::clone(&self.held.record),
+                    position: self.held.position,
                     query_length: self.held.query_length,
                     ..read.held
                 },
-                position: self.position,
             }
         } else {
             read
@@ -706,22 +752,9 @@ impl Pileup {
     }
 
     fn pileups_of<'py>(&self, py: Python<'py>) -> PyResult<&Bound<'py, PyTuple>> {
-        let pileups = self.pileups.get_or_try_init(py, || {
-            let reads = self
-                .entries
-                .iter()
-                .map(|held| {
-                    Py::new(
-                        py,
-                        PileupRead {
-                            held: held.clone(),
-                            position: Some(self.reference_pos),
-                        },
-                    )
-                })
-                .collect::<PyResult<Vec<_>>>()?;
-            PyTuple::new(py, reads).map(Bound::unbind)
-        })?;
+        let pileups = self
+            .pileups
+            .get_or_try_init(py, || reads_of(py, &self.entries))?;
         Ok(pileups.bind(py))
     }
 
@@ -764,7 +797,10 @@ impl Pileup {
             .iter()
             .map(|read| {
                 read.cast::<PileupRead>()
-                    .map(|read| read.get().held.clone())
+                    .map(|read| Held {
+                        position: Some(reference_pos),
+                        ..read.get().held.clone()
+                    })
                     .map_err(|_| PyTypeError::new_err("every entry of a Pileup is a PileupRead"))
             })
             .collect::<PyResult<Vec<_>>>()?;
@@ -828,20 +864,11 @@ impl Pileup {
                 object: alignment.unbind(),
                 record,
             });
-            let mut push = |kind, offset, length| {
-                let mut held = Held::located(&record, kind, offset, length);
+            footprint.entries_at(pos, |kind, offset, length| {
+                let mut held = Held::located(&record, pos, kind, offset, length);
                 held.query_length = Some(query_length);
                 entries.push(held);
-            };
-            match footprint.locate(pos) {
-                Some(Located::Base(offset)) => push(EntryKind::Base, offset, 0),
-                Some(Located::Deletion(next)) => push(EntryKind::Deletion, next.unwrap_or(NONE), 0),
-                Some(Located::Skip) => push(EntryKind::Skip, NONE, 0),
-                None => {}
-            }
-            if let Some(insertion) = footprint.insertion_at(pos) {
-                push(EntryKind::Insertion, insertion.offset, insertion.length);
-            }
+            });
         }
         Ok(Self::of(contig.unbind(), pos, min_base_quality, entries))
     }
@@ -965,34 +992,20 @@ impl Pileup {
         let numbers = number_templates(&self.entries, |held| {
             (held.kind != EntryKind::Insertion).then(|| held.template())
         });
-        let mut grouped: Vec<Vec<Held>> = Vec::new();
+        let mut entries = Vec::with_capacity(self.entries.len());
         for (held, number) in self.entries.iter().zip(numbers) {
-            let Some(number) = number else { continue };
-            match grouped.get_mut(number) {
-                Some(reads) => reads.push(held.clone()),
-                None => grouped.push(vec![held.clone()]),
+            if let Some(number) = number {
+                entries.push((number, held.clone(), held.observation()?));
             }
         }
-        grouped
+        let floor = self.min_base_quality;
+        Ok(templates(entries, agreement, disagreement, floor)
             .into_iter()
-            .map(|reads| {
-                let mut observations = Vec::with_capacity(reads.len());
-                for held in &reads {
-                    observations.push(Observation {
-                        kind: held.kind,
-                        base: held.base()?,
-                        quality: held.quality()?,
-                    });
-                }
-                let floor = self.min_base_quality;
-                Ok(PileupTemplate {
-                    called: overlap::observe(observations, agreement, disagreement, floor),
-                    reads,
-                    position: self.reference_pos,
-                    pileups: PyOnceLock::new(),
-                })
+            .map(|template| PileupTemplate {
+                template,
+                pileups: PyOnceLock::new(),
             })
-            .collect()
+            .collect())
     }
 
     fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
@@ -1031,27 +1044,8 @@ impl Pileup {
 ///     qual: the quality of the template's base, or of the next base for a deletion.
 #[pyclass(module = "streampile", name = "PileupTemplate", frozen)]
 pub(crate) struct PileupTemplate {
-    reads: Vec<Held>,
-    position: i64,
-    called: Observation,
+    template: Template<Held>,
     pileups: PyOnceLock<Py<PyTuple>>,
-}
-
-impl PileupTemplate {
-    /// The template's first read here: the first of a pair, or a fragment's only read.
-    fn first_read(&self) -> Option<&Held> {
-        self.reads.iter().find(|held| !is_second(held))
-    }
-
-    /// The template's second read here: the last of a pair.
-    fn second_read(&self) -> Option<&Held> {
-        self.reads.iter().find(|held| is_second(held))
-    }
-}
-
-fn is_second(held: &Held) -> bool {
-    let flags = held.bam().flags();
-    flags.is_segmented() && flags.is_last_segment()
 }
 
 #[pymethods]
@@ -1059,7 +1053,8 @@ impl PileupTemplate {
     /// The name of the template's reads.
     #[getter]
     fn query_name(&self) -> Option<String> {
-        self.reads[0]
+        self.template
+            .first()
             .bam()
             .name()
             .map(|name| String::from_utf8_lossy(name).into_owned())
@@ -1068,22 +1063,9 @@ impl PileupTemplate {
     /// The entries of the template's reads at the position, usually one or two, as in `pileups`.
     #[getter]
     fn reads<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let reads = self.pileups.get_or_try_init(py, || {
-            let reads = self
-                .reads
-                .iter()
-                .map(|held| {
-                    Py::new(
-                        py,
-                        PileupRead {
-                            held: held.clone(),
-                            position: Some(self.position),
-                        },
-                    )
-                })
-                .collect::<PyResult<Vec<_>>>()?;
-            PyTuple::new(py, reads).map(Bound::unbind)
-        })?;
+        let reads = self
+            .pileups
+            .get_or_try_init(py, || reads_of(py, self.template.entries()))?;
         Ok(reads.bind(py).clone())
     }
 
@@ -1091,38 +1073,38 @@ impl PileupTemplate {
     /// else a deletion if a read's deletion votes, or else, with no vote, what its reads hold.
     #[getter]
     fn pileup_type<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        pileup_read_type(py, self.called.kind)
+        pileup_read_type(py, self.template.called().kind)
     }
 
     /// The template's upper-cased base, its voting reads' bases called into one, or `None`.
     #[getter]
     fn base(&self) -> Option<char> {
-        self.called.base.map(char::from)
+        self.template.called().base.map(char::from)
     }
 
     /// The quality of the template's base, or of the next base for a deletion, or `None` without
     /// a vote.
     #[getter]
     fn qual(&self) -> Option<u8> {
-        self.called.quality
+        self.template.called().quality
     }
 
     /// Whether the template holds a deletion at the position, and no base that votes.
     #[getter]
     fn is_del(&self) -> bool {
-        self.called.kind == EntryKind::Deletion
+        self.template.called().kind == EntryKind::Deletion
     }
 
     /// Whether every read of the template skips over the position.
     #[getter]
     fn is_refskip(&self) -> bool {
-        self.called.kind == EntryKind::Skip
+        self.template.called().kind == EntryKind::Skip
     }
 
     /// Whether the template's base is a no-call, `N`.
     #[getter]
     fn is_no_call(&self) -> bool {
-        self.called.base == Some(b'N')
+        self.template.called().base == Some(b'N')
     }
 
     /// Whether the template's first read is aligned to the reverse strand.
@@ -1131,10 +1113,7 @@ impl PileupTemplate {
     /// flags without the first.
     #[getter]
     fn is_reverse(&self) -> bool {
-        match self.first_read() {
-            Some(first) => first.bam().flags().is_reverse_complemented(),
-            None => self.reads[0].bam().flags().is_mate_reverse_complemented(),
-        }
+        self.template.is_reverse()
     }
 
     /// The number of the template's bases between its first read's 5′ end and the position.
@@ -1145,14 +1124,8 @@ impl PileupTemplate {
     /// Raises:
     ///     ValueError: for a read of an FR pair with no usable `MC` tag.
     #[getter]
-    fn five_prime_distance(&self) -> PyResult<Option<i64>> {
-        if let Some(distance) = self.first_read().and_then(Held::five_prime_distance) {
-            return Ok(Some(distance));
-        }
-        match self.second_read() {
-            Some(second) => second.template_end_distance(Some(self.position)),
-            None => Ok(None),
-        }
+    fn five_prime_distance(&self) -> PyResult<Option<usize>> {
+        self.template.five_prime_distance().map_err(to_python)
     }
 
     /// The number of the template's bases between the position and its other end, the 5′ end of
@@ -1165,12 +1138,8 @@ impl PileupTemplate {
     /// Raises:
     ///     ValueError: for a read of an FR pair with no usable `MC` tag.
     #[getter]
-    fn template_end_distance(&self) -> PyResult<Option<i64>> {
-        match self.first_read() {
-            Some(first) => first.template_end_distance(Some(self.position)),
-            None if self.reads[0].is_fr_pair()? => Ok(self.reads[0].five_prime_distance()),
-            None => Ok(None),
-        }
+    fn template_end_distance(&self) -> PyResult<Option<usize>> {
+        self.template.template_end_distance().map_err(to_python)
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {

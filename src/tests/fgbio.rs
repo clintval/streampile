@@ -563,9 +563,8 @@ fn test_the_template_ends_of_a_record_buf() -> crate::Result<()> {
         .map(|position| crate::template_end_distance(&record, header, position).unwrap())
         .collect();
     assert_eq!(ends, [Some(1), Some(1), Some(0), None]);
-    let five_prime = |offset| -> crate::Result<Option<usize>> {
-        crate::five_prime_distance(&record, offset)
-    };
+    let five_prime =
+        |offset| -> crate::Result<Option<usize>> { crate::five_prime_distance(&record, offset) };
     assert_eq!(
         (five_prime(0)?, five_prime(128)?, five_prime(129)?),
         (Some(0), Some(128), None)

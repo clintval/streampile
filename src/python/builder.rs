@@ -414,7 +414,7 @@ impl StreamingPileupBuilder {
                     return Err(to_python(error));
                 }
             };
-            let entries = pileup.iter().map(|entry| Held::of(&entry)).collect();
+            let entries = pileup.iter().map(|entry| Held::of(&entry, pos)).collect();
             Pileup::of(
                 self.names[id].clone_ref(py),
                 pos,

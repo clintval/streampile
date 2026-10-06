@@ -70,7 +70,8 @@ pub(crate) struct Observation {
     pub quality: Option<u8>,
 }
 
-/// What a template holds at a position, from what its reads hold there, in input order.
+/// What a template holds at a position, made from what its reads hold there, one at a time in
+/// input order.
 ///
 /// Only a read whose quality is at the floor votes: its base, or its deletion, judged by the
 /// quality of its next base. The voting bases are called into one by the strategies, in input
@@ -79,52 +80,72 @@ pub(crate) struct Observation {
 /// base has it at its own quality. A template with no voting base holds a deletion at the higher
 /// of the voting deletions' qualities, or, with no vote at all, what its reads hold, a base if any
 /// of them does or else a deletion or a skip, with no base or quality.
-pub(crate) fn observe(
-    reads: impl IntoIterator<Item = Observation>,
-    agreement: AgreementStrategy,
-    disagreement: DisagreementStrategy,
-    min_base_quality: i64,
-) -> Observation {
-    let mut held = EntryKind::Skip;
-    let mut called: Option<(u8, u8)> = None;
-    let mut deleted: Option<u8> = None;
-    for read in reads {
-        if rank(read.kind) > rank(held) {
-            held = read.kind;
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Vote {
+    held: EntryKind,
+    called: Option<(u8, u8)>,
+    deleted: Option<u8>,
+}
+
+impl Default for Vote {
+    fn default() -> Self {
+        Self {
+            held: EntryKind::Skip,
+            called: None,
+            deleted: None,
+        }
+    }
+}
+
+impl Vote {
+    /// Adds what the template's next read holds.
+    pub(crate) fn add(
+        &mut self,
+        read: Observation,
+        agreement: AgreementStrategy,
+        disagreement: DisagreementStrategy,
+        min_base_quality: i64,
+    ) {
+        if rank(read.kind) > rank(self.held) {
+            self.held = read.kind;
         }
         let Some(quality) = read
             .quality
             .filter(|&quality| i64::from(quality) >= min_base_quality)
         else {
-            continue;
+            return;
         };
         match (read.kind, read.base) {
             (EntryKind::Base, Some(base)) => {
-                called = Some(match called {
+                self.called = Some(match self.called {
                     Some(template) => call(template, (base, quality), agreement, disagreement),
                     None => (base, quality),
                 });
             }
-            (EntryKind::Deletion, _) => deleted = deleted.max(Some(quality)),
+            (EntryKind::Deletion, _) => self.deleted = self.deleted.max(Some(quality)),
             _ => {}
         }
     }
-    match (called, deleted) {
-        (Some((base, quality)), _) => Observation {
-            kind: EntryKind::Base,
-            base: Some(base),
-            quality: Some(quality),
-        },
-        (None, Some(quality)) => Observation {
-            kind: EntryKind::Deletion,
-            base: None,
-            quality: Some(quality),
-        },
-        (None, None) => Observation {
-            kind: held,
-            base: None,
-            quality: None,
-        },
+
+    /// What the template holds, from the reads added so far.
+    pub(crate) fn result(self) -> Observation {
+        match (self.called, self.deleted) {
+            (Some((base, quality)), _) => Observation {
+                kind: EntryKind::Base,
+                base: Some(base),
+                quality: Some(quality),
+            },
+            (None, Some(quality)) => Observation {
+                kind: EntryKind::Deletion,
+                base: None,
+                quality: Some(quality),
+            },
+            (None, None) => Observation {
+                kind: self.held,
+                base: None,
+                quality: None,
+            },
+        }
     }
 }
 

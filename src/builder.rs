@@ -7,8 +7,8 @@ use noodles::sam::{self, alignment::record::Cigar as _, alignment::record::Flags
 
 use crate::auxiliary;
 use crate::error::{Error, Result};
-use crate::footprint::{Footprint, Located};
-use crate::pileup::{EntryKind, LiveRecord, NONE, Pileup, RawEntry, name_hash, record_name};
+use crate::footprint::Footprint;
+use crate::pileup::{LiveRecord, Pileup, RawEntry, name_hash, record_name};
 use crate::source::{AlignmentRecord, RecordSource};
 
 /// Secondary, QC-fail, duplicate, and supplementary reads, which are left out by default.
@@ -581,31 +581,18 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
 
     fn collect(&mut self, pos: i64) {
         self.entries.clear();
+        let entries = &mut self.entries;
         for &index in &self.active {
-            let footprint = &mut self.slots[index as usize].footprint;
-            let entry = |kind, offset| RawEntry {
-                slot: index,
-                kind,
-                offset,
-                length: 0,
-            };
-            match footprint.locate(pos) {
-                Some(Located::Base(offset)) => self.entries.push(entry(EntryKind::Base, offset)),
-                Some(Located::Deletion(next)) => {
-                    self.entries
-                        .push(entry(EntryKind::Deletion, next.unwrap_or(NONE)));
-                }
-                Some(Located::Skip) => self.entries.push(entry(EntryKind::Skip, NONE)),
-                None => {}
-            }
-            if let Some(insertion) = footprint.insertion_at(pos) {
-                self.entries.push(RawEntry {
-                    slot: index,
-                    kind: EntryKind::Insertion,
-                    offset: insertion.offset,
-                    length: insertion.length,
+            self.slots[index as usize]
+                .footprint
+                .entries_at(pos, |kind, offset, length| {
+                    entries.push(RawEntry {
+                        slot: index,
+                        kind,
+                        offset,
+                        length,
+                    });
                 });
-            }
         }
     }
 }
