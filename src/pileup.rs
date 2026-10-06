@@ -300,9 +300,12 @@ impl<'a, R: AlignmentRecord> Pileup<'a, R> {
     ///   holds one, at the higher of their qualities, or else a skip.
     /// - Insertion entries are no part of a template, so a read whose only entry here is an
     ///   insertion adds nothing to its template, and is in none without another read here.
-    /// - The quality floor is not applied to the reads: the strategies see every base, as fgumi
-    ///   does, and [`passes`](PileupTemplate::passes) compares the template's quality to a floor,
-    ///   so two agreeing bases under it can make a template at it.
+    /// - A read under the pileup's quality floor does not vote, as [`bases`](Pileup::bases),
+    ///   [`qualities`](Pileup::qualities), and [`filtered_depth`](Pileup::filtered_depth) leave it
+    ///   out: a base, or a deletion judged by its next base, under `min_base_quality`. So a mate
+    ///   under the floor neither masks nor lowers the other mate's base. A template none of whose
+    ///   reads votes holds no base or quality, and [`passes`](PileupTemplate::passes) compares a
+    ///   template's quality to another floor.
     /// - A template with more than two reads here, as when supplementary records are piled up,
     ///   calls them in input order.
     pub fn templates(
@@ -332,6 +335,7 @@ impl<'a, R: AlignmentRecord> Pileup<'a, R> {
                 }),
                 agreement,
                 disagreement,
+                i64::from(self.min_base_quality),
             );
             template.called = called;
         }
@@ -625,13 +629,14 @@ impl<'a, R: AlignmentRecord> PileupTemplate<'a, R> {
             .chain(self.others.iter().copied())
     }
 
-    /// What the template holds here: a base if any of its reads does, or else a deletion if any of
-    /// them does, or else a skip.
+    /// What the template holds here: a base if a read's base votes, or else a deletion if a read's
+    /// deletion votes, or else, with no vote, a base if any of its reads holds one, or else a
+    /// deletion if any of them does, or else a skip.
     pub fn kind(&self) -> EntryKind {
         self.called.kind
     }
 
-    /// Whether the template holds a deletion here, and no base.
+    /// Whether the template holds a deletion here, and no base that votes.
     pub fn is_deletion(&self) -> bool {
         self.called.kind == EntryKind::Deletion
     }
@@ -646,12 +651,14 @@ impl<'a, R: AlignmentRecord> PileupTemplate<'a, R> {
         self.called.base == Some(b'N')
     }
 
-    /// The template's upper-cased base, its reads' bases called into one, or `None` without one.
+    /// The template's upper-cased base, its voting reads' bases called into one, or `None` without
+    /// one.
     pub fn base(&self) -> Option<u8> {
         self.called.base
     }
 
-    /// The quality of the template's base, or for a deletion of the next base, or `None`.
+    /// The quality of the template's base, or for a deletion of the next base, or `None` without a
+    /// vote.
     pub fn quality(&self) -> Option<u8> {
         self.called.quality
     }

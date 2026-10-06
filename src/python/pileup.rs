@@ -948,10 +948,12 @@ impl Pileup {
     /// read holds one has that base at its own quality; a template with no base is a deletion if
     /// either read holds one, at the higher of their qualities, or else a skip. Insertion entries
     /// are no part of a template, so a read whose only entry here is an insertion adds nothing to
-    /// its template. The strategies see every base, as fgumi does, and `min_base_quality` is not
-    /// applied, so compare a template's `qual` to it: two agreeing bases under the floor can make
-    /// a template at it. A template with more than two reads here, as when supplementary records
-    /// are piled up, calls them in the order of `pileups`.
+    /// its template. A read under `min_base_quality` does not vote, as `bases`, `qualities`, and
+    /// `filtered_depth` leave it out: a base, or a deletion judged by its next base, under the
+    /// floor. So a mate under the floor neither masks nor lowers the other mate's base, and a
+    /// template none of whose reads votes has no `base` or `qual`. A template with more than two
+    /// reads here, as when supplementary records are piled up, calls them in the order of
+    /// `pileups`.
     ///
     /// Args:
     ///     agreement: how the quality of two reads holding the same base is made.
@@ -982,8 +984,9 @@ impl Pileup {
                         quality: held.quality()?,
                     });
                 }
+                let floor = self.min_base_quality;
                 Ok(PileupTemplate {
-                    called: overlap::observe(observations, agreement, disagreement),
+                    called: overlap::observe(observations, agreement, disagreement, floor),
                     reads,
                     position: self.reference_pos,
                     pileups: PyOnceLock::new(),
@@ -1084,26 +1087,27 @@ impl PileupTemplate {
         Ok(reads.bind(py).clone())
     }
 
-    /// Whether the template holds a base, a deletion, or a skip: a base if any of its reads does,
-    /// or else a deletion if any of them does.
+    /// Whether the template holds a base, a deletion, or a skip: a base if a read's base votes, or
+    /// else a deletion if a read's deletion votes, or else, with no vote, what its reads hold.
     #[getter]
     fn pileup_type<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         pileup_read_type(py, self.called.kind)
     }
 
-    /// The template's upper-cased base, its reads' bases called into one, or `None` without one.
+    /// The template's upper-cased base, its voting reads' bases called into one, or `None`.
     #[getter]
     fn base(&self) -> Option<char> {
         self.called.base.map(char::from)
     }
 
-    /// The quality of the template's base, or of the next base for a deletion, or `None`.
+    /// The quality of the template's base, or of the next base for a deletion, or `None` without
+    /// a vote.
     #[getter]
     fn qual(&self) -> Option<u8> {
         self.called.quality
     }
 
-    /// Whether the template holds a deletion at the position, and no base.
+    /// Whether the template holds a deletion at the position, and no base that votes.
     #[getter]
     fn is_del(&self) -> bool {
         self.called.kind == EntryKind::Deletion

@@ -23,7 +23,7 @@ chr1	10	templates	plain/1/base/A/40/False/(10,None) snv/1/base/T/40/False/(8,Non
 chr1	11	all	4	4	CCGC	40,40,40,40	plain/0/base/11/11/None/0/C/40/None/None snv/0/base/9/9/None/0/C/40/None/None mnv/16/base/7/7/None/0/G/40/None/None lowqual/0/base/6/6/None/0/C/40/None/None
 chr1	11	templates	plain/1/base/C/40/False/(11,None) snv/1/base/C/40/False/(9,None) mnv/1/base/G/40/True/(12,None) lowqual/1/base/C/40/False/(6,None)
 chr1	12	all	4	3	GGG	40,40,40	plain/0/base/12/12/None/0/G/40/None/None snv/0/base/10/10/None/0/G/40/None/None mnv/16/base/8/8/None/0/G/40/None/None lowqual/0/base/7/7/None/0/G/2/None/None
-chr1	12	templates	plain/1/base/G/40/False/(12,None) snv/1/base/G/40/False/(10,None) mnv/1/base/G/40/True/(11,None) lowqual/1/base/G/2/False/(7,None)
+chr1	12	templates	plain/1/base/G/40/False/(12,None) snv/1/base/G/40/False/(10,None) mnv/1/base/G/40/True/(11,None) lowqual/1/base/None/None/False/(7,None)
 chr1	13	all	4	4	TTTT	40,40,40,40	plain/0/base/13/13/None/0/T/40/None/None snv/0/base/11/11/None/0/T/40/None/None mnv/16/base/9/9/None/0/T/40/None/None lowqual/0/base/8/8/None/0/T/40/None/None
 chr1	13	templates	plain/1/base/T/40/False/(13,None) snv/1/base/T/40/False/(11,None) mnv/1/base/T/40/True/(10,None) lowqual/1/base/T/40/False/(8,None)
 chr1	14	all	4	4	TTTT	40,40,40,40	plain/0/base/14/14/None/0/T/40/None/None snv/0/base/12/12/None/0/T/40/None/None mnv/16/base/10/10/None/0/T/40/None/None lowqual/0/base/9/9/None/0/T/40/None/None
@@ -103,7 +103,7 @@ chr1	50	templates	pair/2/base/T/80/False/(10,9)
 chr1	51	all	2	2	AA	40,40	pair/99/base/11/11/None/0/A/40/None/None pair/147/base/6/6/None/0/A/40/None/None
 chr1	51	templates	pair/2/base/A/80/False/(11,8)
 chr1	52	all	2	1	G	40	pair/99/base/12/12/None/0/G/40/None/None pair/147/base/7/7/None/0/A/20/None/None
-chr1	52	templates	pair/2/base/G/20/False/(12,7)
+chr1	52	templates	pair/2/base/G/40/False/(12,7)
 chr1	53	all	2	2	GG	40,40	pair/99/base/13/13/None/0/G/40/None/None pair/147/base/8/8/None/0/G/40/None/None
 chr1	53	templates	pair/2/base/G/80/False/(13,6)
 chr1	54	all	2	2	CC	40,40	pair/99/base/14/14/None/0/C/40/None/None pair/147/base/9/9/None/0/C/40/None/None

@@ -288,13 +288,20 @@ def test_insertion_entries_are_no_part_of_a_template() -> None:
     assert [read.pileup_type for read in templates[0].reads] == [BASE, BASE]
 
 
-def test_the_floor_applies_to_a_templates_quality_and_not_to_its_reads() -> None:
+def test_a_read_under_the_floor_does_not_vote() -> None:
     pileup = mates("C", 10, "C", 10)
-    assert (pileup.min_base_quality, pileup.filtered_depth, pileup.templates()[0].qual) == (
-        13,
-        0,
-        20,
-    )
+    assert (pileup.min_base_quality, pileup.filtered_depth) == (13, 0)
+    template = pileup.templates()[0]
+    assert (len(template.reads), called(template)) == (2, ("t", "base", None, None))
+    unfloored = Pileup.from_alignments([read.alignment for read in pileup.pileups], "chr1", 12, 0)
+    assert called(unfloored.templates()[0]) == ("t", "base", "C", 20)
+
+
+def test_a_mate_under_the_floor_does_not_mask_the_other_mates_base() -> None:
+    pileup = mates("A", 35, "C", 5)
+    masked = pileup.templates(disagreement=DisagreementStrategy.mask_both)[0]
+    assert (masked.base, masked.qual) == ("A", 35)
+    assert (pileup.templates()[0].base, pileup.templates()[0].qual) == ("A", 35)
 
 
 def test_a_templates_strand_and_distances_are_its_first_reads() -> None:

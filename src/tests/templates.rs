@@ -26,14 +26,14 @@ fn called(template: &PileupTemplate<'_>) -> Called {
     )
 }
 
-/// The templates of the reads at a position, piled up without a filter.
+/// The templates of the reads at a position, piled up without a filter or a quality floor.
 fn templates_at(
     reads: &[Read],
     position: usize,
     agreement: AgreementStrategy,
     disagreement: DisagreementStrategy,
 ) -> Vec<Called> {
-    let mut builder = unfiltered(reads);
+    let mut builder = unfiltered(reads).min_base_quality(0);
     let pileup = builder.pileup("chr1", position).unwrap();
     pileup
         .templates(agreement, disagreement)
@@ -265,24 +265,84 @@ fn test_insertion_entries_are_no_part_of_a_template() {
     );
 }
 
+/// The templates of the reads at a position under a quality floor and the default strategies.
+fn floored(reads: &[Read], position: usize, floor: u8) -> Vec<Called> {
+    let mut builder = unfiltered(reads).min_base_quality(floor);
+    let pileup = builder.pileup("chr1", position).unwrap();
+    pileup
+        .templates(
+            AgreementStrategy::default(),
+            DisagreementStrategy::default(),
+        )
+        .iter()
+        .map(called)
+        .collect()
+}
+
 #[test]
-fn test_the_floor_applies_to_a_templates_quality_and_not_to_its_reads() {
+fn test_a_read_under_the_floor_does_not_vote() {
     let reads = mates('C', 10, 'C', 10);
     let mut builder = unfiltered(&reads).min_base_quality(13);
     let pileup = builder.pileup("chr1", 12).unwrap();
     assert_eq!(pileup.filtered_depth(), 0);
     let templates = pileup.templates(
-        AgreementStrategy::Consensus,
+        AgreementStrategy::default(),
         DisagreementStrategy::default(),
     );
+    assert_eq!(templates[0].entries().count(), 2);
     assert_eq!(
-        (templates[0].quality(), templates[0].passes(13)),
-        (Some(20), true)
+        called(&templates[0]),
+        ("t".into(), EntryKind::Base, None, None)
     );
-    let templates = pileup.templates(AgreementStrategy::MaxQual, DisagreementStrategy::default());
+    assert!(!templates[0].passes(0));
     assert_eq!(
-        (templates[0].quality(), templates[0].passes(13)),
-        (Some(10), false)
+        floored(&reads, 12, 0),
+        [("t".into(), EntryKind::Base, Some('C'), Some(20))]
+    );
+    assert_eq!(
+        floored(&mates('C', 10, 'C', 30), 12, 13),
+        [("t".into(), EntryKind::Base, Some('C'), Some(30))]
+    );
+}
+
+#[test]
+fn test_a_mate_under_the_floor_neither_masks_nor_lowers_the_other_mates_base() {
+    let reads = mates('A', 35, 'C', 5);
+    for disagreement in DISAGREEMENTS {
+        let mut builder = unfiltered(&reads).min_base_quality(13);
+        let pileup = builder.pileup("chr1", 12).unwrap();
+        let templates = pileup.templates(AgreementStrategy::default(), disagreement);
+        assert_eq!(
+            (templates[0].base(), templates[0].quality()),
+            (Some(b'A'), Some(35)),
+            "{disagreement:?}"
+        );
+    }
+    let masked = templates_at(
+        &reads,
+        12,
+        AgreementStrategy::default(),
+        DisagreementStrategy::MaskBoth,
+    );
+    assert_eq!(masked[0].2, Some('N'));
+}
+
+#[test]
+fn test_a_deletion_votes_by_the_quality_of_its_next_base() {
+    let base = read("t", 10, "4M", "ACGT").flag(99).quals(&[30, 30, 5, 30]);
+    let deletion = read("t", 10, "2M1D2M", "ACTT")
+        .flag(147)
+        .quals(&[30, 30, 25, 30]);
+    assert_eq!(
+        floored(&[base.clone(), deletion], 12, 13),
+        [("t".into(), EntryKind::Deletion, None, Some(25))]
+    );
+    let shallow = read("t", 10, "2M1D2M", "ACTT")
+        .flag(147)
+        .quals(&[30, 30, 5, 30]);
+    assert_eq!(
+        floored(&[base, shallow], 12, 13),
+        [("t".into(), EntryKind::Base, None, None)]
     );
 }
 

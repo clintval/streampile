@@ -72,55 +72,69 @@ pub(crate) struct Observation {
 
 /// What a template holds at a position, from what its reads hold there, in input order.
 ///
-/// A read's base and the template's are called into one by the strategies, in input order. A
-/// no-call is left alone, so the other read's base stands, and two no-calls are an `N` at the
-/// higher quality. A read with a deletion or a skip holds no base, so a template with a base has it
-/// at its own quality. A template with no base holds a deletion at the higher of the deletions'
-/// qualities, or else a skip.
+/// Only a read whose quality is at the floor votes: its base, or its deletion, judged by the
+/// quality of its next base. The voting bases are called into one by the strategies, in input
+/// order. A no-call is left alone, so the other read's base stands, and two no-calls are an `N` at
+/// the higher quality. A read with a deletion or a skip holds no base, so a template with a voting
+/// base has it at its own quality. A template with no voting base holds a deletion at the higher
+/// of the voting deletions' qualities, or, with no vote at all, what its reads hold, a base if any
+/// of them does or else a deletion or a skip, with no base or quality.
 pub(crate) fn observe(
     reads: impl IntoIterator<Item = Observation>,
     agreement: AgreementStrategy,
     disagreement: DisagreementStrategy,
+    min_base_quality: i64,
 ) -> Observation {
-    let mut kind = EntryKind::Skip;
+    let mut held = EntryKind::Skip;
     let mut called: Option<(u8, u8)> = None;
     let mut deleted: Option<u8> = None;
     for read in reads {
-        match read.kind {
-            EntryKind::Base => {
-                kind = EntryKind::Base;
-                if let (Some(base), Some(quality)) = (read.base, read.quality) {
-                    called = Some(match called {
-                        Some(template) => call(template, (base, quality), agreement, disagreement),
-                        None => (base, quality),
-                    });
-                }
+        if rank(read.kind) > rank(held) {
+            held = read.kind;
+        }
+        let Some(quality) = read
+            .quality
+            .filter(|&quality| i64::from(quality) >= min_base_quality)
+        else {
+            continue;
+        };
+        match (read.kind, read.base) {
+            (EntryKind::Base, Some(base)) => {
+                called = Some(match called {
+                    Some(template) => call(template, (base, quality), agreement, disagreement),
+                    None => (base, quality),
+                });
             }
-            EntryKind::Deletion => {
-                if kind == EntryKind::Skip {
-                    kind = EntryKind::Deletion;
-                }
-                deleted = deleted.max(read.quality);
-            }
-            EntryKind::Skip | EntryKind::Insertion => {}
+            (EntryKind::Deletion, _) => deleted = deleted.max(Some(quality)),
+            _ => {}
         }
     }
-    match kind {
-        EntryKind::Base => Observation {
-            kind,
-            base: called.map(|(base, _)| base),
-            quality: called.map(|(_, quality)| quality),
+    match (called, deleted) {
+        (Some((base, quality)), _) => Observation {
+            kind: EntryKind::Base,
+            base: Some(base),
+            quality: Some(quality),
         },
-        EntryKind::Deletion => Observation {
-            kind,
+        (None, Some(quality)) => Observation {
+            kind: EntryKind::Deletion,
             base: None,
-            quality: deleted,
+            quality: Some(quality),
         },
-        EntryKind::Skip | EntryKind::Insertion => Observation {
-            kind: EntryKind::Skip,
+        (None, None) => Observation {
+            kind: held,
             base: None,
             quality: None,
         },
+    }
+}
+
+/// How much a kind of entry says about a position: a base most, then a deletion, then a skip.
+fn rank(kind: EntryKind) -> u8 {
+    match kind {
+        EntryKind::Base => 3,
+        EntryKind::Deletion => 2,
+        EntryKind::Skip => 1,
+        EntryKind::Insertion => 0,
     }
 }
 

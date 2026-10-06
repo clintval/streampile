@@ -79,6 +79,21 @@ mask_lower_qual G 40
 
 ```
 
+A mate whose base is under the quality floor does not vote, as it is left out of `bases`, so it neither masks nor lowers the other mate's base:
+
+```pycon
+>>> with (
+...     AlignmentFile("tests/data/reads.bam") as reads,
+...     StreamingPileupBuilder(reads, min_base_quality=30) as builder,
+... ):
+...     floored = builder.pileup("chr1", 52)
+>>>
+>>> template = floored.templates(disagreement=DisagreementStrategy.mask_both)[0]
+>>> floored.bases, template.base, template.qual
+(['G'], 'G', 40)
+
+```
+
 A template also holds its `reads`, its strand, and its distances to both of its ends:
 
 ```pycon
