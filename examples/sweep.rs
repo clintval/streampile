@@ -92,10 +92,7 @@ type Span = (usize, usize, usize);
 /// joined, as a `bedspec.Territory` joins them.
 fn territory(bed: &str, header: &noodles::sam::Header) -> Result<Vec<Span>, Box<dyn Error>> {
     let mut spans = Vec::new();
-    for line in bed
-        .lines()
-        .filter(|line| !(line.is_empty() || line.starts_with(['#', 't', 'b'])))
-    {
+    for line in bed.lines().filter(|line| !is_header(line)) {
         let mut fields = line.split('\t');
         let (Some(contig), Some(start), Some(end)) = (fields.next(), fields.next(), fields.next())
         else {
@@ -117,4 +114,30 @@ fn territory(bed: &str, header: &noodles::sam::Header) -> Result<Vec<Span>, Box<
         }
     }
     Ok(joined)
+}
+
+/// Whether a BED line is blank, a comment, or a `track` or `browser` line, rather than a span.
+fn is_header(line: &str) -> bool {
+    let first = line.split_whitespace().next();
+    first.is_none_or(|word| word.starts_with('#') || matches!(word, "track" | "browser"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_header;
+
+    #[test]
+    fn test_only_blank_comment_track_and_browser_lines_are_headers() {
+        let lines = [
+            "",
+            "# a comment",
+            "track name=panel",
+            "browser position chr1:1-100",
+            "tig00000001\t0\t10",
+            "big\t5\t8",
+            "trackless\t5\t8",
+        ];
+        let headers: Vec<bool> = lines.iter().map(|line| is_header(line)).collect();
+        assert_eq!(headers, [true, true, true, true, false, false, false]);
+    }
 }

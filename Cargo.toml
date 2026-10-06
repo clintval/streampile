@@ -28,6 +28,10 @@ name = "streampile"
 [package.metadata.docs.rs]
 features = ["testing"]
 
+[[example]]
+name = "sweep"
+test = true
+
 [features]
 default = ["libdeflate"]
 libdeflate = ["noodles-bgzf/libdeflate"]
