@@ -4,6 +4,7 @@ mod fixture;
 mod footprint;
 mod pileup;
 mod templates;
+mod testing;
 
 use std::io;
 

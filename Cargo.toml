@@ -29,6 +29,7 @@ name = "streampile"
 default = ["libdeflate"]
 libdeflate = ["noodles-bgzf/libdeflate"]
 python = ["dep:pyo3"]
+testing = ["noodles/core"]
 
 [dependencies]
 bstr = "1.12"

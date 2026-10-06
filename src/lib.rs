@@ -10,6 +10,8 @@ mod pileup;
 mod python;
 mod source;
 mod template;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 #[cfg(test)]
 mod tests;
 
