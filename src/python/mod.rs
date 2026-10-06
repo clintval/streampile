@@ -115,10 +115,12 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     bridge::verify(module.py())?;
     module.add_function(wrap_pyfunction!(bridge::direct_bridge, module)?)?;
     module.add_class::<builder::StreamingPileupBuilder>()?;
+    module.add_class::<builder::Columns>()?;
     module.add_class::<pileup::Pileup>()?;
     module.add_class::<pileup::PileupRead>()?;
     module.add_class::<pileup::PileupTemplate>()?;
     module.add_class::<tabulate::Tabulation>()?;
+    module.add_class::<tabulate::ContigRows>()?;
     module.add_function(wrap_pyfunction!(tabulate::normalize_allele, module)?)?;
     module.add("DEFAULT_EXCLUDE_FLAGS", DEFAULT_EXCLUDE_FLAGS.bits())?;
     module.add("DEFAULT_MIN_BASE_QUALITY", DEFAULT_MIN_BASE_QUALITY)?;
