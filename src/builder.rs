@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::io::{self, Read};
+use std::io;
 use std::mem;
 
 use bstr::{BStr, ByteSlice};
@@ -8,11 +8,12 @@ use noodles::sam::{self, alignment::record::Cigar as _, alignment::record::Flags
 
 use crate::auxiliary::{self, AuxValue};
 use crate::error::{Error, Result};
-use crate::footprint::Located;
+use crate::footprint::{Footprint, Located};
 use crate::pileup::{
     EntryKind, LiveRecord, NONE, OtherEnd, Pileup, RawEntry, name_hash, quality_of, record_name,
     templates_kept,
 };
+use crate::source::{AlignmentRecord, RecordSource};
 
 /// Secondary, QC-fail, duplicate, and supplementary reads, which are left out by default.
 pub const DEFAULT_EXCLUDE_FLAGS: Flags = Flags::from_bits_retain(0xF00);
@@ -23,55 +24,8 @@ pub const DEFAULT_MIN_BASE_QUALITY: u8 = 13;
 
 const UNPLACED: usize = usize::MAX;
 
-/// A coordinate-sorted stream of BAM records, which may be an unindexed pipe.
-pub trait RecordSource {
-    /// Reads the next record into `record`, reusing its buffer, and returns `false` at the end.
-    fn read_record(&mut self, record: &mut bam::Record) -> io::Result<bool>;
-}
-
-impl<R: Read> RecordSource for bam::io::Reader<R> {
-    fn read_record(&mut self, record: &mut bam::Record) -> io::Result<bool> {
-        bam::io::Reader::read_record(self, record).map(|read| read > 0)
-    }
-}
-
-impl<S: RecordSource + ?Sized> RecordSource for &mut S {
-    fn read_record(&mut self, record: &mut bam::Record) -> io::Result<bool> {
-        (**self).read_record(record)
-    }
-}
-
-impl<S: RecordSource + ?Sized> RecordSource for Box<S> {
-    fn read_record(&mut self, record: &mut bam::Record) -> io::Result<bool> {
-        (**self).read_record(record)
-    }
-}
-
-/// A [`RecordSource`] over any iterator of records.
-#[derive(Debug)]
-pub struct Records<I>(I);
-
-impl<I> Records<I> {
-    /// Wraps an iterator of records.
-    pub fn new(records: I) -> Self {
-        Self(records)
-    }
-}
-
-impl<I: Iterator<Item = io::Result<bam::Record>>> RecordSource for Records<I> {
-    fn read_record(&mut self, record: &mut bam::Record) -> io::Result<bool> {
-        match self.0.next() {
-            Some(next) => {
-                *record = next?;
-                Ok(true)
-            }
-            None => Ok(false),
-        }
-    }
-}
-
-type ReadFilter<'f> = Box<dyn FnMut(&bam::Record) -> bool + Send + 'f>;
-type Tap<'f> = Box<dyn FnMut(bam::Record) -> io::Result<()> + Send + 'f>;
+type ReadFilter<'f, R> = Box<dyn FnMut(&R) -> io::Result<bool> + Send + 'f>;
+type Tap<'f, R> = Box<dyn FnMut(R) -> io::Result<()> + Send + 'f>;
 
 #[derive(Clone, Debug)]
 struct Options {
@@ -142,9 +96,9 @@ pub struct StreamingPileupBuilder<'f, S: RecordSource> {
     source: S,
     header: sam::Header,
     options: Options,
-    read_filter: Option<ReadFilter<'f>>,
-    tap: Option<Tap<'f>>,
-    pub(crate) slots: Vec<LiveRecord>,
+    read_filter: Option<ReadFilter<'f, S::Record>>,
+    tap: Option<Tap<'f, S::Record>>,
+    pub(crate) slots: Vec<LiveRecord<S::Record>>,
     pub(crate) free: Vec<u32>,
     pub(crate) active: Vec<u32>,
     pub(crate) waiting: VecDeque<u32>,
@@ -251,9 +205,16 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     /// pass the other filters and align to the contig piled up, and a record it rejects still
     /// goes to the tap.
     #[must_use]
-    pub fn read_filter(
+    pub fn read_filter(self, mut read_filter: impl FnMut(&S::Record) -> bool + Send + 'f) -> Self {
+        self.try_read_filter(move |record| Ok(read_filter(record)))
+    }
+
+    /// Keeps a record for pileups only when this returns `Ok(true)`, as
+    /// [`read_filter`](StreamingPileupBuilder::read_filter) does, and stops at an error.
+    #[must_use]
+    pub(crate) fn try_read_filter(
         mut self,
-        read_filter: impl FnMut(&bam::Record) -> bool + Send + 'f,
+        read_filter: impl FnMut(&S::Record) -> io::Result<bool> + Send + 'f,
     ) -> Self {
         self.read_filter = Some(Box::new(read_filter));
         self
@@ -264,7 +225,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     /// With a tap, [`close`](StreamingPileupBuilder::close) reads the rest of the input, so an
     /// output written by the tap is complete.
     #[must_use]
-    pub fn tap(mut self, tap: impl FnMut(bam::Record) -> io::Result<()> + Send + 'f) -> Self {
+    pub fn tap(mut self, tap: impl FnMut(S::Record) -> io::Result<()> + Send + 'f) -> Self {
         self.tap = Some(Box::new(tap));
         self
     }
@@ -274,9 +235,36 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         &self.header
     }
 
+    /// Whether a record passes the flag, mapping-quality, and proper-pair filters, is placed
+    /// with a reference-consuming CIGAR operator, and then passes the read filter, so that it is
+    /// piled up wherever it spans.
+    pub fn accepts(&mut self, record: &S::Record) -> Result<bool> {
+        let bam = record.bam();
+        let invalid = |source| Error::InvalidRecord {
+            name: record_name(bam),
+            source,
+        };
+        let start = bam.alignment_start().transpose().map_err(invalid)?;
+        let placed = bam.reference_sequence_id().is_some()
+            && self.passes(bam.flags(), bam.mapping_quality().map_or(255, u8::from))
+            && Footprint::default()
+                .fill(
+                    start.map_or(-1, |start| usize::from(start) as i64 - 1),
+                    bam.cigar().as_bytes(),
+                    bam.sequence().len(),
+                )
+                .map_err(invalid)?;
+        Ok(placed
+            && start.is_some()
+            && match self.read_filter.as_mut() {
+                Some(read_filter) => read_filter(record)?,
+                None => true,
+            })
+    }
+
     /// Advances to a position on a contig, at or after the last one, and piles up the records
     /// there.
-    pub fn pileup(&mut self, contig: &str, position: usize) -> Result<Pileup<'_>> {
+    pub fn pileup(&mut self, contig: &str, position: usize) -> Result<Pileup<'_, S::Record>> {
         if self.stage != Stage::Open {
             return Err(Error::Closed);
         }
@@ -290,7 +278,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         &mut self,
         reference_sequence_id: usize,
         position: usize,
-    ) -> Result<Pileup<'_>> {
+    ) -> Result<Pileup<'_, S::Record>> {
         if self.stage != Stage::Open {
             return Err(Error::Closed);
         }
@@ -370,7 +358,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
                 tap(mem::take(&mut self.slots[index as usize].record))?;
             }
             if !self.exhausted {
-                let mut record = bam::Record::default();
+                let mut record = S::Record::default();
                 while self.source.read_record(&mut record)? {
                     tap(mem::take(&mut record))?;
                 }
@@ -383,6 +371,13 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         self.next = None;
         self.stage = Stage::Closed;
         Ok(())
+    }
+
+    fn passes(&self, flags: Flags, mapping_quality: u8) -> bool {
+        !(flags.intersects(self.options.exclude_flags)
+            || mapping_quality < self.options.min_mapping_quality
+            || (self.options.proper_pairs_only && !flags.is_properly_segmented())
+            || flags.is_unmapped())
     }
 
     fn reference_sequence_id(&self, contig: &str) -> Result<usize> {
@@ -399,7 +394,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
             .map_or(b"".as_bstr(), |(name, _)| name.as_bstr())
     }
 
-    fn view(&self, reference_sequence_id: usize, position: usize) -> Pileup<'_> {
+    fn view(&self, reference_sequence_id: usize, position: usize) -> Pileup<'_, S::Record> {
         Pileup {
             reference_sequence_id,
             reference_sequence_name: self.name_of(reference_sequence_id),
@@ -409,6 +404,11 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
             slots: &self.slots,
             aux_tags: &self.options.aux_tags,
         }
+    }
+
+    fn free(&mut self, index: u32) {
+        self.slots[index as usize].record.release();
+        self.free.push(index);
     }
 
     fn advance(&mut self, reference_sequence_id: usize, pos: i64) -> Result<()> {
@@ -427,7 +427,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
             }
             if key < self.last_key {
                 return Err(Error::OutOfOrder {
-                    name: record_name(&live.record),
+                    name: record_name(live.record.bam()),
                 });
             }
             self.last_key = key;
@@ -443,7 +443,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
             if let Ok(true) = accepted {
                 self.activate(index);
             } else if self.tap.is_none() {
-                self.free.push(index);
+                self.free(index);
             }
             accepted?;
         }
@@ -470,14 +470,14 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
                     if tapped {
                         self.waiting.push_back(index);
                     } else {
-                        self.free.push(index);
+                        self.free(index);
                     }
                     return Err(error.into());
                 }
                 self.next = Some(index);
             }
             read => {
-                self.free.push(index);
+                self.free(index);
                 read?;
                 self.exhausted = true;
             }
@@ -486,40 +486,40 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     }
 
     fn accept(&mut self, index: u32, pos: i64) -> Result<bool> {
-        let live = &mut self.slots[index as usize];
-        let flags = live.flags;
-        let mapping_quality = live.record.mapping_quality().map_or(255, u8::from);
-        if flags.intersects(self.options.exclude_flags)
-            || mapping_quality < self.options.min_mapping_quality
-            || (self.options.proper_pairs_only && !flags.is_properly_segmented())
-            || flags.is_unmapped()
-            || live.start < 0
-        {
+        let live = &self.slots[index as usize];
+        let mapping_quality = live.record.bam().mapping_quality().map_or(255, u8::from);
+        if !self.passes(live.flags, mapping_quality) || live.start < 0 {
             return Ok(false);
         }
-        let stored_bases = live.record.sequence().len();
+        let live = &mut self.slots[index as usize];
+        let record = live.record.bam();
+        let invalid = |source| Error::InvalidRecord {
+            name: record_name(record),
+            source,
+        };
         let placed = live
             .footprint
-            .fill(live.start, live.record.cigar().as_bytes(), stored_bases)
-            .map_err(|source| Error::InvalidRecord {
-                name: record_name(&live.record),
-                source,
-            })?;
+            .fill(
+                live.start,
+                record.cigar().as_bytes(),
+                record.sequence().len(),
+            )
+            .map_err(invalid)?;
         if !placed {
             return Ok(false);
         }
         if let Some(read_filter) = self.read_filter.as_mut()
-            && !read_filter(&live.record)
+            && !read_filter(&live.record)?
         {
             return Ok(false);
         }
         if live.footprint.end <= pos {
             return Ok(false);
         }
-        live.name_hash = name_hash(&live.record);
+        live.name_hash = name_hash(live.record.bam());
         index_fields(live, &self.options.aux_tags).map_err(|error| match error {
             Error::Io(source) => Error::InvalidRecord {
-                name: record_name(&live.record),
+                name: record_name(live.record.bam()),
                 source,
             },
             error => error,
@@ -545,7 +545,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
                 kept += 1;
                 min_end = min_end.min(end);
             } else if self.tap.is_none() {
-                self.free.push(index);
+                self.free(index);
             }
         }
         active.truncate(kept);
@@ -610,8 +610,12 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         let slots = &self.slots;
         let kept = templates_kept(&self.entries, |raw| {
             let live = &slots[raw.slot as usize];
-            let passes = quality_of(&live.record, raw.kind, raw.offset).is_some_and(|q| q >= floor);
-            (live.template(), raw.slot as usize, passes)
+            let quality = quality_of(live.record.bam(), raw.kind, raw.offset);
+            (
+                live.template(),
+                raw.slot as usize,
+                quality.is_some_and(|q| q >= floor),
+            )
         });
         let mut kept = kept.into_iter();
         self.entries.retain(|_| kept.next().unwrap_or(true));
@@ -637,7 +641,7 @@ pub struct Columns<'b, 'f, S: RecordSource> {
 
 impl<S: RecordSource> Columns<'_, '_, S> {
     /// The pileup at the next position of the span, or `None` past its end.
-    pub fn next_pileup(&mut self) -> Option<Result<Pileup<'_>>> {
+    pub fn next_pileup(&mut self) -> Option<Result<Pileup<'_, S::Record>>> {
         if self.next >= self.end {
             return None;
         }
@@ -648,8 +652,8 @@ impl<S: RecordSource> Columns<'_, '_, S> {
 }
 
 /// Reads a record's contig, start, and flags, and with a tap, where the builder is past it.
-fn describe(live: &mut LiveRecord, tapped: bool) -> io::Result<()> {
-    let record = &live.record;
+fn describe<R: AlignmentRecord>(live: &mut LiveRecord<R>, tapped: bool) -> io::Result<()> {
+    let record = live.record.bam();
     live.reference_id = record
         .reference_sequence_id()
         .transpose()?
@@ -673,14 +677,15 @@ fn describe(live: &mut LiveRecord, tapped: bool) -> io::Result<()> {
 }
 
 /// Finds the indexed auxiliary fields of an accepted record, and the 5′ end of its mate.
-fn index_fields(live: &mut LiveRecord, tags: &[[u8; 2]]) -> Result<()> {
+fn index_fields<R: AlignmentRecord>(live: &mut LiveRecord<R>, tags: &[[u8; 2]]) -> Result<()> {
     live.fields.clear();
     live.fields.resize(tags.len(), None);
+    let record = live.record.bam();
     let mut mate_cigar = MateCigar::Unsearched;
     if !tags.is_empty() {
         let fields = &mut live.fields;
         let mut found = None;
-        auxiliary::walk(live.record.data().as_bytes(), |tag, field| {
+        auxiliary::walk(record.data().as_bytes(), |tag, field| {
             if tag == *b"MC" {
                 found.get_or_insert(field);
             }
@@ -692,24 +697,37 @@ fn index_fields(live: &mut LiveRecord, tags: &[[u8; 2]]) -> Result<()> {
         })?;
         mate_cigar = found.map_or(MateCigar::Missing, MateCigar::Found);
     }
-    live.other_end = other_end(live, mate_cigar)?;
+    live.other_end = other_end(
+        record,
+        live.reference_id,
+        live.start,
+        live.footprint.end,
+        mate_cigar,
+    )?;
     Ok(())
 }
 
 /// Where a record's `MC` field is, if it has been looked for.
 #[derive(Clone, Copy)]
-enum MateCigar {
+pub(crate) enum MateCigar {
     Unsearched,
     Missing,
     Found(auxiliary::Field),
 }
 
-/// Where the 5′ end of the mate of a read in an FR pair is.
+/// Where the 5′ end of the mate of a read in an FR pair is, for a read placed from `start` to
+/// `end` on the contig with index `reference_id`.
 ///
 /// For a reverse read it is the mate's start. For a forward read it is the end of the mate's
 /// alignment, from its start and its `MC` tag alone, never from the template length (TLEN).
-fn other_end(live: &LiveRecord, mate_cigar: MateCigar) -> Result<OtherEnd> {
-    let flags = live.flags;
+pub(crate) fn other_end(
+    record: &bam::Record,
+    reference_id: usize,
+    start: i64,
+    end: i64,
+    mate_cigar: MateCigar,
+) -> Result<OtherEnd> {
+    let flags = record.flags();
     let reverse = flags.is_reverse_complemented();
     if !flags.is_segmented()
         || flags.is_mate_unmapped()
@@ -717,8 +735,7 @@ fn other_end(live: &LiveRecord, mate_cigar: MateCigar) -> Result<OtherEnd> {
     {
         return Ok(OtherEnd::None);
     }
-    let record = &live.record;
-    if record.mate_reference_sequence_id().transpose()? != Some(live.reference_id) {
+    if record.mate_reference_sequence_id().transpose()? != Some(reference_id) {
         return Ok(OtherEnd::None);
     }
     let Some(mate_start) = record.mate_alignment_start().transpose()? else {
@@ -726,7 +743,7 @@ fn other_end(live: &LiveRecord, mate_cigar: MateCigar) -> Result<OtherEnd> {
     };
     let mate_start = usize::from(mate_start) as i64 - 1;
     if reverse {
-        return Ok(if mate_start < live.footprint.end {
+        return Ok(if mate_start < end {
             OtherEnd::At(mate_start)
         } else {
             OtherEnd::None
@@ -742,7 +759,7 @@ fn other_end(live: &LiveRecord, mate_cigar: MateCigar) -> Result<OtherEnd> {
         None => OtherEnd::MissingMateCigar,
         Some(value) => match mate_span(value) {
             None => OtherEnd::InvalidMateCigar,
-            Some(span) if live.start < mate_start + span => OtherEnd::At(mate_start + span - 1),
+            Some(span) if start < mate_start + span => OtherEnd::At(mate_start + span - 1),
             Some(_) => OtherEnd::None,
         },
     })

@@ -37,6 +37,8 @@ struct Counted {
 }
 
 impl RecordSource for Counted {
+    type Record = bam::Record;
+
     fn read_record(&mut self, record: &mut bam::Record) -> io::Result<bool> {
         match self.records.next() {
             Some(next) => {

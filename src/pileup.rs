@@ -8,6 +8,7 @@ use noodles::sam::alignment::record::Flags;
 use crate::auxiliary::{self, AuxElement, AuxValue, Field};
 use crate::error::{Error, Result};
 use crate::footprint::Footprint;
+use crate::source::AlignmentRecord;
 
 /// The base quality of every base of a read with no stored qualities (QUAL `*`), as in htslib.
 pub const MISSING_BASE_QUALITY: u8 = 255;
@@ -57,8 +58,8 @@ pub(crate) enum OtherEnd {
 
 /// One record held by a builder, with what was worked out once when it was read.
 #[derive(Debug)]
-pub(crate) struct LiveRecord {
-    pub record: bam::Record,
+pub(crate) struct LiveRecord<R = bam::Record> {
+    pub record: R,
     pub reference_id: usize,
     pub start: i64,
     pub end: i64,
@@ -69,10 +70,10 @@ pub(crate) struct LiveRecord {
     pub name_hash: u64,
 }
 
-impl Default for LiveRecord {
+impl<R: Default> Default for LiveRecord<R> {
     fn default() -> Self {
         Self {
-            record: bam::Record::default(),
+            record: R::default(),
             reference_id: usize::MAX,
             start: -1,
             end: 0,
@@ -85,12 +86,12 @@ impl Default for LiveRecord {
     }
 }
 
-impl LiveRecord {
+impl<R: AlignmentRecord> LiveRecord<R> {
     /// The record's template, by name.
     pub fn template(&self) -> Template<'_> {
         Template {
             hash: self.name_hash,
-            name: self.record.name().map_or(b"*", |name| name.as_bytes()),
+            name: name_of(self.record.bam()),
         }
     }
 }
@@ -136,10 +137,15 @@ impl Hasher for Prehashed {
     }
 }
 
+/// A record's name, `*` for a record with none.
+pub(crate) fn name_of(record: &bam::Record) -> &[u8] {
+    record.name().map_or(b"*", |name| name.as_bytes())
+}
+
 /// The hash of a record's name, `*` for a record with none.
 pub(crate) fn name_hash(record: &bam::Record) -> u64 {
     let mut hasher = DefaultHasher::new();
-    hasher.write(record.name().map_or(b"*", |name| name.as_bytes()));
+    hasher.write(name_of(record));
     hasher.finish()
 }
 
@@ -190,18 +196,28 @@ pub(crate) struct RawEntry {
 /// [`filtered_depth`](Pileup::filtered_depth), [`bases`](Pileup::bases), and
 /// [`qualities`](Pileup::qualities), and to choosing the mate a builder keeps when it leaves out
 /// overlapping mates.
-#[derive(Clone, Copy, Debug)]
-pub struct Pileup<'a> {
+///
+/// `R` is the type of record the builder's source reads: [`bam::Record`] for a BAM reader.
+#[derive(Debug)]
+pub struct Pileup<'a, R = bam::Record> {
     pub(crate) reference_sequence_id: usize,
     pub(crate) reference_sequence_name: &'a BStr,
     pub(crate) position: usize,
     pub(crate) min_base_quality: u8,
     pub(crate) entries: &'a [RawEntry],
-    pub(crate) slots: &'a [LiveRecord],
+    pub(crate) slots: &'a [LiveRecord<R>],
     pub(crate) aux_tags: &'a [[u8; 2]],
 }
 
-impl<'a> Pileup<'a> {
+impl<R> Clone for Pileup<'_, R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<R> Copy for Pileup<'_, R> {}
+
+impl<'a, R: AlignmentRecord> Pileup<'a, R> {
     /// The index of the contig in the header.
     pub fn reference_sequence_id(&self) -> usize {
         self.reference_sequence_id
@@ -233,17 +249,17 @@ impl<'a> Pileup<'a> {
     }
 
     /// The entry at an index.
-    pub fn get(&self, index: usize) -> Option<PileupEntry<'a>> {
+    pub fn get(&self, index: usize) -> Option<PileupEntry<'a, R>> {
         self.entries.get(index).map(|raw| self.entry(*raw))
     }
 
     /// Every entry, in input order.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = PileupEntry<'a>> + 'a {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = PileupEntry<'a, R>> + 'a {
         let pileup = *self;
         self.entries.iter().map(move |raw| pileup.entry(*raw))
     }
 
-    fn entry(&self, raw: RawEntry) -> PileupEntry<'a> {
+    fn entry(&self, raw: RawEntry) -> PileupEntry<'a, R> {
         PileupEntry {
             live: &self.slots[raw.slot as usize],
             raw,
@@ -293,17 +309,30 @@ impl<'a> Pileup<'a> {
 }
 
 /// One read at one pileup position.
-#[derive(Clone, Copy, Debug)]
-pub struct PileupEntry<'a> {
-    live: &'a LiveRecord,
+#[derive(Debug)]
+pub struct PileupEntry<'a, R = bam::Record> {
+    pub(crate) live: &'a LiveRecord<R>,
     raw: RawEntry,
     position: i64,
     aux_tags: &'a [[u8; 2]],
 }
 
-impl<'a> PileupEntry<'a> {
-    /// The record.
+impl<R> Clone for PileupEntry<'_, R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<R> Copy for PileupEntry<'_, R> {}
+
+impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
+    /// The BAM record.
     pub fn record(&self) -> &'a bam::Record {
+        self.live.record.bam()
+    }
+
+    /// The record as the builder's source read it, which for a BAM reader is the BAM record.
+    pub fn source_record(&self) -> &'a R {
         &self.live.record
     }
 
@@ -375,7 +404,7 @@ impl<'a> PileupEntry<'a> {
     /// The upper-cased base here, or `None` without one, as for a read with no stored bases.
     pub fn base(&self) -> Option<u8> {
         self.query_position()
-            .and_then(|offset| self.live.record.sequence().get(offset))
+            .and_then(|offset| self.record().sequence().get(offset))
     }
 
     /// The base as the sequencer read it: the complement of [`base`](PileupEntry::base) for a
@@ -395,7 +424,7 @@ impl<'a> PileupEntry<'a> {
     /// htslib. It is `None` for an insertion, a skip, a deletion no base follows, or a read with
     /// no stored bases (SEQ `*`).
     pub fn quality(&self) -> Option<u8> {
-        quality_of(&self.live.record, self.raw.kind, self.raw.offset)
+        quality_of(self.record(), self.raw.kind, self.raw.offset)
     }
 
     /// Whether the entry has a quality at the floor: a base or a deletion followed by a base.
@@ -408,7 +437,7 @@ impl<'a> PileupEntry<'a> {
     /// read with no stored bases.
     pub fn inserted_bases(&self) -> Option<impl Iterator<Item = u8> + 'a> {
         let offset = self.insertion_offset()?;
-        let sequence = self.live.record.sequence();
+        let sequence = self.record().sequence();
         if sequence.is_empty() {
             return None;
         }
@@ -420,7 +449,7 @@ impl<'a> PileupEntry<'a> {
     /// qualities, and `None` for any other entry or a read with no stored bases.
     pub fn inserted_qualities(&self) -> Option<impl Iterator<Item = u8> + 'a> {
         let offset = self.insertion_offset()?;
-        let record = &self.live.record;
+        let record = self.record();
         let stored = record.sequence().len();
         if stored == 0 {
             return None;
@@ -467,31 +496,7 @@ impl<'a> PileupEntry<'a> {
     /// A forward read of an FR pair with no `MC` tag, or one that is not a CIGAR string spanning
     /// at least one base, is an error naming the read.
     pub fn template_end_distance(&self) -> Result<Option<usize>> {
-        let other = match self.live.other_end {
-            OtherEnd::None => return Ok(None),
-            OtherEnd::At(other) => other,
-            OtherEnd::MissingMateCigar => {
-                return Err(Error::MissingMateCigar {
-                    name: record_name(&self.live.record),
-                });
-            }
-            OtherEnd::InvalidMateCigar => {
-                let value = auxiliary::find(self.live.record.data().as_bytes(), *b"MC")?;
-                return Err(Error::InvalidMateCigar {
-                    name: record_name(&self.live.record),
-                    value: match value {
-                        Some(AuxValue::String(text)) => String::from_utf8_lossy(text).into_owned(),
-                        other => format!("{other:?}"),
-                    },
-                });
-            }
-        };
-        let distance = if self.is_reverse() {
-            self.position - other
-        } else {
-            other - self.position
-        };
-        Ok(usize::try_from(distance).ok())
+        template_end_distance(self.record(), self.live.other_end, self.position)
     }
 
     /// The value of one of the record's auxiliary fields, borrowed from the record.
@@ -500,7 +505,7 @@ impl<'a> PileupEntry<'a> {
     /// [`index_aux_tags`](crate::StreamingPileupBuilder::index_aux_tags) is found without a
     /// search; any other is searched for in the record's fields.
     pub fn aux(&self, tag: [u8; 2]) -> Result<Option<AuxValue<'a>>> {
-        let data = self.live.record.data().as_bytes();
+        let data = self.record().data().as_bytes();
         match self.aux_tags.iter().position(|indexed| *indexed == tag) {
             Some(index) => match self.live.fields.get(index).copied().flatten() {
                 Some(field) => field.value(data).map(Some),
@@ -558,4 +563,37 @@ pub(crate) fn record_name(record: &bam::Record) -> String {
     record
         .name()
         .map_or_else(|| "*".to_owned(), |name| name.to_str_lossy().into_owned())
+}
+
+/// The distance on the reference from a position to the template's other end, given where it is.
+pub(crate) fn template_end_distance(
+    record: &bam::Record,
+    other_end: OtherEnd,
+    position: i64,
+) -> Result<Option<usize>> {
+    let other = match other_end {
+        OtherEnd::None => return Ok(None),
+        OtherEnd::At(other) => other,
+        OtherEnd::MissingMateCigar => {
+            return Err(Error::MissingMateCigar {
+                name: record_name(record),
+            });
+        }
+        OtherEnd::InvalidMateCigar => {
+            let value = auxiliary::find(record.data().as_bytes(), *b"MC")?;
+            return Err(Error::InvalidMateCigar {
+                name: record_name(record),
+                value: match value {
+                    Some(AuxValue::String(text)) => String::from_utf8_lossy(text).into_owned(),
+                    other => format!("{other:?}"),
+                },
+            });
+        }
+    };
+    let distance = if record.flags().is_reverse_complemented() {
+        position - other
+    } else {
+        other - position
+    };
+    Ok(usize::try_from(distance).ok())
 }
