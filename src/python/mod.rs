@@ -63,7 +63,8 @@ fn sentence(message: &str) -> String {
     sentence
 }
 
-#[pymodule(gil_used = false)]
+// The bridge reads each pysam record in place, which only the GIL keeps from changing meanwhile.
+#[pymodule(gil_used = true)]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     bridge::verify(module.py())?;
     module.add_function(wrap_pyfunction!(bridge::direct_bridge, module)?)?;
