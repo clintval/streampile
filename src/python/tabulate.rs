@@ -323,7 +323,13 @@ struct Read {
 }
 
 impl Read {
-    fn fill(&mut self, record: &bam::Record) -> PyResult<()> {
+    /// Decodes a record, reading each aligned base written as `=` as the reference base there.
+    fn fill(
+        &mut self,
+        py: Python<'_>,
+        record: &bam::Record,
+        contig: &mut Reference,
+    ) -> PyResult<()> {
         let invalid = |error: std::io::Error| PyValueError::new_err(error.to_string());
         self.start = record
             .alignment_start()
@@ -370,6 +376,21 @@ impl Read {
                     query += length;
                 }
                 Kind::HardClip | Kind::Pad => {}
+            }
+        }
+        if self.sequence.contains(&b'=') {
+            for segment in &self.segments {
+                if segment.kind != SegmentKind::Aligned {
+                    continue;
+                }
+                let end = segment.reference + segment.length;
+                let bases = contig.get(py, segment.reference, end)?;
+                let from = segment.query.clamp(0, self.sequence.len() as i64) as usize;
+                for (base, &reference_base) in self.sequence[from..].iter_mut().zip(bases) {
+                    if *base == b'=' {
+                        *base = reference_base;
+                    }
+                }
             }
         }
         Ok(())
@@ -753,7 +774,7 @@ impl Tabulation {
         let mut bam = bam::Record::default();
         bridge::read(record, &mut bam)?;
         let mut read = Read::default();
-        read.fill(&bam)?;
+        read.fill(py, &bam, reference)?;
         let counted = self.options.alleles(py, &read, reference)?;
         let text = |bytes: Vec<u8>| String::from_utf8_lossy(&bytes).into_owned();
         Ok((
@@ -874,7 +895,7 @@ impl ContigRows {
             return Ok(());
         }
         Python::attach(|py| {
-            self.read.fill(&self.record)?;
+            self.read.fill(py, &self.record, &mut self.reference)?;
             let read = &self.read;
             let reverse = read.reverse;
             let counted = self.options.alleles(py, read, &mut self.reference)?;

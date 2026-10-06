@@ -543,6 +543,8 @@ impl PileupRead {
     }
 
     /// The upper-cased read base at the position, or `None` without one.
+    ///
+    /// A base written as `=`, a match to the reference, is `=`, as a pileup knows no reference.
     #[getter]
     fn base(&self) -> PyResult<Option<char>> {
         Ok(self.held.base()?.map(char::from))

@@ -69,9 +69,10 @@ class Tabulator:
     A run that spells the reference, such as an insertion and a deletion of the same base, is no
     allele, and its read is a reference read across it.
 
-    A read is counted for an allele only when none of its bases in the allele is an `N`, and its
-    mismatched and inserted bases are at the base-quality floor, as is the base before an insertion
-    that opens the allele and the base after a deletion that closes it: as in pysam's `pileup()` and
+    A read's aligned base written as `=` is the reference base there, as in SAM. A read is counted
+    for an allele only when none of its bases in the allele is an `N`, and its mismatched and
+    inserted bases are at the base-quality floor, as is the base before an insertion that opens the
+    allele and the base after a deletion that closes it: as in pysam's `pileup()` and
     `samtools mpileup`, an insertion is judged with the base it follows, and a deletion by the
     read's next base, not its anchor. Otherwise the read is not informative at any base of that
     allele. A read is never counted for an allele that starts with an indel with no aligned base

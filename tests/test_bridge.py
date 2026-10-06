@@ -111,3 +111,14 @@ def test_a_mate_cigar_that_is_not_a_string_is_piled_up_alike_by_both_bridges(
         with pytest.raises(ValueError, match=rf"^Read p has an invalid MC tag: {shown}\.$"):
             _ = pileup.pileups[0].template_end_distance
         assert pileup.pileups[1].template_end_distance is None
+
+
+def test_a_base_written_as_equals_piles_up_as_equals_on_both_bridges() -> None:
+    read = record("eq", 10, "4M", "A=GT")
+    for direct in (True, False):
+        assert _native.direct_bridge(direct) is direct
+        try:
+            pileup = StreamingPileupBuilder([read]).pileup("chr1", 11)
+        finally:
+            assert _native.direct_bridge(True)
+        assert (pileup.bases, pileup.pileups[0].base) == (["="], "=")

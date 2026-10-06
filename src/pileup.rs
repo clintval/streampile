@@ -481,6 +481,8 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
     }
 
     /// The upper-cased base here, or `None` without one, as for a read with no stored bases.
+    ///
+    /// A base written as `=`, a match to the reference, is `=`, as a pileup knows no reference.
     pub fn base(&self) -> Option<u8> {
         self.query_position()
             .and_then(|offset| self.record().sequence().get(offset))

@@ -563,3 +563,17 @@ def test_a_tabulator_refuses_options_out_of_range(
 ) -> None:
     with pytest.raises(ValueError, match=rf"^{option} must be from 0 to {most}, found: {value}$"):
         Tabulator(reference, **{option: value})
+
+
+def test_a_base_written_as_equals_is_the_reference_base(tmp_path: Path) -> None:
+    chr1 = "ACGTACGTACGTACGTACGT"
+    header = header_of({"chr1": chr1})
+    reads = [record("eq", 0, "10M", "====T=====", header=header)]
+    sites = tabulated(tmp_path, chr1, reads, ("chr1", 0, 10))
+    assert [(site.pos, alleles(site)) for site in sites if site.alts] == [(5, {"A>T": 1})]
+    assert [site.depth for site in sites] == [1] * 10
+    with FastaFile(str(tmp_path / "reference.fa")) as fasta:
+        assert Tabulator(fasta).alleles(reads[0]) == (
+            [Allele(pos=4, ref="A", alt="T", start=4, end=5)],
+            [],
+        )
