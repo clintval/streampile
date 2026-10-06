@@ -455,3 +455,13 @@ def test_a_pileup_read_behaves_as_the_tuple_of_its_fields() -> None:
         entry._replace(base="A")  # type: ignore[call-arg]  # pyright: ignore[reportCallIssue]  # ty: ignore[unknown-argument]
     with pytest.raises(ValueError, match="'bogus' is not a valid PileupReadType"):
         PileupRead(read, 0, 0, "bogus")  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]
+
+
+def test_replacing_fields_but_not_the_alignment_keeps_the_read_as_it_was_piled_up() -> None:
+    read = record("r", 10, "2M1D2M", "ACGT", flag=16)
+    (deletion,) = StreamingPileupBuilder([read]).pileup("chr1", 12).pileups
+    read.query_sequence = "TTTTTT"
+    moved = deletion._replace(insertion_length=0)
+    assert (moved.five_prime_distance, moved.qual) == (deletion.five_prime_distance, 40) == (2, 40)
+    based = deletion._replace(query_position=2, pileup_type=BASE)
+    assert (based.base, based.five_prime_distance) == ("G", 1)

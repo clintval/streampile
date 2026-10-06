@@ -309,6 +309,13 @@ impl TemplateRead for Held {
     }
 }
 
+/// A pysam record and the BAM record copied from it.
+fn bridged(alignment: &Bound<'_, PyAny>) -> PyResult<Arc<Bridged>> {
+    let mut record = bam::Record::default();
+    bridge::read(alignment, &mut record)?;
+    Ok(Arc::new(Bridged::new(alignment.clone().unbind(), record)))
+}
+
 /// A tuple of the `PileupRead`s of entries.
 fn reads_of<'a>(
     py: Python<'_>,
@@ -458,11 +465,9 @@ impl PileupRead {
         insertion_offset: Option<i64>,
         insertion_length: i64,
     ) -> PyResult<Self> {
-        let mut record = bam::Record::default();
-        bridge::read(alignment, &mut record)?;
         Ok(Self {
             held: Held::by_hand(
-                Arc::new(Bridged::new(alignment.clone().unbind(), record)),
+                bridged(alignment)?,
                 kind_of(pileup_type)?,
                 [
                     optional(query_position),
@@ -634,6 +639,7 @@ impl PileupRead {
     #[pyo3(name = "_replace")]
     fn replace(&self, py: Python<'_>, changes: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let fields = self.asdict(py)?;
+        let mut moved = false;
         if let Some(changes) = changes {
             for (name, value) in changes {
                 if !FIELDS.contains(&name.extract::<&str>()?) {
@@ -642,33 +648,35 @@ impl PileupRead {
                         name.repr()?
                     )));
                 }
+                moved |= name.eq("alignment")?;
                 fields.set_item(name, value)?;
             }
         }
-        let read = PileupRead::new(
-            &fields.as_any().get_item("alignment")?,
-            fields.as_any().get_item("query_position")?.extract()?,
-            fields
-                .as_any()
-                .get_item("query_position_or_next")?
-                .extract()?,
-            fields.as_any().get_item("pileup_type")?.extract()?,
-            fields.as_any().get_item("insertion_offset")?.extract()?,
-            fields.as_any().get_item("insertion_length")?.extract()?,
-        )?;
-        let unchanged =
-            changes.is_none_or(|changes| !changes.contains("alignment").unwrap_or(true));
-        Ok(if unchanged {
-            Self {
-                held: Held {
-                    record: Arc::clone(&self.held.record),
-                    position: self.held.position,
-                    ..read.held
-                },
-            }
+        let field = |name: &str| fields.as_any().get_item(name);
+        let record = if moved {
+            bridged(&field("alignment")?)?
         } else {
-            read
-        })
+            Arc::clone(&self.held.record)
+        };
+        let mut held = Held::by_hand(
+            record,
+            kind_of(&field("pileup_type")?.extract::<String>()?)?,
+            [
+                optional(field("query_position")?.extract()?),
+                optional(field("query_position_or_next")?.extract()?),
+                optional(field("insertion_offset")?.extract()?),
+                field("insertion_length")?.extract()?,
+            ],
+        );
+        if !moved {
+            held.position = self.held.position;
+            let placed =
+                |held: &Held| (held.kind, held.query_position, held.query_position_or_next);
+            if placed(&held) == placed(&self.held) {
+                held.five_prime_distance = self.held.five_prime_distance;
+            }
+        }
+        Ok(Self { held })
     }
 
     #[allow(clippy::unused_self)]
