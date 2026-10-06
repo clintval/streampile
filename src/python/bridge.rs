@@ -20,7 +20,10 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyString, PyType};
 
+use super::to_python;
+use crate::Error;
 use crate::auxiliary;
+use crate::error::invalid_data;
 
 const DELEGATE_OFFSET: usize = size_of::<pyo3::ffi::PyObject>() + size_of::<*const c_void>();
 
@@ -91,7 +94,7 @@ pub(crate) fn read(object: &Bound<'_, PyAny>, record: &mut bam::Record) -> PyRes
         }
         bam::io::Reader::from(&staged[..])
             .read_record(record)
-            .map_err(|error| PyValueError::new_err(format!("invalid record: {error}")))?;
+            .map_err(|error| invalid(&name_of(object), error))?;
         Ok(())
     })
 }
@@ -130,7 +133,7 @@ pub(crate) fn verify(py: Python<'_>) -> PyResult<()> {
         stage_attributes(&segment, staged)?;
         bam::io::Reader::from(&staged[..])
             .read_record(&mut through_attributes)
-            .map_err(|error| PyValueError::new_err(format!("invalid record: {error}")))?;
+            .map_err(|error| invalid(&name_of(&segment), error))?;
         Ok(())
     })?;
     let header_at = DELEGATE_OFFSET + size_of::<*const c_void>();
@@ -232,7 +235,7 @@ unsafe fn delegate<'a>(object: &'a Bound<'_, PyAny>) -> Option<&'a Delegate> {
 ///
 /// `object` must be a pysam `AlignedSegment` laid out as [`verify`] checks.
 unsafe fn stage_delegate(object: &Bound<'_, PyAny>, staged: &mut Vec<u8>) -> PyResult<()> {
-    let invalid = || PyValueError::new_err("an AlignedSegment holds no valid record");
+    let invalid = || PyValueError::new_err("An AlignedSegment holds no valid record.");
     // SAFETY: the caller guarantees the layout.
     let delegate = unsafe { delegate(object) }.ok_or_else(invalid)?;
     let core = &delegate.core;
@@ -411,6 +414,24 @@ fn stage_number(value: &Bound<'_, PyAny>, kind: u8, staged: &mut Vec<u8>) -> PyR
     Ok(())
 }
 
+/// The error of a read that cannot be staged as a BAM record, as the crate words it.
+fn invalid(name: &str, problem: impl std::fmt::Display) -> PyErr {
+    to_python(Error::InvalidRecord {
+        name: name.to_owned(),
+        source: invalid_data(format!("{problem}")),
+    })
+}
+
+/// The name of an object with the attributes of an `AlignedSegment`, `*` without one.
+fn name_of(object: &Bound<'_, PyAny>) -> String {
+    object
+        .getattr("query_name")
+        .and_then(|name| name.extract::<Option<String>>())
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "*".to_owned())
+}
+
 fn nibble(base: u8) -> u8 {
     let base = base.to_ascii_uppercase();
     SEQUENCE_CODES
@@ -430,7 +451,8 @@ fn stage(
     sequence_and_qualities: impl FnOnce(&mut Vec<u8>),
     aux: &[u8],
 ) -> PyResult<()> {
-    let too_long = |field: &str| PyValueError::new_err(format!("a record's {field} is too long"));
+    let read_name = String::from_utf8_lossy(name.strip_suffix(b"\0").unwrap_or(name));
+    let too_long = |field: &str| invalid(&read_name, format!("its {field} is too long"));
     let narrow = |value: i64, field: &str| i32::try_from(value).map_err(|_| too_long(field));
     let l_read_name = u8::try_from(name.len()).map_err(|_| too_long("name"))?;
     let long_cigar = operators > MOST_CIGAR_OPERATORS;

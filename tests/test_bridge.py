@@ -1,6 +1,7 @@
 from array import array
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from typing import Literal
 
@@ -8,8 +9,10 @@ import pytest
 from pysam import AlignmentFile
 
 from streampile import Pileup
+from streampile import PileupRead
 from streampile import StreamingPileupBuilder
 from streampile import _native
+from streampile._pileup import BASE
 
 from .records import record
 from .records import write_bam
@@ -122,3 +125,29 @@ def test_a_base_written_as_equals_piles_up_as_equals_on_both_bridges() -> None:
         finally:
             assert _native.direct_bridge(True)
         assert (pileup.bases, pileup.pileups[0].base) == (["="], "=")
+
+
+def test_a_record_that_does_not_fit_bam_is_refused_naming_the_read() -> None:
+    read = record("big", 10, "4M", "ACGT")
+    attributes = {
+        name: getattr(read, name)
+        for name in (
+            "query_name",
+            "cigartuples",
+            "query_sequence",
+            "query_qualities",
+            "reference_id",
+            "mapping_quality",
+            "flag",
+            "next_reference_id",
+            "next_reference_start",
+            "template_length",
+        )
+    }
+
+    def has_tag(_tag: str) -> bool:
+        return False
+
+    distant = SimpleNamespace(**attributes, reference_start=2**40, has_tag=has_tag)
+    with pytest.raises(ValueError, match=r"^Read big is invalid: its position is too long\.$"):
+        PileupRead._make([distant, 0, 0, BASE])
