@@ -461,12 +461,8 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
     /// so soft-clipped bases count, and 0 is the first base sequenced: fgbio's
     /// `positionInReadInReadOrder` minus one. It is `None` for an entry with no base.
     pub fn five_prime_distance(&self) -> Option<usize> {
-        let offset = self.query_position()?;
-        if self.is_reverse() {
-            (self.live.footprint.query_length as usize).checked_sub(offset + 1)
-        } else {
-            Some(offset)
-        }
+        let length = self.live.footprint.query_length as usize;
+        crate::template::from_five_prime(self.is_reverse(), length, self.query_position()?)
     }
 
     /// The number of the template's bases between this position and the template's other end,
@@ -482,7 +478,11 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
     /// A read of an FR pair with no `MC` tag, or one that is not a CIGAR string spanning at least
     /// one base, is an error naming the read.
     pub fn template_end_distance(&self) -> Result<Option<usize>> {
-        crate::template::template_end_distance(self.record(), self.position)
+        crate::template_end_distance(
+            self.record(),
+            &noodles::sam::Header::default(),
+            self.position as usize,
+        )
     }
 
     /// The value of one of the record's auxiliary fields, borrowed from the record.

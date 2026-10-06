@@ -33,6 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 The `template_end_distance()` method counts the template's bases to the 5′ end of the mate of a read in an FR pair, walking the mate's CIGAR from the `MC` tag and never reading the template length (TLEN), and is an error for a read of an FR pair without a usable `MC` tag.
 A `tap` receives every record once, in input order, so records can be written on as they are passed.
+The functions `five_prime_distance` and `template_end_distance` give the same counts for a base of any noodles alignment record.
 A source of records can be any coordinate-sorted stream, and a record type can carry more beside its BAM record.
 
 ## Features

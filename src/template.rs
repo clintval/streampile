@@ -8,13 +8,15 @@
 //! Soft-clipped bases are template bases and hard-clipped bases, which the record no longer
 //! holds, are not. The template length (TLEN) is never read.
 
-use noodles::bam;
-use noodles::sam;
-use noodles::sam::alignment::record::cigar::op::Kind;
+use std::io;
 
-use crate::auxiliary::{self, AuxValue};
+use bstr::ByteSlice;
+use noodles::sam;
+use noodles::sam::alignment::Record;
+use noodles::sam::alignment::record::cigar::op::Kind;
+use noodles::sam::alignment::record::data::field::{Tag, Value};
+
 use crate::error::{Error, Result};
-use crate::pileup::record_name;
 
 const LONGEST_OPERATOR: usize = (1 << 28) - 1;
 
@@ -71,13 +73,9 @@ impl Alignment {
         })
     }
 
-    /// The alignment an `MC` value describes for a mate at a 0-based start, or `None` for a
-    /// value that is not a CIGAR string spanning at least one base with operators no longer than
-    /// BAM allows.
-    pub(crate) fn of_mate(start: i64, value: AuxValue<'_>) -> Option<Self> {
-        let AuxValue::String(text) = value else {
-            return None;
-        };
+    /// The alignment a CIGAR string describes for a mate at a 0-based start, or `None` for one
+    /// that does not span a base or has an operator longer than BAM allows.
+    pub(crate) fn of_mate(start: i64, text: &[u8]) -> Option<Self> {
         let ops = sam::record::Cigar::new(text)
             .iter()
             .map(|op| op.ok().filter(|op| op.len() <= LONGEST_OPERATOR))
@@ -146,21 +144,51 @@ impl Alignment {
     }
 }
 
-/// The template's bases between a 0-based reference position of a record and the 5′ end of its
-/// mate in an FR pair, or `None` for a fragment, a read whose mate is unmapped or on another
-/// contig, a pair that is not FR, and a position past the mate's 5′ end.
+/// The distance of a read's base, at a query offset, from the read's 5′ end, in bases as
+/// sequenced: the offset for a forward read and counted from the other end for a reverse one, so
+/// soft-clipped bases count and hard-clipped ones do not. It is `None` for an offset past the read.
+pub fn five_prime_distance<R: Record + ?Sized>(
+    record: &R,
+    query_offset: usize,
+) -> io::Result<Option<usize>> {
+    let length = record.cigar().read_length()?;
+    let reverse = record.flags()?.is_reverse_complemented();
+    Ok(from_five_prime(reverse, length, query_offset))
+}
+
+/// The distance of a query offset from the 5′ end of a read of a query length on a strand.
+pub(crate) fn from_five_prime(reverse: bool, length: usize, offset: usize) -> Option<usize> {
+    if reverse {
+        length.checked_sub(offset + 1)
+    } else {
+        (offset < length).then_some(offset)
+    }
+}
+
+/// The number of the template's bases between a 0-based reference position of a record and the
+/// 5′ end of its mate in an FR pair: 0 at the mate's 5′ end.
 ///
-/// A record of an FR pair without an `MC` tag, or with one that is not a usable CIGAR string, is
-/// an error naming the record.
-pub(crate) fn template_end_distance(record: &bam::Record, position: i64) -> Result<Option<usize>> {
-    let flags = record.flags();
+/// It walks the record's CIGAR and the mate's, from its `MC` tag, so an indel counts by its
+/// length; soft-clipped bases count and hard-clipped bases do not, and the template length (TLEN)
+/// is never read. It is `None` for a fragment, a read whose mate is unmapped or on another contig,
+/// a pair that is not FR, and a position past the mate's 5′ end. The header resolves the record's
+/// contigs, which a BAM record holds as indices.
+///
+/// A record of an FR pair with no `MC` tag, or one that is not a CIGAR string spanning at least
+/// one base, is an error naming the record.
+pub fn template_end_distance<R: Record + ?Sized>(
+    record: &R,
+    header: &sam::Header,
+    position: usize,
+) -> Result<Option<usize>> {
+    let flags = record.flags()?;
     let reverse = flags.is_reverse_complemented();
     if !flags.is_segmented()
         || flags.is_unmapped()
         || flags.is_mate_unmapped()
         || reverse == flags.is_mate_reverse_complemented()
-        || record.reference_sequence_id().transpose()?
-            != record.mate_reference_sequence_id().transpose()?
+        || record.reference_sequence_id(header).transpose()?
+            != record.mate_reference_sequence_id(header).transpose()?
     {
         return Ok(None);
     }
@@ -174,24 +202,33 @@ pub(crate) fn template_end_distance(record: &bam::Record, position: i64) -> Resu
         .cigar()
         .iter()
         .map(|op| op.map(|op| (op.kind(), op.len() as i64)))
-        .collect::<std::io::Result<Vec<_>>>()?;
+        .collect::<io::Result<Vec<_>>>()?;
     let Some(read) = Alignment::new(usize::from(start) as i64 - 1, ops) else {
         return Ok(None);
     };
-    let name = || record_name(record);
-    let Some(value) = auxiliary::find(record.data().as_bytes(), *b"MC")? else {
+    let name = || {
+        record
+            .name()
+            .map_or_else(|| "*".to_owned(), |name| name.to_str_lossy().into_owned())
+    };
+    let Some(value) = record.data().get(&Tag::MATE_CIGAR).transpose()? else {
         return Err(Error::MissingMateCigar { name: name() });
     };
-    let Some(mate) = Alignment::of_mate(usize::from(mate_start) as i64 - 1, value) else {
+    let mate_start = usize::from(mate_start) as i64 - 1;
+    let mate = match &value {
+        Value::String(text) => Alignment::of_mate(mate_start, text),
+        _ => None,
+    };
+    let Some(mate) = mate else {
         return Err(Error::InvalidMateCigar {
             name: name(),
             value: match value {
-                AuxValue::String(text) => String::from_utf8_lossy(text).into_owned(),
+                Value::String(text) => text.to_str_lossy().into_owned(),
                 other => format!("{other:?}"),
             },
         });
     };
-    Ok(usize::try_from(distance(&read, &mate, reverse, position)).ok())
+    Ok(usize::try_from(distance(&read, &mate, reverse, position as i64)).ok())
 }
 
 /// The template's bases between a position of a read and its mate's 5′ end, which is past the

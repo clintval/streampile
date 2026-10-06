@@ -17,7 +17,8 @@ use crate::footprint::{Footprint, Located};
 use crate::pileup::{
     EntryKind, MISSING_BASE_QUALITY, NONE, Template, name_hash, name_of, templates_kept,
 };
-use crate::template::template_end_distance;
+use crate::template::from_five_prime;
+use crate::template_end_distance;
 use crate::{DEFAULT_MIN_BASE_QUALITY, PileupEntry};
 
 const ABSENT: i64 = i64::MIN;
@@ -171,26 +172,26 @@ impl Held {
     }
 
     fn five_prime_distance(&self) -> Option<i64> {
-        let offset = self.query_position;
-        if offset < 0 {
-            return None;
-        }
+        let offset = usize::try_from(self.query_position).ok()?;
         let record = self.bam();
-        if !record.flags().is_reverse_complemented() {
-            return Some(offset);
-        }
         let length = match self.query_length {
-            Some(length) => i64::from(length),
-            None => i64::try_from(record.cigar().read_length().ok()?).ok()?,
+            Some(length) => length as usize,
+            None => record.cigar().read_length().ok()?,
         };
-        Some(length - offset - 1).filter(|&distance| distance >= 0)
+        let reverse = record.flags().is_reverse_complemented();
+        from_five_prime(reverse, length, offset).map(|distance| distance as i64)
     }
 
     fn template_end_distance(&self, position: Option<i64>) -> PyResult<Option<i64>> {
         let Some(position) = position.or_else(|| self.position_of_base()) else {
             return Ok(None);
         };
-        let distance = template_end_distance(self.bam(), position).map_err(to_python)?;
+        let Ok(position) = usize::try_from(position) else {
+            return Ok(None);
+        };
+        let distance =
+            template_end_distance(self.bam(), &noodles::sam::Header::default(), position)
+                .map_err(to_python)?;
         Ok(distance.map(|distance| distance as i64))
     }
 

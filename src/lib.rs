@@ -19,3 +19,4 @@ pub use builder::{
 pub use error::{Error, Result};
 pub use pileup::{EntryKind, MISSING_BASE_QUALITY, Pileup, PileupEntry};
 pub use source::{AlignmentRecord, RecordSource, Records};
+pub use template::{five_prime_distance, template_end_distance};

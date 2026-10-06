@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use super::{Read, bases, builder, name, names, read};
 use crate::template::Alignment;
-use crate::{AuxValue, EntryKind, Error};
+use crate::{EntryKind, Error};
 
 const READ_LENGTH: usize = 50;
 
@@ -526,7 +526,7 @@ fn test_a_template_end_is_absent_for_a_read_past_its_mates_alignment() {
 
 #[test]
 fn test_a_mate_cigar_must_span_a_base_with_operators_bam_allows() {
-    let mate = |text: &str| Alignment::of_mate(0, AuxValue::String(text.as_bytes()));
+    let mate = |text: &str| Alignment::of_mate(0, text.as_bytes());
     for valid in ["10M2I3D4N1=1X5S2H1P", "+3M", "268435455M268435455N"] {
         assert!(mate(valid).is_some(), "{valid}");
     }
@@ -543,5 +543,48 @@ fn test_a_mate_cigar_must_span_a_base_with_operators_bam_allows() {
     ] {
         assert_eq!(mate(invalid), None, "{invalid}");
     }
-    assert_eq!(Alignment::of_mate(0, AuxValue::Integer(10)), None);
+}
+
+/// The template ends of any alignment record, here a `RecordBuf` holding fgbio #1172's deletion
+/// case, as the public functions give them.
+#[test]
+fn test_the_template_ends_of_a_record_buf() {
+    use noodles::core::Position;
+    use noodles::sam::alignment::RecordBuf;
+    use noodles::sam::alignment::record::Flags;
+    use noodles::sam::alignment::record::data::field::Tag;
+    use noodles::sam::alignment::record_buf::Cigar;
+    use noodles::sam::alignment::record_buf::data::field::Value;
+
+    let cigar = |text: &str| -> Cigar {
+        noodles::sam::record::Cigar::new(text.as_bytes())
+            .iter()
+            .map(Result::unwrap)
+            .collect()
+    };
+    let record = RecordBuf::builder()
+        .set_name("q")
+        .set_flags(Flags::SEGMENTED | Flags::MATE_REVERSE_COMPLEMENTED | Flags::FIRST_SEGMENT)
+        .set_reference_sequence_id(0)
+        .set_alignment_start(Position::try_from(101).unwrap())
+        .set_cigar(cigar("2S124M1D3M"))
+        .set_mate_reference_sequence_id(0)
+        .set_mate_alignment_start(Position::try_from(100).unwrap())
+        .set_data(
+            [(Tag::MATE_CIGAR, Value::from("3S124M2S"))]
+                .into_iter()
+                .collect(),
+        )
+        .build();
+    let header = noodles::sam::Header::default();
+    let ends: Vec<_> = [223, 224, 225, 226]
+        .into_iter()
+        .map(|position| crate::template_end_distance(&record, &header, position).unwrap())
+        .collect();
+    assert_eq!(ends, [Some(1), Some(1), Some(0), None]);
+    let five_prime = |offset| crate::five_prime_distance(&record, offset).unwrap();
+    assert_eq!(
+        (five_prime(0), five_prime(128), five_prime(129)),
+        (Some(0), Some(128), None)
+    );
 }
