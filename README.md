@@ -44,7 +44,8 @@ Give the `AlignmentFile` threads to decompress the BAM with, which pays at depth
 
 At 12, the base of `lowqual` is under the quality floor, so it counts toward `unfiltered_depth` only.
 
-Filter reads with `read_filter`, and count each template once with `without_overlaps()`:
+Filter reads with `read_filter`, and see each template once with `templates()`, which calls the bases of overlapping mates into one as fgbio's `CallOverlappingConsensusBases` does.
+The mates of `pair` overlap from 45 to 54: at 50 they agree, so their qualities add up, and at 52 they disagree, so the base of the higher quality is kept at the difference of the two.
 
 ```pycon
 >>> with (
@@ -53,10 +54,37 @@ Filter reads with `read_filter`, and count each template once with `without_over
 ...         reads, read_filter=lambda read: read.is_paired
 ...     ) as builder,
 ... ):
-...     pileup = builder.pileup("chr1", 50)
+...     agreeing = builder.pileup("chr1", 50)
+...     disagreeing = builder.pileup("chr1", 52)
 >>>
->>> pileup.bases, pileup.without_overlaps().bases
-(['T', 'T'], ['T'])
+>>> for pileup in (agreeing, disagreeing):
+...     template = pileup.templates()[0]
+...     print(pileup.bases, pileup.qualities, template.base, template.qual)
+['T', 'T'] [40, 40] T 80
+['G', 'A'] [40, 20] G 20
+
+```
+
+Other strategies mask a disagreement, or keep the base of the higher quality as it is:
+
+```pycon
+>>> from streampile import DisagreementStrategy
+>>>
+>>> for strategy in DisagreementStrategy:
+...     template = disagreeing.templates(disagreement=strategy)[0]
+...     print(strategy, template.base, template.qual)
+consensus G 20
+mask_both N 2
+mask_lower_qual G 40
+
+```
+
+A template also holds its `reads`, its strand, and its distances to both of its ends:
+
+```pycon
+>>> template = disagreeing.templates()[0]
+>>> template.is_reverse, template.five_prime_distance, template.template_end_distance
+(False, 12, 7)
 
 ```
 

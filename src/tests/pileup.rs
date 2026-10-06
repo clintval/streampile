@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use super::{Read, bases, entries, entry, name, read, unfiltered};
+use super::{Read, bases, entries, entry, read, unfiltered};
 use crate::auxiliary;
 use crate::{ArraySubtype, AuxElement, AuxValue, EntryKind};
 
@@ -251,123 +251,6 @@ fn test_views_of_reads_with_no_stored_bases_or_no_cigar_are_empty() {
     );
     let mut builder = unfiltered(&[read("r", 0, "*", "*")]);
     assert!(builder.pileup("chr1", 0).unwrap().is_empty());
-}
-
-#[test]
-fn test_without_overlaps_keeps_the_first_read_of_each_template() {
-    let reads = [
-        read("q3", 50, "50M", &"A".repeat(50)).flag(99),
-        read("q1", 100, "50M", &"C".repeat(50)).flag(99),
-        read("q2", 100, "50M", &"G".repeat(50)).flag(147),
-        read("q3", 100, "50M", &"T".repeat(50)).flag(147),
-        read("q1", 110, "50M", &"C".repeat(50)).flag(147),
-        read("q2", 110, "50M", &"G".repeat(50)).flag(99),
-    ];
-    let mut builder = super::builder(&reads);
-    assert_eq!(builder.pileup("chr1", 125).unwrap().unfiltered_depth(), 5);
-    let mut builder = super::builder(&reads).without_overlaps(true);
-    let kept = builder.pileup("chr1", 125).unwrap();
-    assert_eq!(kept.unfiltered_depth(), 3);
-    let kept_reads: Vec<(String, u16)> = kept
-        .iter()
-        .map(|entry| (name(entry.record()), entry.flags().bits()))
-        .collect();
-    assert_eq!(
-        kept_reads,
-        [
-            ("q1".to_owned(), 99),
-            ("q2".to_owned(), 147),
-            ("q3".to_owned(), 147)
-        ]
-    );
-    assert_eq!(bases(&kept), "CGT");
-}
-
-#[test]
-fn test_without_overlaps_keeps_every_entry_of_the_kept_read() {
-    let reads = [
-        read("pair", 10, "3M2I3M", "ACGTTACG").flag(99),
-        read("pair", 10, "6M", "ACGACG").flag(147),
-        read("other", 12, "4M", "GACG"),
-    ];
-    let mut builder = unfiltered(&reads).min_base_quality(30);
-    assert_eq!(builder.pileup("chr1", 12).unwrap().len(), 4);
-    let mut builder = unfiltered(&reads)
-        .min_base_quality(30)
-        .without_overlaps(true);
-    let kept = builder.pileup("chr1", 12).unwrap();
-    assert_eq!(
-        entries(&kept),
-        [
-            entry("pair", "base", Some(2), Some(2), None),
-            entry("pair", "insertion", None, None, Some("TT")),
-            entry("other", "base", Some(0), Some(0), None),
-        ]
-    );
-    let flags: Vec<u16> = kept.iter().map(|entry| entry.flags().bits()).collect();
-    assert_eq!(flags, [99, 99, 0]);
-    assert_eq!(
-        (kept.reference_sequence_name().to_string(), kept.position()),
-        ("chr1".into(), 12)
-    );
-    assert_eq!(kept.min_base_quality(), 30);
-}
-
-#[test]
-fn test_without_overlaps_keeps_a_mate_whose_base_another_mate_skips() {
-    let mut bases_of_mate = "G".repeat(10);
-    bases_of_mate.push('C');
-    bases_of_mate.push_str(&"G".repeat(29));
-    let reads = [
-        read("t", 100, "20M300N20M", &"A".repeat(40)).flag(99),
-        read("t", 330, "40M", &bases_of_mate).flag(147),
-    ];
-    let mut builder = unfiltered(&reads);
-    let kinds: Vec<EntryKind> = builder
-        .pileup("chr1", 340)
-        .unwrap()
-        .iter()
-        .map(|entry| entry.kind())
-        .collect();
-    assert_eq!(kinds, [EntryKind::Skip, EntryKind::Base]);
-    let mut builder = unfiltered(&reads).without_overlaps(true);
-    let kept = builder.pileup("chr1", 340).unwrap();
-    assert_eq!((kept.filtered_depth(), bases(&kept)), (1, "C".to_owned()));
-    assert_eq!(kept.get(0).unwrap().flags().bits(), 147);
-}
-
-#[test]
-fn test_without_overlaps_keeps_a_mate_at_the_floor_over_one_under_it() {
-    let mate = read("t", 105, "10M", "GGCGGGGGGG").flag(147);
-    let reads = [
-        read("t", 100, "10M", &"A".repeat(10))
-            .flag(99)
-            .quals(&[2; 10]),
-        mate.clone(),
-    ];
-    let mut builder = unfiltered(&reads).without_overlaps(true);
-    let kept = builder.pileup("chr1", 107).unwrap();
-    assert_eq!((kept.filtered_depth(), bases(&kept)), (1, "C".to_owned()));
-    let reads = [reads[0].clone(), mate.quals(&[2; 10])];
-    let mut builder = unfiltered(&reads).without_overlaps(true);
-    let kept = builder.pileup("chr1", 107).unwrap();
-    let flags: Vec<u16> = kept.iter().map(|entry| entry.flags().bits()).collect();
-    assert_eq!((flags, kept.filtered_depth()), (vec![99], 0));
-}
-
-#[test]
-fn test_without_overlaps_forgets_a_template_once_its_reads_are_passed() {
-    let reads = [
-        read("t", 10, "4M", "ACGT").flag(99),
-        read("t", 12, "4M", "GTAC").flag(147),
-        read("t", 100, "4M", "ACGT").flag(99),
-    ];
-    let mut builder = unfiltered(&reads).without_overlaps(true);
-    let depths: Vec<usize> = [12, 15, 100]
-        .into_iter()
-        .map(|position| builder.pileup("chr1", position).unwrap().unfiltered_depth())
-        .collect();
-    assert_eq!(depths, [1, 1, 1]);
 }
 
 #[test]

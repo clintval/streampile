@@ -1,11 +1,12 @@
-from array import array
-
 import pytest
 from pysam import AlignedSegment
 
+from streampile import AgreementStrategy
+from streampile import DisagreementStrategy
 from streampile import Pileup
 from streampile import PileupRead
 from streampile import PileupReadType
+from streampile import PileupTemplate
 from streampile import StreamingPileupBuilder
 from streampile._pileup import BASE
 from streampile._pileup import DELETION
@@ -164,7 +165,21 @@ def test_views_of_reads_with_no_stored_bases_or_no_cigar_are_empty() -> None:
     assert (unplaced.pileups, unplaced.bases, unplaced.qualities) == ((), [], [])
 
 
-def test_without_overlaps_keeps_the_first_read_of_each_template() -> None:
+def called(template: PileupTemplate) -> tuple[str | None, str, str | None, int | None]:
+    """A template's name, type, base, and quality."""
+    return (template.query_name, template.pileup_type.value, template.base, template.qual)
+
+
+def mates(base1: str, qual1: int, base2: str, qual2: int) -> Pileup:
+    """The pileup at 12 of two overlapping mates of an FR pair whose bases there are given."""
+    reads = [
+        record("t", 10, "4M", f"AA{base1}A", flag=99, quals=[30, 30, qual1, 30]),
+        record("t", 10, "4M", f"AA{base2}A", flag=147, quals=[30, 30, qual2, 30]),
+    ]
+    return Pileup.from_alignments(reads, "chr1", 12)
+
+
+def test_templates_group_reads_by_name_in_the_order_of_their_first_entries() -> None:
     reads = [
         record("q3", 50, "50M", "A" * 50, flag=99),
         record("q1", 100, "50M", "C" * 50, flag=99),
@@ -174,57 +189,144 @@ def test_without_overlaps_keeps_the_first_read_of_each_template() -> None:
         record("q2", 110, "50M", "G" * 50, flag=99),
     ]
     pileup = StreamingPileupBuilder(reads).pileup("chr1", 125)
-    kept = pileup.without_overlaps()
-    assert (pileup.unfiltered_depth, kept.unfiltered_depth) == (5, 3)
-    assert [(entry.alignment.query_name, entry.alignment.flag) for entry in kept.pileups] == [
-        ("q1", 99),
-        ("q2", 147),
-        ("q3", 147),
+    templates = pileup.templates()
+    assert [called(template) for template in templates] == [
+        ("q1", "base", "C", 80),
+        ("q2", "base", "G", 80),
+        ("q3", "base", "T", 40),
     ]
-    assert kept.bases == ["C", "G", "T"]
+    assert [len(template.reads) for template in templates] == [2, 2, 1]
+    assert [read.alignment.flag for read in templates[1].reads] == [147, 99]
+    assert all(read in pileup.pileups for read in templates[0].reads)
 
 
-def test_without_overlaps_keeps_every_entry_of_the_kept_read() -> None:
+@pytest.mark.parametrize(
+    "agreement,quals,qual",
+    [
+        (AgreementStrategy.consensus, (30, 35), 65),
+        (AgreementStrategy.consensus, (60, 50), 93),
+        (AgreementStrategy.max_qual, (30, 35), 35),
+        (AgreementStrategy.pass_through, (30, 35), 35),
+    ],
+)
+def test_agreeing_bases_make_the_quality_of_the_agreement_strategy(
+    agreement: AgreementStrategy, quals: tuple[int, int], qual: int
+) -> None:
+    pileup = mates("C", quals[0], "C", quals[1])
+    assert called(pileup.templates(agreement=agreement)[0]) == ("t", "base", "C", qual)
+
+
+@pytest.mark.parametrize(
+    "disagreement,quals,base,qual",
+    [
+        (DisagreementStrategy.consensus, (30, 20), "A", 10),
+        (DisagreementStrategy.consensus, (20, 30), "C", 10),
+        (DisagreementStrategy.consensus, (21, 20), "A", 2),
+        (DisagreementStrategy.consensus, (30, 30), "N", 2),
+        (DisagreementStrategy.mask_both, (30, 20), "N", 2),
+        (DisagreementStrategy.mask_lower_qual, (30, 20), "A", 30),
+        (DisagreementStrategy.mask_lower_qual, (20, 30), "C", 30),
+        (DisagreementStrategy.mask_lower_qual, (30, 30), "N", 2),
+    ],
+)
+def test_disagreeing_bases_make_the_base_and_quality_of_the_disagreement_strategy(
+    disagreement: DisagreementStrategy, quals: tuple[int, int], base: str, qual: int
+) -> None:
+    pileup = mates("A", quals[0], "C", quals[1])
+    template = pileup.templates(disagreement=disagreement)[0]
+    assert (template.base, template.qual, template.is_no_call) == (base, qual, base == "N")
+
+
+def test_strategies_are_named_by_their_values() -> None:
+    pileup = mates("A", 30, "C", 20)
+    named = pileup.templates(
+        agreement="max_qual",  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]
+        disagreement="mask_lower_qual",  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]
+    )
+    assert (named[0].base, named[0].qual) == ("A", 30)
+    with pytest.raises(ValueError, match="'bogus' is not a valid AgreementStrategy"):
+        pileup.templates(agreement="bogus")  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ValueError, match="'bogus' is not a valid DisagreementStrategy"):
+        pileup.templates(disagreement="bogus")  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]
+
+
+def test_a_no_call_leaves_the_other_reads_base_at_its_own_quality() -> None:
+    assert called(mates("N", 40, "A", 20).templates()[0]) == ("t", "base", "A", 20)
+    assert called(mates("N", 10, "N", 30).templates()[0]) == ("t", "base", "N", 30)
+
+
+def test_a_read_with_a_deletion_or_a_skip_holds_no_base() -> None:
+    base = record("t", 10, "4M", "ACGT", flag=99, quals=[30, 30, 15, 30])
+    deletion = record("t", 10, "2M1D2M", "ACTT", flag=147, quals=[30, 30, 25, 30])
+    skip = record("t", 10, "2M1N2M", "ACTT", flag=147)
+    for reads, expected in (
+        ([base, deletion], ("t", "base", "G", 15)),
+        ([base, skip], ("t", "base", "G", 15)),
+        ([deletion], ("t", "deletion", None, 25)),
+        ([skip], ("t", "skip", None, None)),
+    ):
+        template = Pileup.from_alignments(reads, "chr1", 12).templates()[0]
+        assert called(template) == expected
+        assert (template.is_del, template.is_refskip) == (
+            expected[1] == "deletion",
+            expected[1] == "skip",
+        )
+
+
+def test_insertion_entries_are_no_part_of_a_template() -> None:
     reads = [
-        record("pair", 10, "3M2I3M", "ACGTTACG", flag=99),
-        record("pair", 10, "6M", "ACGACG", flag=147),
-        record("other", 12, "4M", "GACG"),
+        record("t", 10, "3M2I3M", "ACGTTACG", flag=99),
+        record("t", 10, "6M", "ACGACG", flag=147),
+        record("opens", 13, "1I3M", "TACG"),
     ]
-    pileup = Pileup.from_alignments(reads, "chr1", 12, min_base_quality=30)
-    kept = pileup.without_overlaps()
-    assert entries(kept) == [
-        ("pair", "base", 2, 2, None),
-        ("pair", "insertion", None, None, "TT"),
-        ("other", "base", 0, 0, None),
-    ]
-    assert [entry.alignment.flag for entry in kept.pileups] == [99, 99, 0]
-    assert (kept.reference_name, kept.reference_pos, kept.min_base_quality) == ("chr1", 12, 30)
-    assert len(pileup.pileups) == 4
+    pileup = Pileup.from_alignments(reads, "chr1", 12)
+    templates = pileup.templates()
+    assert (len(pileup.pileups), [called(template) for template in templates]) == (
+        4,
+        [("t", "base", "G", 80)],
+    )
+    assert [read.pileup_type for read in templates[0].reads] == [BASE, BASE]
 
 
-def test_without_overlaps_keeps_a_mate_whose_base_another_mate_skips() -> None:
+def test_the_floor_applies_to_a_templates_quality_and_not_to_its_reads() -> None:
+    pileup = mates("C", 10, "C", 10)
+    assert (pileup.min_base_quality, pileup.filtered_depth, pileup.templates()[0].qual) == (
+        13,
+        0,
+        20,
+    )
+
+
+def test_a_templates_strand_and_distances_are_its_first_reads() -> None:
     reads = [
-        record("t", 100, "20M300N20M", "A" * 40, flag=99),
-        record("t", 330, "40M", "G" * 10 + "C" + "G" * 29, flag=147),
+        record("t", 100, "10M", "A" * 10, flag=99),
+        record("t", 105, "10M", "C" * 10, flag=147),
     ]
-    pileup = Pileup.from_alignments(reads, "chr1", 340)
-    kept = pileup.without_overlaps()
-    assert [entry.pileup_type for entry in pileup.pileups] == [SKIP, BASE]
-    assert (kept.filtered_depth, kept.bases) == (1, ["C"])
-    assert [entry.alignment.flag for entry in kept.pileups] == [147]
+    for read, mate in ((reads[0], reads[1]), (reads[1], reads[0])):
+        read.next_reference_id = 0
+        read.next_reference_start = mate.reference_start
+        read.set_tag("MC", "10M")  # pyright: ignore[reportUnknownMemberType]
+    distances: list[tuple[bool, int | None, int | None]] = []
+    for pos in (100, 105, 110, 114):
+        template = Pileup.from_alignments(reads, "chr1", pos).templates()[0]
+        distances.append((
+            template.is_reverse,
+            template.five_prime_distance,
+            template.template_end_distance,
+        ))
+    assert distances == [(False, 0, 14), (False, 5, 9), (False, 10, 4), (False, 14, 0)]
+    reads[1].set_tag("MC", None)  # pyright: ignore[reportUnknownMemberType]
+    template = Pileup.from_alignments(reads, "chr1", 110).templates()[0]
+    with pytest.raises(ValueError, match="no MC tag"):
+        _ = template.five_prime_distance
+    assert template.template_end_distance == 4
 
 
-def test_without_overlaps_keeps_a_mate_at_the_floor_over_one_under_it() -> None:
-    reads = [
-        record("t", 100, "10M", "A" * 10, flag=99, quals=[2] * 10),
-        record("t", 105, "10M", "GGC" + "G" * 7, flag=147),
-    ]
-    kept = Pileup.from_alignments(reads, "chr1", 107, min_base_quality=13).without_overlaps()
-    assert (kept.filtered_depth, kept.bases) == (1, ["C"])
-    reads[1].query_qualities = array("B", [2] * 10)
-    kept = Pileup.from_alignments(reads, "chr1", 107, min_base_quality=13).without_overlaps()
-    assert [entry.alignment.flag for entry in kept.pileups] == [99]
-    assert kept.filtered_depth == 0
+def test_a_template_reads_its_strand_from_its_second_read_without_its_first() -> None:
+    read = record("t", 10, "4M", "ACGT", flag=163)
+    template = Pileup.from_alignments([read], "chr1", 12).templates()[0]
+    assert (template.is_reverse, template.five_prime_distance) == (True, None)
+    assert repr(template).startswith("PileupTemplate(query_name='t', pileup_type=")
 
 
 def test_from_alignments_drops_reads_on_other_contigs() -> None:

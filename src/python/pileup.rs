@@ -1,4 +1,5 @@
-//! `Pileup` and `PileupRead`, owned snapshots of a column that outlive the builder's next move.
+//! `Pileup`, `PileupRead`, and `PileupTemplate`, owned snapshots of a column that outlive the
+//! builder's next move.
 
 use std::sync::Arc;
 
@@ -14,8 +15,9 @@ use pyo3::types::{PyDict, PyList, PyString, PyTuple, PyType};
 use super::builder::Bridged;
 use super::{bridge, to_python};
 use crate::footprint::{Footprint, Located};
+use crate::overlap::{self, AgreementStrategy, DisagreementStrategy, Observation};
 use crate::pileup::{
-    EntryKind, MISSING_BASE_QUALITY, NONE, Template, name_hash, name_of, templates_kept,
+    EntryKind, MISSING_BASE_QUALITY, NONE, TemplateName, name_hash, name_of, number_templates,
 };
 use crate::template::from_five_prime;
 use crate::template_end_distance;
@@ -223,8 +225,8 @@ impl Held {
         None
     }
 
-    fn template(&self) -> Template<'_> {
-        Template {
+    fn template(&self) -> TemplateName<'_> {
+        TemplateName {
             hash: self.name_hash,
             name: name_of(self.bam()),
         }
@@ -306,6 +308,28 @@ fn pileup_read_type(py: Python<'_>, kind: EntryKind) -> PyResult<Bound<'_, PyAny
 
 fn optional(value: Option<i64>) -> i64 {
     value.unwrap_or(ABSENT)
+}
+
+fn agreement_of(name: &str) -> PyResult<AgreementStrategy> {
+    [
+        AgreementStrategy::Consensus,
+        AgreementStrategy::MaxQual,
+        AgreementStrategy::PassThrough,
+    ]
+    .into_iter()
+    .find(|strategy| strategy.as_str() == name)
+    .ok_or_else(|| PyValueError::new_err(format!("'{name}' is not a valid AgreementStrategy")))
+}
+
+fn disagreement_of(name: &str) -> PyResult<DisagreementStrategy> {
+    [
+        DisagreementStrategy::Consensus,
+        DisagreementStrategy::MaskBoth,
+        DisagreementStrategy::MaskLowerQual,
+    ]
+    .into_iter()
+    .find(|strategy| strategy.as_str() == name)
+    .ok_or_else(|| PyValueError::new_err(format!("'{name}' is not a valid DisagreementStrategy")))
 }
 
 /// One read at one pileup position.
@@ -891,49 +915,62 @@ impl Pileup {
         PyList::new(py, qualities)
     }
 
-    /// A copy of this pileup with one read per template, by query name.
+    /// One observation per template at this position, its reads grouped by query name, in the
+    /// order of each template's first entry in `pileups`.
     ///
-    /// The read kept for a template is the first of its name in `pileups` whose entry here is a
-    /// base or a deletion at `min_base_quality`, or else the first of its name. A builder fills
-    /// `pileups` in input order, so of two passing mates in a coordinate-sorted file, the one
-    /// that starts first is kept. A mate's skip, or its base under the floor, therefore never
-    /// hides the other mate's base, as in htslib, and as in fgbio, whose floor drops a failing
-    /// base before its `withoutOverlaps` keeps the first entry. Every entry of the kept read
-    /// stays, its insertion entry included, where fgbio keeps only the first entry of each
-    /// template.
-    fn without_overlaps(&self, py: Python<'_>) -> PyResult<Self> {
-        let passing = self.passing().collect::<PyResult<Vec<_>>>()?;
-        let kept = templates_kept(&passing, |(held, passes)| {
-            (
-                held.template(),
-                held.record.object.as_ptr() as usize,
-                *passes,
-            )
+    /// Where two reads of a template hold bases, they are called into one as fgbio's
+    /// `CallOverlappingConsensusBases` calls them, as fgumi implements it: `agreement` makes the
+    /// quality of equal bases and `disagreement` the base and quality of different ones. Where the
+    /// strategies leave a read's base or quality unchanged, the template takes the higher quality.
+    ///
+    /// fgumi defines no more than that, so at each position a no-call (`N`) is left alone, as fgumi
+    /// leaves it: the other read's base stands at its own quality, and two no-calls are an `N` at
+    /// the higher quality. A read with a deletion or a skip holds no base, so a template whose other
+    /// read holds one has that base at its own quality; a template with no base is a deletion if
+    /// either read holds one, at the higher of their qualities, or else a skip. Insertion entries
+    /// are no part of a template, so a read whose only entry here is an insertion adds nothing to
+    /// its template. The strategies see every base, as fgumi does, and `min_base_quality` is not
+    /// applied, so compare a template's `qual` to it: two agreeing bases under the floor can make
+    /// a template at it. A template with more than two reads here, as when supplementary records
+    /// are piled up, calls them in the order of `pileups`.
+    ///
+    /// Args:
+    ///     agreement: how the quality of two reads holding the same base is made.
+    ///     disagreement: how the base and quality of two reads holding different bases are made.
+    #[pyo3(signature = (*, agreement = "consensus", disagreement = "consensus"))]
+    fn templates(&self, agreement: &str, disagreement: &str) -> PyResult<Vec<PileupTemplate>> {
+        let agreement = agreement_of(agreement)?;
+        let disagreement = disagreement_of(disagreement)?;
+        let numbers = number_templates(&self.entries, |held| {
+            (held.kind != EntryKind::Insertion).then(|| held.template())
         });
-        let entries = self
-            .entries
-            .iter()
-            .zip(&kept)
-            .filter(|(_, kept)| **kept)
-            .map(|(held, _)| held.clone())
-            .collect();
-        let pileup = Self::of(
-            self.reference_name.clone_ref(py),
-            self.reference_pos,
-            self.min_base_quality,
-            entries,
-        );
-        if let Some(pileups) = self.pileups.get(py) {
-            let reads = pileups
-                .bind(py)
-                .iter()
-                .zip(&kept)
-                .filter(|(_, kept)| **kept)
-                .map(|(read, _)| read)
-                .collect::<Vec<_>>();
-            let _ = pileup.pileups.set(py, PyTuple::new(py, reads)?.unbind());
+        let mut grouped: Vec<Vec<Held>> = Vec::new();
+        for (held, number) in self.entries.iter().zip(numbers) {
+            let Some(number) = number else { continue };
+            match grouped.get_mut(number) {
+                Some(reads) => reads.push(held.clone()),
+                None => grouped.push(vec![held.clone()]),
+            }
         }
-        Ok(pileup)
+        grouped
+            .into_iter()
+            .map(|reads| {
+                let mut observations = Vec::with_capacity(reads.len());
+                for held in &reads {
+                    observations.push(Observation {
+                        kind: held.kind,
+                        base: held.base()?,
+                        quality: held.quality()?,
+                    });
+                }
+                Ok(PileupTemplate {
+                    called: overlap::observe(observations, agreement, disagreement),
+                    reads,
+                    position: self.reference_pos,
+                    pileups: PyOnceLock::new(),
+                })
+            })
+            .collect()
     }
 
     fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
@@ -955,6 +992,170 @@ impl Pileup {
             self.reference_pos,
             self.pileups_of(py)?.repr()?,
             self.min_base_quality,
+        ))
+    }
+}
+
+/// One template at one pileup position: the reads of one query name, their bases called into one.
+///
+/// A template's strand and distances are those of its first read, the first of a pair or a
+/// fragment's only read, worked out from its second read where the first holds no base here.
+///
+/// Attributes:
+///     query_name: the name of the template's reads.
+///     reads: the entries of the template's reads at the position, usually one or two.
+///     pileup_type: whether the template holds a base, a deletion, or a skip.
+///     base: the template's base, its reads' bases called into one.
+///     qual: the quality of the template's base, or of the next base for a deletion.
+#[pyclass(module = "streampile", name = "PileupTemplate", frozen)]
+pub(crate) struct PileupTemplate {
+    reads: Vec<Held>,
+    position: i64,
+    called: Observation,
+    pileups: PyOnceLock<Py<PyTuple>>,
+}
+
+impl PileupTemplate {
+    /// The template's first read here: the first of a pair, or a fragment's only read.
+    fn first_read(&self) -> Option<&Held> {
+        self.reads.iter().find(|held| !is_second(held))
+    }
+
+    /// The template's second read here: the last of a pair.
+    fn second_read(&self) -> Option<&Held> {
+        self.reads.iter().find(|held| is_second(held))
+    }
+}
+
+fn is_second(held: &Held) -> bool {
+    let flags = held.bam().flags();
+    flags.is_segmented() && flags.is_last_segment()
+}
+
+#[pymethods]
+impl PileupTemplate {
+    /// The name of the template's reads.
+    #[getter]
+    fn query_name(&self) -> Option<String> {
+        self.reads[0]
+            .bam()
+            .name()
+            .map(|name| String::from_utf8_lossy(name).into_owned())
+    }
+
+    /// The entries of the template's reads at the position, usually one or two, as in `pileups`.
+    #[getter]
+    fn reads<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let reads = self.pileups.get_or_try_init(py, || {
+            let reads = self
+                .reads
+                .iter()
+                .map(|held| {
+                    Py::new(
+                        py,
+                        PileupRead {
+                            held: held.clone(),
+                            position: Some(self.position),
+                        },
+                    )
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            PyTuple::new(py, reads).map(Bound::unbind)
+        })?;
+        Ok(reads.bind(py).clone())
+    }
+
+    /// Whether the template holds a base, a deletion, or a skip: a base if any of its reads does,
+    /// or else a deletion if any of them does.
+    #[getter]
+    fn pileup_type<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        pileup_read_type(py, self.called.kind)
+    }
+
+    /// The template's upper-cased base, its reads' bases called into one, or `None` without one.
+    #[getter]
+    fn base(&self) -> Option<char> {
+        self.called.base.map(char::from)
+    }
+
+    /// The quality of the template's base, or of the next base for a deletion, or `None`.
+    #[getter]
+    fn qual(&self) -> Option<u8> {
+        self.called.quality
+    }
+
+    /// Whether the template holds a deletion at the position, and no base.
+    #[getter]
+    fn is_del(&self) -> bool {
+        self.called.kind == EntryKind::Deletion
+    }
+
+    /// Whether every read of the template skips over the position.
+    #[getter]
+    fn is_refskip(&self) -> bool {
+        self.called.kind == EntryKind::Skip
+    }
+
+    /// Whether the template's base is a no-call, `N`.
+    #[getter]
+    fn is_no_call(&self) -> bool {
+        self.called.base == Some(b'N')
+    }
+
+    /// Whether the template's first read is aligned to the reverse strand.
+    ///
+    /// It is `False` for an F1R2 pair and `True` for an F2R1 pair, read from the second read's
+    /// flags without the first.
+    #[getter]
+    fn is_reverse(&self) -> bool {
+        match self.first_read() {
+            Some(first) => first.bam().flags().is_reverse_complemented(),
+            None => self.reads[0].bam().flags().is_mate_reverse_complemented(),
+        }
+    }
+
+    /// The number of the template's bases between its first read's 5′ end and the position.
+    ///
+    /// It is the first read's `five_prime_distance` where it holds a base here, and otherwise the
+    /// second read's `template_end_distance`.
+    ///
+    /// Raises:
+    ///     ValueError: for a read of an FR pair with no usable `MC` tag.
+    #[getter]
+    fn five_prime_distance(&self) -> PyResult<Option<i64>> {
+        if let Some(distance) = self.first_read().and_then(Held::five_prime_distance) {
+            return Ok(Some(distance));
+        }
+        match self.second_read() {
+            Some(second) => second.template_end_distance(Some(self.position)),
+            None => Ok(None),
+        }
+    }
+
+    /// The number of the template's bases between the position and its other end, the 5′ end of
+    /// the second read of an FR pair.
+    ///
+    /// It is the first read's `template_end_distance`, and without the first read here the second
+    /// read's `five_prime_distance`.
+    ///
+    /// Raises:
+    ///     ValueError: for a read of an FR pair with no usable `MC` tag.
+    #[getter]
+    fn template_end_distance(&self) -> PyResult<Option<i64>> {
+        match self.first_read() {
+            Some(first) => first.template_end_distance(Some(self.position)),
+            None => Ok(self.reads[0].five_prime_distance()),
+        }
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "PileupTemplate(query_name={}, pileup_type={}, base={}, qual={}, reads={})",
+            self.query_name().into_pyobject(py)?.repr()?,
+            self.pileup_type(py)?.repr()?,
+            self.base().into_pyobject(py)?.repr()?,
+            self.qual().into_pyobject(py)?.repr()?,
+            self.reads(py)?.repr()?,
         ))
     }
 }

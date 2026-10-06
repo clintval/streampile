@@ -56,6 +56,27 @@ def described(pileup: Pileup) -> str:
     ])
 
 
+def templates(pileup: Pileup) -> str:
+    """Every field of every template of a pileup, under the default strategies, on one line."""
+    described: list[str] = []
+    for template in pileup.templates():
+        try:
+            ends: object = (template.five_prime_distance, template.template_end_distance)
+        except ValueError as error:
+            ends = str(error)
+        fields = (
+            template.query_name,
+            len(template.reads),
+            template.pileup_type.value,
+            template.base,
+            template.qual,
+            template.is_reverse,
+            ends,
+        )
+        described.append("/".join(str(field) for field in fields).replace(" ", ""))
+    return " ".join(described)
+
+
 def columns(options: dict[str, Any]) -> str:
     lines: list[str] = []
     with (
@@ -66,7 +87,7 @@ def columns(options: dict[str, Any]) -> str:
             for pileup in builder.columns(contig, 0, end):
                 position = f"{pileup.reference_name}\t{pileup.reference_pos}"
                 lines.append(f"{position}\tall\t{described(pileup)}")
-                lines.append(f"{position}\tkept\t{described(pileup.without_overlaps())}")
+                lines.append(f"{position}\ttemplates\t{templates(pileup)}")
     return "\n".join(lines) + "\n"
 
 

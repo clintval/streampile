@@ -4,7 +4,7 @@ use noodles::sam::alignment::record::Flags;
 use noodles::{bam, bgzf};
 
 use super::{bases, names};
-use crate::{AuxValue, StreamingPileupBuilder};
+use crate::{AgreementStrategy, AuxValue, DisagreementStrategy, StreamingPileupBuilder};
 
 const READS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/reads.bam");
 
@@ -34,12 +34,41 @@ fn test_the_fixture_piles_up_as_the_readme_shows() {
 }
 
 #[test]
-fn test_the_fixture_keeps_one_read_of_the_pair_without_overlaps() {
+fn test_the_fixture_pair_is_one_template_whose_mates_agree_and_then_disagree() {
     let paired = |record: &bam::Record| record.flags().is_segmented();
     let mut builder = open().read_filter(paired);
-    assert_eq!(bases(&builder.pileup("chr1", 50).unwrap()), "TT");
-    let mut builder = open().read_filter(paired).without_overlaps(true);
-    assert_eq!(bases(&builder.pileup("chr1", 50).unwrap()), "T");
+    let mut called = |position, agreement, disagreement| {
+        let pileup = builder.pileup("chr1", position).unwrap();
+        let templates = pileup.templates(agreement, disagreement);
+        assert_eq!(templates.len(), 1);
+        let template = &templates[0];
+        assert_eq!(template.entries().count(), 2);
+        (template.base().map(char::from), template.quality())
+    };
+    assert_eq!(
+        called(
+            50,
+            AgreementStrategy::Consensus,
+            DisagreementStrategy::Consensus
+        ),
+        (Some('T'), Some(80))
+    );
+    let disagreeing: Vec<(Option<char>, Option<u8>)> = [
+        DisagreementStrategy::Consensus,
+        DisagreementStrategy::MaskBoth,
+        DisagreementStrategy::MaskLowerQual,
+    ]
+    .into_iter()
+    .map(|strategy| called(52, AgreementStrategy::Consensus, strategy))
+    .collect();
+    assert_eq!(
+        disagreeing,
+        [
+            (Some('G'), Some(20)),
+            (Some('N'), Some(2)),
+            (Some('G'), Some(40))
+        ]
+    );
 }
 
 #[test]

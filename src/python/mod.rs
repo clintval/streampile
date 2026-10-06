@@ -70,6 +70,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<builder::StreamingPileupBuilder>()?;
     module.add_class::<pileup::Pileup>()?;
     module.add_class::<pileup::PileupRead>()?;
+    module.add_class::<pileup::PileupTemplate>()?;
     module.add_class::<tabulate::Tabulation>()?;
     module.add_function(wrap_pyfunction!(tabulate::normalize_allele, module)?)?;
     module.add("DEFAULT_EXCLUDE_FLAGS", DEFAULT_EXCLUDE_FLAGS.bits())?;

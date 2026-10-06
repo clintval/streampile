@@ -13,6 +13,7 @@ from .records import write_bam
 from .test_golden import OPTIONS
 from .test_golden import columns
 from .test_golden import described
+from .test_golden import templates
 from .test_pysam_agreement import LENGTH
 from .test_pysam_agreement import RANDOM_HEADER
 from .test_pysam_agreement import random_reads
@@ -42,11 +43,11 @@ def test_records_read_through_their_attributes_pile_up_the_same(name: str) -> No
 
 
 def sweep(path: Path, **options: Any) -> list[str]:
-    """Every column of the random reads, with each entry's distances to both fragment ends."""
+    """Every column of the random reads, with its templates and each entry's distances."""
     swept: list[str] = []
     with AlignmentFile(str(path)) as reads, StreamingPileupBuilder(reads, **options) as builder:
         for pileup in builder.columns("chr1", 0, LENGTH):
-            swept.append(described(pileup) + described(pileup.without_overlaps()) + ends(pileup))
+            swept.append(described(pileup) + templates(pileup) + ends(pileup))
     return swept
 
 

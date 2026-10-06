@@ -8,10 +8,7 @@ use noodles::sam::{self, alignment::record::Cigar as _, alignment::record::Flags
 use crate::auxiliary;
 use crate::error::{Error, Result};
 use crate::footprint::{Footprint, Located};
-use crate::pileup::{
-    EntryKind, LiveRecord, NONE, Pileup, RawEntry, name_hash, quality_of, record_name,
-    templates_kept,
-};
+use crate::pileup::{EntryKind, LiveRecord, NONE, Pileup, RawEntry, name_hash, record_name};
 use crate::source::{AlignmentRecord, RecordSource};
 
 /// Secondary, QC-fail, duplicate, and supplementary reads, which are left out by default.
@@ -32,7 +29,6 @@ struct Options {
     exclude_flags: Flags,
     min_base_quality: u8,
     proper_pairs_only: bool,
-    without_overlaps: bool,
     aux_tags: Vec<[u8; 2]>,
 }
 
@@ -43,7 +39,6 @@ impl Default for Options {
             exclude_flags: DEFAULT_EXCLUDE_FLAGS,
             min_base_quality: DEFAULT_MIN_BASE_QUALITY,
             proper_pairs_only: false,
-            without_overlaps: false,
             aux_tags: Vec::new(),
         }
     }
@@ -176,19 +171,6 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     #[must_use]
     pub fn proper_pairs_only(mut self, proper_pairs_only: bool) -> Self {
         self.options.proper_pairs_only = proper_pairs_only;
-        self
-    }
-
-    /// Keeps one record per template, by name, in every pileup.
-    ///
-    /// The record kept is the first of its name whose entry is a base, or a deletion followed by
-    /// a base, at the quality floor, or else the first of its name, and every entry of it is
-    /// kept, its insertion entry included. Entries come in input order, so of two passing mates
-    /// in a coordinate-sorted stream, the one that starts first is kept. A mate's skip, or its
-    /// base under the floor, therefore never hides the other mate's base.
-    #[must_use]
-    pub fn without_overlaps(mut self, without_overlaps: bool) -> Self {
-        self.options.without_overlaps = without_overlaps;
         self
     }
 
@@ -612,25 +594,6 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
                 });
             }
         }
-        if self.options.without_overlaps {
-            self.keep_one_per_template();
-        }
-    }
-
-    fn keep_one_per_template(&mut self) {
-        let floor = self.options.min_base_quality;
-        let slots = &self.slots;
-        let kept = templates_kept(&self.entries, |raw| {
-            let live = &slots[raw.slot as usize];
-            let quality = quality_of(live.record.bam(), raw.kind, raw.offset);
-            (
-                live.template(),
-                raw.slot as usize,
-                quality.is_some_and(|q| q >= floor),
-            )
-        });
-        let mut kept = kept.into_iter();
-        self.entries.retain(|_| kept.next().unwrap_or(true));
     }
 }
 

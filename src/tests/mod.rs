@@ -3,6 +3,7 @@ mod fgbio;
 mod fixture;
 mod footprint;
 mod pileup;
+mod templates;
 
 use std::io;
 

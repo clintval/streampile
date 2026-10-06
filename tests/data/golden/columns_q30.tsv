@@ -1,200 +1,200 @@
 chr1	0	all	1	1	A	40	plain/0/base/0/0/None/0/A/40/None/None
-chr1	0	kept	1	1	A	40	plain/0/base/0/0/None/0/A/40/None/None
+chr1	0	templates	plain/1/base/A/40/False/(0,None)
 chr1	1	all	1	1	C	40	plain/0/base/1/1/None/0/C/40/None/None
-chr1	1	kept	1	1	C	40	plain/0/base/1/1/None/0/C/40/None/None
+chr1	1	templates	plain/1/base/C/40/False/(1,None)
 chr1	2	all	2	2	GG	40,40	plain/0/base/2/2/None/0/G/40/None/None snv/0/base/0/0/None/0/G/40/None/None
-chr1	2	kept	2	2	GG	40,40	plain/0/base/2/2/None/0/G/40/None/None snv/0/base/0/0/None/0/G/40/None/None
+chr1	2	templates	plain/1/base/G/40/False/(2,None) snv/1/base/G/40/False/(0,None)
 chr1	3	all	2	2	TT	40,40	plain/0/base/3/3/None/0/T/40/None/None snv/0/base/1/1/None/0/T/40/None/None
-chr1	3	kept	2	2	TT	40,40	plain/0/base/3/3/None/0/T/40/None/None snv/0/base/1/1/None/0/T/40/None/None
+chr1	3	templates	plain/1/base/T/40/False/(3,None) snv/1/base/T/40/False/(1,None)
 chr1	4	all	3	3	AAA	40,40,40	plain/0/base/4/4/None/0/A/40/None/None snv/0/base/2/2/None/0/A/40/None/None mnv/16/base/0/0/None/0/A/40/None/None
-chr1	4	kept	3	3	AAA	40,40,40	plain/0/base/4/4/None/0/A/40/None/None snv/0/base/2/2/None/0/A/40/None/None mnv/16/base/0/0/None/0/A/40/None/None
+chr1	4	templates	plain/1/base/A/40/False/(4,None) snv/1/base/A/40/False/(2,None) mnv/1/base/A/40/True/(19,None)
 chr1	5	all	4	4	GGGG	40,40,40,40	plain/0/base/5/5/None/0/G/40/None/None snv/0/base/3/3/None/0/G/40/None/None mnv/16/base/1/1/None/0/G/40/None/None lowqual/0/base/0/0/None/0/G/40/None/None
-chr1	5	kept	4	4	GGGG	40,40,40,40	plain/0/base/5/5/None/0/G/40/None/None snv/0/base/3/3/None/0/G/40/None/None mnv/16/base/1/1/None/0/G/40/None/None lowqual/0/base/0/0/None/0/G/40/None/None
+chr1	5	templates	plain/1/base/G/40/False/(5,None) snv/1/base/G/40/False/(3,None) mnv/1/base/G/40/True/(18,None) lowqual/1/base/G/40/False/(0,None)
 chr1	6	all	4	4	GGGG	40,40,40,40	plain/0/base/6/6/None/0/G/40/None/None snv/0/base/4/4/None/0/G/40/None/None mnv/16/base/2/2/None/0/G/40/None/None lowqual/0/base/1/1/None/0/G/40/None/None
-chr1	6	kept	4	4	GGGG	40,40,40,40	plain/0/base/6/6/None/0/G/40/None/None snv/0/base/4/4/None/0/G/40/None/None mnv/16/base/2/2/None/0/G/40/None/None lowqual/0/base/1/1/None/0/G/40/None/None
+chr1	6	templates	plain/1/base/G/40/False/(6,None) snv/1/base/G/40/False/(4,None) mnv/1/base/G/40/True/(17,None) lowqual/1/base/G/40/False/(1,None)
 chr1	7	all	4	4	CCCC	40,40,40,40	plain/0/base/7/7/None/0/C/40/None/None snv/0/base/5/5/None/0/C/40/None/None mnv/16/base/3/3/None/0/C/40/None/None lowqual/0/base/2/2/None/0/C/40/None/None
-chr1	7	kept	4	4	CCCC	40,40,40,40	plain/0/base/7/7/None/0/C/40/None/None snv/0/base/5/5/None/0/C/40/None/None mnv/16/base/3/3/None/0/C/40/None/None lowqual/0/base/2/2/None/0/C/40/None/None
+chr1	7	templates	plain/1/base/C/40/False/(7,None) snv/1/base/C/40/False/(5,None) mnv/1/base/C/40/True/(16,None) lowqual/1/base/C/40/False/(2,None)
 chr1	8	all	4	4	TTTT	40,40,40,40	plain/0/base/8/8/None/0/T/40/None/None snv/0/base/6/6/None/0/T/40/None/None mnv/16/base/4/4/None/0/T/40/None/None lowqual/0/base/3/3/None/0/T/40/None/None
-chr1	8	kept	4	4	TTTT	40,40,40,40	plain/0/base/8/8/None/0/T/40/None/None snv/0/base/6/6/None/0/T/40/None/None mnv/16/base/4/4/None/0/T/40/None/None lowqual/0/base/3/3/None/0/T/40/None/None
+chr1	8	templates	plain/1/base/T/40/False/(8,None) snv/1/base/T/40/False/(6,None) mnv/1/base/T/40/True/(15,None) lowqual/1/base/T/40/False/(3,None)
 chr1	9	all	4	4	AAAA	40,40,40,40	plain/0/base/9/9/None/0/A/40/None/None snv/0/base/7/7/None/0/A/40/None/None mnv/16/base/5/5/None/0/A/40/None/None lowqual/0/base/4/4/None/0/A/40/None/None
-chr1	9	kept	4	4	AAAA	40,40,40,40	plain/0/base/9/9/None/0/A/40/None/None snv/0/base/7/7/None/0/A/40/None/None mnv/16/base/5/5/None/0/A/40/None/None lowqual/0/base/4/4/None/0/A/40/None/None
+chr1	9	templates	plain/1/base/A/40/False/(9,None) snv/1/base/A/40/False/(7,None) mnv/1/base/A/40/True/(14,None) lowqual/1/base/A/40/False/(4,None)
 chr1	10	all	4	4	ATGA	40,40,40,40	plain/0/base/10/10/None/0/A/40/None/None snv/0/base/8/8/None/0/T/40/None/None mnv/16/base/6/6/None/0/G/40/None/None lowqual/0/base/5/5/None/0/A/40/None/None
-chr1	10	kept	4	4	ATGA	40,40,40,40	plain/0/base/10/10/None/0/A/40/None/None snv/0/base/8/8/None/0/T/40/None/None mnv/16/base/6/6/None/0/G/40/None/None lowqual/0/base/5/5/None/0/A/40/None/None
+chr1	10	templates	plain/1/base/A/40/False/(10,None) snv/1/base/T/40/False/(8,None) mnv/1/base/G/40/True/(13,None) lowqual/1/base/A/40/False/(5,None)
 chr1	11	all	4	4	CCGC	40,40,40,40	plain/0/base/11/11/None/0/C/40/None/None snv/0/base/9/9/None/0/C/40/None/None mnv/16/base/7/7/None/0/G/40/None/None lowqual/0/base/6/6/None/0/C/40/None/None
-chr1	11	kept	4	4	CCGC	40,40,40,40	plain/0/base/11/11/None/0/C/40/None/None snv/0/base/9/9/None/0/C/40/None/None mnv/16/base/7/7/None/0/G/40/None/None lowqual/0/base/6/6/None/0/C/40/None/None
+chr1	11	templates	plain/1/base/C/40/False/(11,None) snv/1/base/C/40/False/(9,None) mnv/1/base/G/40/True/(12,None) lowqual/1/base/C/40/False/(6,None)
 chr1	12	all	4	3	GGG	40,40,40	plain/0/base/12/12/None/0/G/40/None/None snv/0/base/10/10/None/0/G/40/None/None mnv/16/base/8/8/None/0/G/40/None/None lowqual/0/base/7/7/None/0/G/2/None/None
-chr1	12	kept	4	3	GGG	40,40,40	plain/0/base/12/12/None/0/G/40/None/None snv/0/base/10/10/None/0/G/40/None/None mnv/16/base/8/8/None/0/G/40/None/None lowqual/0/base/7/7/None/0/G/2/None/None
+chr1	12	templates	plain/1/base/G/40/False/(12,None) snv/1/base/G/40/False/(10,None) mnv/1/base/G/40/True/(11,None) lowqual/1/base/G/2/False/(7,None)
 chr1	13	all	4	4	TTTT	40,40,40,40	plain/0/base/13/13/None/0/T/40/None/None snv/0/base/11/11/None/0/T/40/None/None mnv/16/base/9/9/None/0/T/40/None/None lowqual/0/base/8/8/None/0/T/40/None/None
-chr1	13	kept	4	4	TTTT	40,40,40,40	plain/0/base/13/13/None/0/T/40/None/None snv/0/base/11/11/None/0/T/40/None/None mnv/16/base/9/9/None/0/T/40/None/None lowqual/0/base/8/8/None/0/T/40/None/None
+chr1	13	templates	plain/1/base/T/40/False/(13,None) snv/1/base/T/40/False/(11,None) mnv/1/base/T/40/True/(10,None) lowqual/1/base/T/40/False/(8,None)
 chr1	14	all	4	4	TTTT	40,40,40,40	plain/0/base/14/14/None/0/T/40/None/None snv/0/base/12/12/None/0/T/40/None/None mnv/16/base/10/10/None/0/T/40/None/None lowqual/0/base/9/9/None/0/T/40/None/None
-chr1	14	kept	4	4	TTTT	40,40,40,40	plain/0/base/14/14/None/0/T/40/None/None snv/0/base/12/12/None/0/T/40/None/None mnv/16/base/10/10/None/0/T/40/None/None lowqual/0/base/9/9/None/0/T/40/None/None
+chr1	14	templates	plain/1/base/T/40/False/(14,None) snv/1/base/T/40/False/(12,None) mnv/1/base/T/40/True/(9,None) lowqual/1/base/T/40/False/(9,None)
 chr1	15	all	4	4	AAAA	40,40,40,40	plain/0/base/15/15/None/0/A/40/None/None snv/0/base/13/13/None/0/A/40/None/None mnv/16/base/11/11/None/0/A/40/None/None lowqual/0/base/10/10/None/0/A/40/None/None
-chr1	15	kept	4	4	AAAA	40,40,40,40	plain/0/base/15/15/None/0/A/40/None/None snv/0/base/13/13/None/0/A/40/None/None mnv/16/base/11/11/None/0/A/40/None/None lowqual/0/base/10/10/None/0/A/40/None/None
+chr1	15	templates	plain/1/base/A/40/False/(15,None) snv/1/base/A/40/False/(13,None) mnv/1/base/A/40/True/(8,None) lowqual/1/base/A/40/False/(10,None)
 chr1	16	all	5	5	GGGGG	40,40,40,40,40	plain/0/base/16/16/None/0/G/40/None/None snv/0/base/14/14/None/0/G/40/None/None mnv/16/base/12/12/None/0/G/40/None/None lowqual/0/base/11/11/None/0/G/40/None/None deletion/16/base/0/0/None/0/G/40/None/None
-chr1	16	kept	5	5	GGGGG	40,40,40,40,40	plain/0/base/16/16/None/0/G/40/None/None snv/0/base/14/14/None/0/G/40/None/None mnv/16/base/12/12/None/0/G/40/None/None lowqual/0/base/11/11/None/0/G/40/None/None deletion/16/base/0/0/None/0/G/40/None/None
+chr1	16	templates	plain/1/base/G/40/False/(16,None) snv/1/base/G/40/False/(14,None) mnv/1/base/G/40/True/(7,None) lowqual/1/base/G/40/False/(11,None) deletion/1/base/G/40/True/(20,None)
 chr1	17	all	5	5	CCCCC	40,40,40,40,40	plain/0/base/17/17/None/0/C/40/None/None snv/0/base/15/15/None/0/C/40/None/None mnv/16/base/13/13/None/0/C/40/None/None lowqual/0/base/12/12/None/0/C/40/None/None deletion/16/base/1/1/None/0/C/40/None/None
-chr1	17	kept	5	5	CCCCC	40,40,40,40,40	plain/0/base/17/17/None/0/C/40/None/None snv/0/base/15/15/None/0/C/40/None/None mnv/16/base/13/13/None/0/C/40/None/None lowqual/0/base/12/12/None/0/C/40/None/None deletion/16/base/1/1/None/0/C/40/None/None
+chr1	17	templates	plain/1/base/C/40/False/(17,None) snv/1/base/C/40/False/(15,None) mnv/1/base/C/40/True/(6,None) lowqual/1/base/C/40/False/(12,None) deletion/1/base/C/40/True/(19,None)
 chr1	18	all	5	5	CCCCC	40,40,40,40,40	plain/0/base/18/18/None/0/C/40/None/None snv/0/base/16/16/None/0/C/40/None/None mnv/16/base/14/14/None/0/C/40/None/None lowqual/0/base/13/13/None/0/C/40/None/None deletion/16/base/2/2/None/0/C/40/None/None
-chr1	18	kept	5	5	CCCCC	40,40,40,40,40	plain/0/base/18/18/None/0/C/40/None/None snv/0/base/16/16/None/0/C/40/None/None mnv/16/base/14/14/None/0/C/40/None/None lowqual/0/base/13/13/None/0/C/40/None/None deletion/16/base/2/2/None/0/C/40/None/None
+chr1	18	templates	plain/1/base/C/40/False/(18,None) snv/1/base/C/40/False/(16,None) mnv/1/base/C/40/True/(5,None) lowqual/1/base/C/40/False/(13,None) deletion/1/base/C/40/True/(18,None)
 chr1	19	all	5	5	AAAAA	40,40,40,40,40	plain/0/base/19/19/None/0/A/40/None/None snv/0/base/17/17/None/0/A/40/None/None mnv/16/base/15/15/None/0/A/40/None/None lowqual/0/base/14/14/None/0/A/40/None/None deletion/16/base/3/3/None/0/A/40/None/None
-chr1	19	kept	5	5	AAAAA	40,40,40,40,40	plain/0/base/19/19/None/0/A/40/None/None snv/0/base/17/17/None/0/A/40/None/None mnv/16/base/15/15/None/0/A/40/None/None lowqual/0/base/14/14/None/0/A/40/None/None deletion/16/base/3/3/None/0/A/40/None/None
+chr1	19	templates	plain/1/base/A/40/False/(19,None) snv/1/base/A/40/False/(17,None) mnv/1/base/A/40/True/(4,None) lowqual/1/base/A/40/False/(14,None) deletion/1/base/A/40/True/(17,None)
 chr1	20	all	5	5	TTTTT	40,40,40,40,40	snv/0/base/18/18/None/0/T/40/None/None mnv/16/base/16/16/None/0/T/40/None/None lowqual/0/base/15/15/None/0/T/40/None/None deletion/16/base/4/4/None/0/T/40/None/None clipped/0/base/2/2/None/0/T/40/None/None
-chr1	20	kept	5	5	TTTTT	40,40,40,40,40	snv/0/base/18/18/None/0/T/40/None/None mnv/16/base/16/16/None/0/T/40/None/None lowqual/0/base/15/15/None/0/T/40/None/None deletion/16/base/4/4/None/0/T/40/None/None clipped/0/base/2/2/None/0/T/40/None/None
+chr1	20	templates	snv/1/base/T/40/False/(18,None) mnv/1/base/T/40/True/(3,None) lowqual/1/base/T/40/False/(15,None) deletion/1/base/T/40/True/(16,None) clipped/1/base/T/40/False/(2,None)
 chr1	21	all	5	5	GGGGG	40,40,40,40,40	snv/0/base/19/19/None/0/G/40/None/None mnv/16/base/17/17/None/0/G/40/None/None lowqual/0/base/16/16/None/0/G/40/None/None deletion/16/base/5/5/None/0/G/40/None/None clipped/0/base/3/3/None/0/G/40/None/None
-chr1	21	kept	5	5	GGGGG	40,40,40,40,40	snv/0/base/19/19/None/0/G/40/None/None mnv/16/base/17/17/None/0/G/40/None/None lowqual/0/base/16/16/None/0/G/40/None/None deletion/16/base/5/5/None/0/G/40/None/None clipped/0/base/3/3/None/0/G/40/None/None
+chr1	21	templates	snv/1/base/G/40/False/(19,None) mnv/1/base/G/40/True/(2,None) lowqual/1/base/G/40/False/(16,None) deletion/1/base/G/40/True/(15,None) clipped/1/base/G/40/False/(3,None)
 chr1	22	all	4	4	CCCC	40,40,40,40	mnv/16/base/18/18/None/0/C/40/None/None lowqual/0/base/17/17/None/0/C/40/None/None deletion/16/base/6/6/None/0/C/40/None/None clipped/0/base/4/4/None/0/C/40/None/None
-chr1	22	kept	4	4	CCCC	40,40,40,40	mnv/16/base/18/18/None/0/C/40/None/None lowqual/0/base/17/17/None/0/C/40/None/None deletion/16/base/6/6/None/0/C/40/None/None clipped/0/base/4/4/None/0/C/40/None/None
+chr1	22	templates	mnv/1/base/C/40/True/(1,None) lowqual/1/base/C/40/False/(17,None) deletion/1/base/C/40/True/(14,None) clipped/1/base/C/40/False/(4,None)
 chr1	23	all	4	4	AAAA	40,40,40,40	mnv/16/base/19/19/None/0/A/40/None/None lowqual/0/base/18/18/None/0/A/40/None/None deletion/16/base/7/7/None/0/A/40/None/None clipped/0/base/5/5/None/0/A/40/None/None
-chr1	23	kept	4	4	AAAA	40,40,40,40	mnv/16/base/19/19/None/0/A/40/None/None lowqual/0/base/18/18/None/0/A/40/None/None deletion/16/base/7/7/None/0/A/40/None/None clipped/0/base/5/5/None/0/A/40/None/None
+chr1	23	templates	mnv/1/base/A/40/True/(0,None) lowqual/1/base/A/40/False/(18,None) deletion/1/base/A/40/True/(13,None) clipped/1/base/A/40/False/(5,None)
 chr1	24	all	3	3	AAA	40,40,40	lowqual/0/base/19/19/None/0/A/40/None/None deletion/16/base/8/8/None/0/A/40/None/None clipped/0/base/6/6/None/0/A/40/None/None
-chr1	24	kept	3	3	AAA	40,40,40	lowqual/0/base/19/19/None/0/A/40/None/None deletion/16/base/8/8/None/0/A/40/None/None clipped/0/base/6/6/None/0/A/40/None/None
+chr1	24	templates	lowqual/1/base/A/40/False/(19,None) deletion/1/base/A/40/True/(12,None) clipped/1/base/A/40/False/(6,None)
 chr1	25	all	2	2	AA	40,40	deletion/16/base/9/9/None/0/A/40/None/None clipped/0/base/7/7/None/0/A/40/None/None
-chr1	25	kept	2	2	AA	40,40	deletion/16/base/9/9/None/0/A/40/None/None clipped/0/base/7/7/None/0/A/40/None/None
+chr1	25	templates	deletion/1/base/A/40/True/(11,None) clipped/1/base/A/40/False/(7,None)
 chr1	26	all	3	3	AAA	40,40,40	deletion/16/base/10/10/None/0/A/40/None/None clipped/0/base/8/8/None/0/A/40/None/None insertion/0/base/0/0/None/0/A/40/None/None
-chr1	26	kept	3	3	AAA	40,40,40	deletion/16/base/10/10/None/0/A/40/None/None clipped/0/base/8/8/None/0/A/40/None/None insertion/0/base/0/0/None/0/A/40/None/None
+chr1	26	templates	deletion/1/base/A/40/True/(10,None) clipped/1/base/A/40/False/(8,None) insertion/1/base/A/40/False/(0,None)
 chr1	27	all	3	3	AA	40,40	deletion/16/deletion/None/11/None/0/None/40/None/None clipped/0/base/9/9/None/0/A/40/None/None insertion/0/base/1/1/None/0/A/40/None/None
-chr1	27	kept	3	3	AA	40,40	deletion/16/deletion/None/11/None/0/None/40/None/None clipped/0/base/9/9/None/0/A/40/None/None insertion/0/base/1/1/None/0/A/40/None/None
+chr1	27	templates	deletion/1/deletion/None/40/True/(None,None) clipped/1/base/A/40/False/(9,None) insertion/1/base/A/40/False/(1,None)
 chr1	28	all	3	3	GGG	40,40,40	deletion/16/base/11/11/None/0/G/40/None/None clipped/0/base/10/10/None/0/G/40/None/None insertion/0/base/2/2/None/0/G/40/None/None
-chr1	28	kept	3	3	GGG	40,40,40	deletion/16/base/11/11/None/0/G/40/None/None clipped/0/base/10/10/None/0/G/40/None/None insertion/0/base/2/2/None/0/G/40/None/None
+chr1	28	templates	deletion/1/base/G/40/True/(9,None) clipped/1/base/G/40/False/(10,None) insertion/1/base/G/40/False/(2,None)
 chr1	29	all	3	3	TTT	40,40,40	deletion/16/base/12/12/None/0/T/40/None/None clipped/0/base/11/11/None/0/T/40/None/None insertion/0/base/3/3/None/0/T/40/None/None
-chr1	29	kept	3	3	TTT	40,40,40	deletion/16/base/12/12/None/0/T/40/None/None clipped/0/base/11/11/None/0/T/40/None/None insertion/0/base/3/3/None/0/T/40/None/None
+chr1	29	templates	deletion/1/base/T/40/True/(8,None) clipped/1/base/T/40/False/(11,None) insertion/1/base/T/40/False/(3,None)
 chr1	30	all	4	4	CCCC	40,40,40,40	deletion/16/base/13/13/None/0/C/40/None/None clipped/0/base/12/12/None/0/C/40/None/None insertion/0/base/4/4/None/0/C/40/None/None spliced/0/base/0/0/None/0/C/40/None/None
-chr1	30	kept	4	4	CCCC	40,40,40,40	deletion/16/base/13/13/None/0/C/40/None/None clipped/0/base/12/12/None/0/C/40/None/None insertion/0/base/4/4/None/0/C/40/None/None spliced/0/base/0/0/None/0/C/40/None/None
+chr1	30	templates	deletion/1/base/C/40/True/(7,None) clipped/1/base/C/40/False/(12,None) insertion/1/base/C/40/False/(4,None) spliced/1/base/C/40/False/(0,None)
 chr1	31	all	4	4	CCCC	40,40,40,40	deletion/16/base/14/14/None/0/C/40/None/None clipped/0/base/13/13/None/0/C/40/None/None insertion/0/base/5/5/None/0/C/40/None/None spliced/0/base/1/1/None/0/C/40/None/None
-chr1	31	kept	4	4	CCCC	40,40,40,40	deletion/16/base/14/14/None/0/C/40/None/None clipped/0/base/13/13/None/0/C/40/None/None insertion/0/base/5/5/None/0/C/40/None/None spliced/0/base/1/1/None/0/C/40/None/None
+chr1	31	templates	deletion/1/base/C/40/True/(6,None) clipped/1/base/C/40/False/(13,None) insertion/1/base/C/40/False/(5,None) spliced/1/base/C/40/False/(1,None)
 chr1	32	all	4	4	AAAA	40,40,40,40	deletion/16/base/15/15/None/0/A/40/None/None clipped/0/base/14/14/None/0/A/40/None/None insertion/0/base/6/6/None/0/A/40/None/None spliced/0/base/2/2/None/0/A/40/None/None
-chr1	32	kept	4	4	AAAA	40,40,40,40	deletion/16/base/15/15/None/0/A/40/None/None clipped/0/base/14/14/None/0/A/40/None/None insertion/0/base/6/6/None/0/A/40/None/None spliced/0/base/2/2/None/0/A/40/None/None
+chr1	32	templates	deletion/1/base/A/40/True/(5,None) clipped/1/base/A/40/False/(14,None) insertion/1/base/A/40/False/(6,None) spliced/1/base/A/40/False/(2,None)
 chr1	33	all	4	4	TTTT	40,40,40,40	deletion/16/base/16/16/None/0/T/40/None/None clipped/0/base/15/15/None/0/T/40/None/None insertion/0/base/7/7/None/0/T/40/None/None insertion/0/insertion/None/None/8/2/None/None/TT/[40,40] spliced/0/base/3/3/None/0/T/40/None/None
-chr1	33	kept	4	4	TTTT	40,40,40,40	deletion/16/base/16/16/None/0/T/40/None/None clipped/0/base/15/15/None/0/T/40/None/None insertion/0/base/7/7/None/0/T/40/None/None insertion/0/insertion/None/None/8/2/None/None/TT/[40,40] spliced/0/base/3/3/None/0/T/40/None/None
+chr1	33	templates	deletion/1/base/T/40/True/(4,None) clipped/1/base/T/40/False/(15,None) insertion/1/base/T/40/False/(7,None) spliced/1/base/T/40/False/(3,None)
 chr1	34	all	4	4	GGGG	40,40,40,40	deletion/16/base/17/17/None/0/G/40/None/None clipped/0/base/16/16/None/0/G/40/None/None insertion/0/base/10/10/None/0/G/40/None/None spliced/0/base/4/4/None/0/G/40/None/None
-chr1	34	kept	4	4	GGGG	40,40,40,40	deletion/16/base/17/17/None/0/G/40/None/None clipped/0/base/16/16/None/0/G/40/None/None insertion/0/base/10/10/None/0/G/40/None/None spliced/0/base/4/4/None/0/G/40/None/None
+chr1	34	templates	deletion/1/base/G/40/True/(3,None) clipped/1/base/G/40/False/(16,None) insertion/1/base/G/40/False/(10,None) spliced/1/base/G/40/False/(4,None)
 chr1	35	all	4	3	AAA	40,40,40	deletion/16/base/18/18/None/0/A/40/None/None clipped/0/base/17/17/None/0/A/40/None/None insertion/0/base/11/11/None/0/A/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
-chr1	35	kept	4	3	AAA	40,40,40	deletion/16/base/18/18/None/0/A/40/None/None clipped/0/base/17/17/None/0/A/40/None/None insertion/0/base/11/11/None/0/A/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
+chr1	35	templates	deletion/1/base/A/40/True/(2,None) clipped/1/base/A/40/False/(17,None) insertion/1/base/A/40/False/(11,None) spliced/1/skip/None/None/False/(None,None)
 chr1	36	all	3	2	CC	40,40	deletion/16/base/19/19/None/0/C/40/None/None insertion/0/base/12/12/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
-chr1	36	kept	3	2	CC	40,40	deletion/16/base/19/19/None/0/C/40/None/None insertion/0/base/12/12/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
+chr1	36	templates	deletion/1/base/C/40/True/(1,None) insertion/1/base/C/40/False/(12,None) spliced/1/skip/None/None/False/(None,None)
 chr1	37	all	3	2	GG	40,40	deletion/16/base/20/20/None/0/G/40/None/None insertion/0/base/13/13/None/0/G/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
-chr1	37	kept	3	2	GG	40,40	deletion/16/base/20/20/None/0/G/40/None/None insertion/0/base/13/13/None/0/G/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
+chr1	37	templates	deletion/1/base/G/40/True/(0,None) insertion/1/base/G/40/False/(13,None) spliced/1/skip/None/None/False/(None,None)
 chr1	38	all	2	1	T	40	insertion/0/base/14/14/None/0/T/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
-chr1	38	kept	2	1	T	40	insertion/0/base/14/14/None/0/T/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
+chr1	38	templates	insertion/1/base/T/40/False/(14,None) spliced/1/skip/None/None/False/(None,None)
 chr1	39	all	2	1	C	40	insertion/0/base/15/15/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
-chr1	39	kept	2	1	C	40	insertion/0/base/15/15/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None
+chr1	39	templates	insertion/1/base/C/40/False/(15,None) spliced/1/skip/None/None/False/(None,None)
 chr1	40	all	3	2	GG	40,40	insertion/0/base/16/16/None/0/G/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/0/0/None/0/G/40/None/None
-chr1	40	kept	3	2	GG	40,40	insertion/0/base/16/16/None/0/G/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/0/0/None/0/G/40/None/None
+chr1	40	templates	insertion/1/base/G/40/False/(16,None) spliced/1/skip/None/None/False/(None,None) pair/1/base/G/40/False/(0,19)
 chr1	41	all	3	2	AA	40,40	insertion/0/base/17/17/None/0/A/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/1/1/None/0/A/40/None/None
-chr1	41	kept	3	2	AA	40,40	insertion/0/base/17/17/None/0/A/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/1/1/None/0/A/40/None/None
+chr1	41	templates	insertion/1/base/A/40/False/(17,None) spliced/1/skip/None/None/False/(None,None) pair/1/base/A/40/False/(1,18)
 chr1	42	all	3	2	TT	40,40	insertion/0/base/18/18/None/0/T/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/2/2/None/0/T/40/None/None
-chr1	42	kept	3	2	TT	40,40	insertion/0/base/18/18/None/0/T/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/2/2/None/0/T/40/None/None
+chr1	42	templates	insertion/1/base/T/40/False/(18,None) spliced/1/skip/None/None/False/(None,None) pair/1/base/T/40/False/(2,17)
 chr1	43	all	3	2	CC	40,40	insertion/0/base/19/19/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/3/3/None/0/C/40/None/None
-chr1	43	kept	3	2	CC	40,40	insertion/0/base/19/19/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/3/3/None/0/C/40/None/None
+chr1	43	templates	insertion/1/base/C/40/False/(19,None) spliced/1/skip/None/None/False/(None,None) pair/1/base/C/40/False/(3,16)
 chr1	44	all	2	1	G	40	spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/4/4/None/0/G/40/None/None
-chr1	44	kept	2	1	G	40	spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/4/4/None/0/G/40/None/None
+chr1	44	templates	spliced/1/skip/None/None/False/(None,None) pair/1/base/G/40/False/(4,15)
 chr1	45	all	3	3	GGG	40,40,40	spliced/0/base/5/5/None/0/G/40/None/None pair/99/base/5/5/None/0/G/40/None/None pair/147/base/0/0/None/0/G/40/None/None
-chr1	45	kept	2	2	GG	40,40	spliced/0/base/5/5/None/0/G/40/None/None pair/99/base/5/5/None/0/G/40/None/None
+chr1	45	templates	spliced/1/base/G/40/False/(5,None) pair/2/base/G/80/False/(5,14)
 chr1	46	all	3	3	AAA	40,40,40	spliced/0/base/6/6/None/0/A/40/None/None pair/99/base/6/6/None/0/A/40/None/None pair/147/base/1/1/None/0/A/40/None/None
-chr1	46	kept	2	2	AA	40,40	spliced/0/base/6/6/None/0/A/40/None/None pair/99/base/6/6/None/0/A/40/None/None
+chr1	46	templates	spliced/1/base/A/40/False/(6,None) pair/2/base/A/80/False/(6,13)
 chr1	47	all	3	3	TTT	40,40,40	spliced/0/base/7/7/None/0/T/40/None/None pair/99/base/7/7/None/0/T/40/None/None pair/147/base/2/2/None/0/T/40/None/None
-chr1	47	kept	2	2	TT	40,40	spliced/0/base/7/7/None/0/T/40/None/None pair/99/base/7/7/None/0/T/40/None/None
+chr1	47	templates	spliced/1/base/T/40/False/(7,None) pair/2/base/T/80/False/(7,12)
 chr1	48	all	3	3	CCC	40,40,40	spliced/0/base/8/8/None/0/C/40/None/None pair/99/base/8/8/None/0/C/40/None/None pair/147/base/3/3/None/0/C/40/None/None
-chr1	48	kept	2	2	CC	40,40	spliced/0/base/8/8/None/0/C/40/None/None pair/99/base/8/8/None/0/C/40/None/None
+chr1	48	templates	spliced/1/base/C/40/False/(8,None) pair/2/base/C/80/False/(8,11)
 chr1	49	all	3	3	CCC	40,40,40	spliced/0/base/9/9/None/0/C/40/None/None pair/99/base/9/9/None/0/C/40/None/None pair/147/base/4/4/None/0/C/40/None/None
-chr1	49	kept	2	2	CC	40,40	spliced/0/base/9/9/None/0/C/40/None/None pair/99/base/9/9/None/0/C/40/None/None
+chr1	49	templates	spliced/1/base/C/40/False/(9,None) pair/2/base/C/80/False/(9,10)
 chr1	50	all	2	2	TT	40,40	pair/99/base/10/10/None/0/T/40/None/None pair/147/base/5/5/None/0/T/40/None/None
-chr1	50	kept	1	1	T	40	pair/99/base/10/10/None/0/T/40/None/None
+chr1	50	templates	pair/2/base/T/80/False/(10,9)
 chr1	51	all	2	2	AA	40,40	pair/99/base/11/11/None/0/A/40/None/None pair/147/base/6/6/None/0/A/40/None/None
-chr1	51	kept	1	1	A	40	pair/99/base/11/11/None/0/A/40/None/None
-chr1	52	all	2	2	GG	40,40	pair/99/base/12/12/None/0/G/40/None/None pair/147/base/7/7/None/0/G/40/None/None
-chr1	52	kept	1	1	G	40	pair/99/base/12/12/None/0/G/40/None/None
+chr1	51	templates	pair/2/base/A/80/False/(11,8)
+chr1	52	all	2	1	G	40	pair/99/base/12/12/None/0/G/40/None/None pair/147/base/7/7/None/0/A/20/None/None
+chr1	52	templates	pair/2/base/G/20/False/(12,7)
 chr1	53	all	2	2	GG	40,40	pair/99/base/13/13/None/0/G/40/None/None pair/147/base/8/8/None/0/G/40/None/None
-chr1	53	kept	1	1	G	40	pair/99/base/13/13/None/0/G/40/None/None
+chr1	53	templates	pair/2/base/G/80/False/(13,6)
 chr1	54	all	2	2	CC	40,40	pair/99/base/14/14/None/0/C/40/None/None pair/147/base/9/9/None/0/C/40/None/None
-chr1	54	kept	1	1	C	40	pair/99/base/14/14/None/0/C/40/None/None
+chr1	54	templates	pair/2/base/C/80/False/(14,5)
 chr1	55	all	1	1	T	40	pair/147/base/10/10/None/0/T/40/None/None
-chr1	55	kept	1	1	T	40	pair/147/base/10/10/None/0/T/40/None/None
+chr1	55	templates	pair/1/base/T/40/False/(15,4)
 chr1	56	all	1	1	A	40	pair/147/base/11/11/None/0/A/40/None/None
-chr1	56	kept	1	1	A	40	pair/147/base/11/11/None/0/A/40/None/None
+chr1	56	templates	pair/1/base/A/40/False/(16,3)
 chr1	57	all	1	1	G	40	pair/147/base/12/12/None/0/G/40/None/None
-chr1	57	kept	1	1	G	40	pair/147/base/12/12/None/0/G/40/None/None
+chr1	57	templates	pair/1/base/G/40/False/(17,2)
 chr1	58	all	1	1	C	40	pair/147/base/13/13/None/0/C/40/None/None
-chr1	58	kept	1	1	C	40	pair/147/base/13/13/None/0/C/40/None/None
+chr1	58	templates	pair/1/base/C/40/False/(18,1)
 chr1	59	all	1	1	T	40	pair/147/base/14/14/None/0/T/40/None/None
-chr1	59	kept	1	1	T	40	pair/147/base/14/14/None/0/T/40/None/None
+chr1	59	templates	pair/1/base/T/40/False/(19,0)
 chr2	0	all	0	0			
-chr2	0	kept	0	0			
+chr2	0	templates	
 chr2	1	all	0	0			
-chr2	1	kept	0	0			
+chr2	1	templates	
 chr2	2	all	0	0			
-chr2	2	kept	0	0			
+chr2	2	templates	
 chr2	3	all	0	0			
-chr2	3	kept	0	0			
+chr2	3	templates	
 chr2	4	all	0	0			
-chr2	4	kept	0	0			
+chr2	4	templates	
 chr2	5	all	1	1	C	40	other/0/base/0/0/None/0/C/40/None/None
-chr2	5	kept	1	1	C	40	other/0/base/0/0/None/0/C/40/None/None
+chr2	5	templates	other/1/base/C/40/False/(0,None)
 chr2	6	all	1	1	G	40	other/0/base/1/1/None/0/G/40/None/None
-chr2	6	kept	1	1	G	40	other/0/base/1/1/None/0/G/40/None/None
+chr2	6	templates	other/1/base/G/40/False/(1,None)
 chr2	7	all	1	1	A	40	other/0/base/2/2/None/0/A/40/None/None
-chr2	7	kept	1	1	A	40	other/0/base/2/2/None/0/A/40/None/None
+chr2	7	templates	other/1/base/A/40/False/(2,None)
 chr2	8	all	1	1	T	40	other/0/base/3/3/None/0/T/40/None/None
-chr2	8	kept	1	1	T	40	other/0/base/3/3/None/0/T/40/None/None
+chr2	8	templates	other/1/base/T/40/False/(3,None)
 chr2	9	all	1	1	A	40	other/0/base/4/4/None/0/A/40/None/None
-chr2	9	kept	1	1	A	40	other/0/base/4/4/None/0/A/40/None/None
+chr2	9	templates	other/1/base/A/40/False/(4,None)
 chr2	10	all	1	1	G	40	other/0/base/5/5/None/0/G/40/None/None
-chr2	10	kept	1	1	G	40	other/0/base/5/5/None/0/G/40/None/None
+chr2	10	templates	other/1/base/G/40/False/(5,None)
 chr2	11	all	1	1	C	40	other/0/base/6/6/None/0/C/40/None/None
-chr2	11	kept	1	1	C	40	other/0/base/6/6/None/0/C/40/None/None
+chr2	11	templates	other/1/base/C/40/False/(6,None)
 chr2	12	all	1	1	T	40	other/0/base/7/7/None/0/T/40/None/None
-chr2	12	kept	1	1	T	40	other/0/base/7/7/None/0/T/40/None/None
+chr2	12	templates	other/1/base/T/40/False/(7,None)
 chr2	13	all	1	1	A	40	other/0/base/8/8/None/0/A/40/None/None
-chr2	13	kept	1	1	A	40	other/0/base/8/8/None/0/A/40/None/None
+chr2	13	templates	other/1/base/A/40/False/(8,None)
 chr2	14	all	1	1	G	40	other/0/base/9/9/None/0/G/40/None/None
-chr2	14	kept	1	1	G	40	other/0/base/9/9/None/0/G/40/None/None
+chr2	14	templates	other/1/base/G/40/False/(9,None)
 chr2	15	all	1	1	G	40	other/0/base/10/10/None/0/G/40/None/None
-chr2	15	kept	1	1	G	40	other/0/base/10/10/None/0/G/40/None/None
+chr2	15	templates	other/1/base/G/40/False/(10,None)
 chr2	16	all	1	1	C	40	other/0/base/11/11/None/0/C/40/None/None
-chr2	16	kept	1	1	C	40	other/0/base/11/11/None/0/C/40/None/None
+chr2	16	templates	other/1/base/C/40/False/(11,None)
 chr2	17	all	1	1	A	40	other/0/base/12/12/None/0/A/40/None/None
-chr2	17	kept	1	1	A	40	other/0/base/12/12/None/0/A/40/None/None
+chr2	17	templates	other/1/base/A/40/False/(12,None)
 chr2	18	all	1	1	T	40	other/0/base/13/13/None/0/T/40/None/None
-chr2	18	kept	1	1	T	40	other/0/base/13/13/None/0/T/40/None/None
+chr2	18	templates	other/1/base/T/40/False/(13,None)
 chr2	19	all	1	1	C	40	other/0/base/14/14/None/0/C/40/None/None
-chr2	19	kept	1	1	C	40	other/0/base/14/14/None/0/C/40/None/None
+chr2	19	templates	other/1/base/C/40/False/(14,None)
 chr2	20	all	1	1	G	40	other/0/base/15/15/None/0/G/40/None/None
-chr2	20	kept	1	1	G	40	other/0/base/15/15/None/0/G/40/None/None
+chr2	20	templates	other/1/base/G/40/False/(15,None)
 chr2	21	all	1	1	A	40	other/0/base/16/16/None/0/A/40/None/None
-chr2	21	kept	1	1	A	40	other/0/base/16/16/None/0/A/40/None/None
+chr2	21	templates	other/1/base/A/40/False/(16,None)
 chr2	22	all	1	1	T	40	other/0/base/17/17/None/0/T/40/None/None
-chr2	22	kept	1	1	T	40	other/0/base/17/17/None/0/T/40/None/None
+chr2	22	templates	other/1/base/T/40/False/(17,None)
 chr2	23	all	1	1	C	40	other/0/base/18/18/None/0/C/40/None/None
-chr2	23	kept	1	1	C	40	other/0/base/18/18/None/0/C/40/None/None
+chr2	23	templates	other/1/base/C/40/False/(18,None)
 chr2	24	all	1	1	G	40	other/0/base/19/19/None/0/G/40/None/None
-chr2	24	kept	1	1	G	40	other/0/base/19/19/None/0/G/40/None/None
+chr2	24	templates	other/1/base/G/40/False/(19,None)
 chr2	25	all	0	0			
-chr2	25	kept	0	0			
+chr2	25	templates	
 chr2	26	all	0	0			
-chr2	26	kept	0	0			
+chr2	26	templates	
 chr2	27	all	0	0			
-chr2	27	kept	0	0			
+chr2	27	templates	
 chr2	28	all	0	0			
-chr2	28	kept	0	0			
+chr2	28	templates	
 chr2	29	all	0	0			
-chr2	29	kept	0	0			
+chr2	29	templates	
 chr2	30	all	0	0			
-chr2	30	kept	0	0			
+chr2	30	templates	
 chr2	31	all	0	0			
-chr2	31	kept	0	0			
+chr2	31	templates	
 chr2	32	all	0	0			
-chr2	32	kept	0	0			
+chr2	32	templates	
 chr2	33	all	0	0			
-chr2	33	kept	0	0			
+chr2	33	templates	
 chr2	34	all	0	0			
-chr2	34	kept	0	0			
+chr2	34	templates	
 chr2	35	all	0	0			
-chr2	35	kept	0	0			
+chr2	35	templates	
 chr2	36	all	0	0			
-chr2	36	kept	0	0			
+chr2	36	templates	
 chr2	37	all	0	0			
-chr2	37	kept	0	0			
+chr2	37	templates	
 chr2	38	all	0	0			
-chr2	38	kept	0	0			
+chr2	38	templates	
 chr2	39	all	0	0			
-chr2	39	kept	0	0			
+chr2	39	templates	

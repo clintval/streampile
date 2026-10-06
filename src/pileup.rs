@@ -8,6 +8,7 @@ use noodles::sam::alignment::record::Flags;
 use crate::auxiliary::{self, AuxElement, AuxValue, Field};
 use crate::error::Result;
 use crate::footprint::Footprint;
+use crate::overlap::{self, AgreementStrategy, DisagreementStrategy, Observation};
 use crate::source::AlignmentRecord;
 
 /// The base quality of every base of a read with no stored qualities (QUAL `*`), as in htslib.
@@ -73,8 +74,8 @@ impl<R: Default> Default for LiveRecord<R> {
 
 impl<R: AlignmentRecord> LiveRecord<R> {
     /// The record's template, by name.
-    pub fn template(&self) -> Template<'_> {
-        Template {
+    pub fn template(&self) -> TemplateName<'_> {
+        TemplateName {
             hash: self.name_hash,
             name: name_of(self.record.bam()),
         }
@@ -83,26 +84,26 @@ impl<R: AlignmentRecord> LiveRecord<R> {
 
 /// A read's template: its name, and a hash of it worked out once.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Template<'n> {
+pub(crate) struct TemplateName<'n> {
     pub hash: u64,
     pub name: &'n [u8],
 }
 
-impl Hash for Template<'_> {
+impl Hash for TemplateName<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.hash);
     }
 }
 
-impl PartialEq for Template<'_> {
+impl PartialEq for TemplateName<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
 }
 
-impl Eq for Template<'_> {}
+impl Eq for TemplateName<'_> {}
 
-/// A hasher of [`Template`] keys, which are hashed already.
+/// A hasher of [`TemplateName`] keys, which are hashed already.
 #[derive(Default)]
 struct Prehashed(u64);
 
@@ -134,30 +135,20 @@ pub(crate) fn name_hash(record: &bam::Record) -> u64 {
     hasher.finish()
 }
 
-/// Which entries of a pileup to keep so that each template has one read.
-///
-/// `describe` gives an entry's template, its read's identity, and whether the entry has a
-/// quality at the floor. The read kept for a template is the first of its name whose entry
-/// passes, or else the first of its name, and every entry of that read is kept.
-pub(crate) fn templates_kept<'n, T>(
+/// The template of each entry, numbered in the order of each template's first entry, or `None`
+/// for an entry that `name` gives no template.
+pub(crate) fn number_templates<'n, T>(
     entries: &'n [T],
-    describe: impl Fn(&'n T) -> (Template<'n>, usize, bool),
-) -> Vec<bool> {
-    let mut chosen: HashMap<Template<'n>, (usize, Option<usize>), BuildHasherDefault<Prehashed>> =
+    name: impl Fn(&'n T) -> Option<TemplateName<'n>>,
+) -> Vec<Option<usize>> {
+    let mut numbers: HashMap<TemplateName<'n>, usize, BuildHasherDefault<Prehashed>> =
         HashMap::with_capacity_and_hasher(entries.len(), BuildHasherDefault::default());
-    for entry in entries {
-        let (template, read, passes) = describe(entry);
-        let choice = chosen.entry(template).or_insert((read, None));
-        if passes && choice.1.is_none() {
-            choice.1 = Some(read);
-        }
-    }
     entries
         .iter()
         .map(|entry| {
-            let (template, read, _) = describe(entry);
-            let (first, passing) = chosen[&template];
-            read == passing.unwrap_or(first)
+            let name = name(entry)?;
+            let next = numbers.len();
+            Some(*numbers.entry(name).or_insert(next))
         })
         .collect()
 }
@@ -179,8 +170,8 @@ pub(crate) struct RawEntry {
 ///
 /// Every entry of an accepted read is kept: `min_base_quality` applies only to
 /// [`filtered_depth`](Pileup::filtered_depth), [`bases`](Pileup::bases), and
-/// [`qualities`](Pileup::qualities), and to choosing the mate a builder keeps when it leaves out
-/// overlapping mates.
+/// [`qualities`](Pileup::qualities). [`templates`](Pileup::templates) sees each template once,
+/// calling the bases of overlapping mates into one.
 ///
 /// `R` is the type of record the builder's source reads: [`bam::Record`] for a BAM reader.
 #[derive(Debug)]
@@ -290,6 +281,61 @@ impl<'a, R: AlignmentRecord> Pileup<'a, R> {
             .filter(|entry| entry.kind() == EntryKind::Base)
             .filter_map(|entry| entry.quality())
             .filter(move |&quality| quality >= floor)
+    }
+
+    /// One observation per template here, its reads grouped by name, in the order of each
+    /// template's first entry.
+    ///
+    /// Where two reads of a template hold bases, they are called into one as fgbio's
+    /// `CallOverlappingConsensusBases` calls them, as fgumi implements it: `agreement` makes the
+    /// quality of equal bases and `disagreement` the base and quality of different ones. Where the
+    /// strategies leave a read's base or quality unchanged, the template takes the higher quality.
+    ///
+    /// fgumi defines no more than that, so at each position:
+    ///
+    /// - A no-call (`N`) is left alone, as fgumi leaves it, so the other read's base stands at its
+    ///   own quality, and two no-calls are an `N` at the higher quality.
+    /// - A read with a deletion or a skip holds no base, so a template whose other read holds one
+    ///   has that base at its own quality. A template with no base is a deletion if either read
+    ///   holds one, at the higher of their qualities, or else a skip.
+    /// - Insertion entries are no part of a template, so a read whose only entry here is an
+    ///   insertion adds nothing to its template, and is in none without another read here.
+    /// - The quality floor is not applied to the reads: the strategies see every base, as fgumi
+    ///   does, and [`passes`](PileupTemplate::passes) compares the template's quality to a floor,
+    ///   so two agreeing bases under it can make a template at it.
+    /// - A template with more than two reads here, as when supplementary records are piled up,
+    ///   calls them in input order.
+    pub fn templates(
+        &self,
+        agreement: AgreementStrategy,
+        disagreement: DisagreementStrategy,
+    ) -> Vec<PileupTemplate<'a, R>> {
+        let slots = self.slots;
+        let numbers = number_templates(self.entries, |raw| {
+            (raw.kind != EntryKind::Insertion).then(|| slots[raw.slot as usize].template())
+        });
+        let mut templates: Vec<PileupTemplate<'a, R>> = Vec::new();
+        for (raw, number) in self.entries.iter().zip(numbers) {
+            let Some(number) = number else { continue };
+            let entry = self.entry(*raw);
+            match templates.get_mut(number) {
+                Some(template) => template.push(entry),
+                None => templates.push(PileupTemplate::of(entry)),
+            }
+        }
+        for template in &mut templates {
+            let called = overlap::observe(
+                template.entries().map(|entry| Observation {
+                    kind: entry.kind(),
+                    base: entry.base(),
+                    quality: entry.quality(),
+                }),
+                agreement,
+                disagreement,
+            );
+            template.called = called;
+        }
+        templates
     }
 }
 
@@ -509,6 +555,159 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
         };
         Ok(self.aux(tag)?.and_then(|value| value.get(offset)))
     }
+}
+
+/// One template at one pileup position: the reads of one name, their bases called into one.
+///
+/// A template's strand and distances are those of its first read, the first of a pair or a
+/// fragment's only read, worked out from its second read where the first holds no base here.
+#[derive(Debug)]
+pub struct PileupTemplate<'a, R = bam::Record> {
+    first: PileupEntry<'a, R>,
+    second: Option<PileupEntry<'a, R>>,
+    others: Vec<PileupEntry<'a, R>>,
+    called: Observation,
+}
+
+impl<R> Clone for PileupTemplate<'_, R> {
+    fn clone(&self) -> Self {
+        Self {
+            first: self.first,
+            second: self.second,
+            others: self.others.clone(),
+            called: self.called,
+        }
+    }
+}
+
+impl<'a, R: AlignmentRecord> PileupTemplate<'a, R> {
+    fn of(entry: PileupEntry<'a, R>) -> Self {
+        Self {
+            first: entry,
+            second: None,
+            others: Vec::new(),
+            called: Observation {
+                kind: entry.kind(),
+                base: None,
+                quality: None,
+            },
+        }
+    }
+
+    fn push(&mut self, entry: PileupEntry<'a, R>) {
+        if self.second.is_none() {
+            self.second = Some(entry);
+        } else {
+            self.others.push(entry);
+        }
+    }
+
+    /// The template's name, `*` for reads with none.
+    pub fn name(&self) -> &'a BStr {
+        name_of(self.first.record()).as_bstr()
+    }
+
+    /// The entries of the template's reads here, usually one or two, in input order.
+    pub fn entries(&self) -> impl Iterator<Item = PileupEntry<'a, R>> + '_ {
+        std::iter::once(self.first)
+            .chain(self.second)
+            .chain(self.others.iter().copied())
+    }
+
+    /// What the template holds here: a base if any of its reads does, or else a deletion if any of
+    /// them does, or else a skip.
+    pub fn kind(&self) -> EntryKind {
+        self.called.kind
+    }
+
+    /// Whether the template holds a deletion here, and no base.
+    pub fn is_deletion(&self) -> bool {
+        self.called.kind == EntryKind::Deletion
+    }
+
+    /// Whether every read of the template skips over the position.
+    pub fn is_skip(&self) -> bool {
+        self.called.kind == EntryKind::Skip
+    }
+
+    /// Whether the template's base is a no-call, `N`.
+    pub fn is_no_call(&self) -> bool {
+        self.called.base == Some(b'N')
+    }
+
+    /// The template's upper-cased base, its reads' bases called into one, or `None` without one.
+    pub fn base(&self) -> Option<u8> {
+        self.called.base
+    }
+
+    /// The quality of the template's base, or for a deletion of the next base, or `None`.
+    pub fn quality(&self) -> Option<u8> {
+        self.called.quality
+    }
+
+    /// Whether the template has a quality at the floor: a base, or a deletion followed by a base.
+    pub fn passes(&self, min_base_quality: u8) -> bool {
+        self.called
+            .quality
+            .is_some_and(|quality| quality >= min_base_quality)
+    }
+
+    /// Whether the template's first read is aligned to the reverse strand: `false` for an F1R2
+    /// pair and `true` for an F2R1 pair, read from the second read's flags without the first.
+    pub fn is_reverse(&self) -> bool {
+        match self.first_read() {
+            Some(first) => first.is_reverse(),
+            None => self.first.flags().is_mate_reverse_complemented(),
+        }
+    }
+
+    /// The number of the template's bases between its first read's 5′ end and this position: 0
+    /// at that end.
+    ///
+    /// It is the first read's [`five_prime_distance`](PileupEntry::five_prime_distance) where it
+    /// holds a base here, and otherwise the second read's
+    /// [`template_end_distance`](PileupEntry::template_end_distance), which is an error for a read
+    /// of an FR pair without a usable `MC` tag.
+    pub fn five_prime_distance(&self) -> Result<Option<usize>> {
+        if let Some(distance) = self
+            .first_read()
+            .and_then(|first| first.five_prime_distance())
+        {
+            return Ok(Some(distance));
+        }
+        match self.second_read() {
+            Some(second) => second.template_end_distance(),
+            None => Ok(None),
+        }
+    }
+
+    /// The number of the template's bases between this position and its other end, the 5′ end of
+    /// the second read of an FR pair: 0 at that end.
+    ///
+    /// It is the first read's [`template_end_distance`](PileupEntry::template_end_distance), an
+    /// error for a read of an FR pair without a usable `MC` tag, and without the first read here
+    /// the second read's [`five_prime_distance`](PileupEntry::five_prime_distance).
+    pub fn template_end_distance(&self) -> Result<Option<usize>> {
+        match self.first_read() {
+            Some(first) => first.template_end_distance(),
+            None => Ok(self.first.five_prime_distance()),
+        }
+    }
+
+    /// The template's first read here: the first of a pair, or a fragment's only read.
+    fn first_read(&self) -> Option<PileupEntry<'a, R>> {
+        self.entries().find(|entry| !is_second(entry.flags()))
+    }
+
+    /// The template's second read here: the last of a pair.
+    fn second_read(&self) -> Option<PileupEntry<'a, R>> {
+        self.entries().find(|entry| is_second(entry.flags()))
+    }
+}
+
+/// Whether a read is the last segment of a template.
+fn is_second(flags: Flags) -> bool {
+    flags.is_segmented() && flags.is_last_segment()
 }
 
 /// The quality of the base at a query offset of a base or deletion entry, as

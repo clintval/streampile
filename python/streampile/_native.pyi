@@ -14,6 +14,8 @@ from pysam import FastaFile
 from typing_extensions import Self
 from typing_extensions import override
 
+from streampile._pileup import AgreementStrategy
+from streampile._pileup import DisagreementStrategy
 from streampile._pileup import PileupReadType
 from streampile._table import TabulatedBase
 
@@ -142,6 +144,44 @@ class PileupRead:
     def __ge__(self, other: PileupRead | tuple[Any, ...]) -> bool: ...
 
 @final
+class PileupTemplate:
+    """One template at one pileup position: the reads of one query name, their bases called into one."""
+
+    @property
+    def query_name(self) -> str | None:
+        """The name of the template's reads."""
+    @property
+    def reads(self) -> tuple[PileupRead, ...]:
+        """The entries of the template's reads at the position, usually one or two."""
+    @property
+    def pileup_type(self) -> PileupReadType:
+        """Whether the template holds a base, a deletion, or a skip."""
+    @property
+    def base(self) -> str | None:
+        """The template's upper-cased base, its reads' bases called into one, or `None` without one."""
+    @property
+    def qual(self) -> int | None:
+        """The quality of the template's base, or of the next base for a deletion, or `None`."""
+    @property
+    def is_del(self) -> bool:
+        """Whether the template holds a deletion at the position, and no base."""
+    @property
+    def is_refskip(self) -> bool:
+        """Whether every read of the template skips over the position."""
+    @property
+    def is_no_call(self) -> bool:
+        """Whether the template's base is a no-call, `N`."""
+    @property
+    def is_reverse(self) -> bool:
+        """Whether the template's first read is aligned to the reverse strand."""
+    @property
+    def five_prime_distance(self) -> int | None:
+        """The number of the template's bases between its first read's 5′ end and the position."""
+    @property
+    def template_end_distance(self) -> int | None:
+        """The number of the template's bases between the position and its other end."""
+
+@final
 class Pileup:
     """The reads at one reference position."""
 
@@ -185,8 +225,13 @@ class Pileup:
     @property
     def qualities(self) -> list[int]:
         """The base qualities of the bases at this position at the quality floor."""
-    def without_overlaps(self) -> Self:
-        """A copy of this pileup with one read per template, by query name."""
+    def templates(
+        self,
+        *,
+        agreement: AgreementStrategy = ...,
+        disagreement: DisagreementStrategy = ...,
+    ) -> list[PileupTemplate]:
+        """One observation per template at this position, its reads grouped by query name."""
     @override
     def __hash__(self) -> int: ...
     @override
