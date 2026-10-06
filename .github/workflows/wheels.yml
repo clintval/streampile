@@ -56,7 +56,8 @@ jobs:
     name: verify-wheels (${{ matrix.platform.name }}, ${{ matrix.python-version }})
     needs: build-wheels
     runs-on: ${{ matrix.platform.runner }}
-    permissions: {}
+    permissions:
+      contents: read  # to check out the smoke test
     strategy:
       fail-fast: false
       matrix:
@@ -75,39 +76,17 @@ jobs:
           name: streampile-wheel-${{ matrix.platform.name }}
           path: dist/
 
-      - name: Write the smoke test
+      - name: Check out the smoke test
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/smoke.py
+          sparse-checkout-cone-mode: false
+          path: repository
+
+      - name: Copy out the smoke test
         shell: bash
-        run: |
-          cat > smoke.py <<'PY'
-          import importlib
-          import pkgutil
-
-          import pysam
-
-          import streampile
-          from streampile import StreamingPileupBuilder
-          from streampile._native import direct_bridge
-
-          for module in pkgutil.walk_packages(streampile.__path__, "streampile."):
-              importlib.import_module(module.name)
-
-          header = {"HD": {"VN": "1.6", "SO": "coordinate"}, "SQ": [{"SN": "chr1", "LN": 100}]}
-          with pysam.AlignmentFile("smoke.bam", "wb", header=header) as sink:
-              read = pysam.AlignedSegment(sink.header)
-              read.query_name = "r"
-              read.reference_id = 0
-              read.reference_start = 10
-              read.mapping_quality = 60
-              read.cigarstring = "2M1D2M"
-              read.query_sequence = "ACGT"
-              read.query_qualities = pysam.qualitystring_to_array("IIII")
-              sink.write(read)
-          with pysam.AlignmentFile("smoke.bam") as reads, StreamingPileupBuilder(reads) as builder:
-              depths = [pileup.unfiltered_depth for pileup in builder.columns("chr1", 9, 16)]
-          assert direct_bridge(), "pysam records are read through their attributes"
-          assert depths == [0, 1, 1, 1, 1, 1, 0], depths
-          print("streampile", "works")
-          PY
+        run: cp repository/.github/smoke.py smoke.py
 
       - name: Install uv
         if: ${{ !matrix.platform.alpine }}
@@ -133,3 +112,74 @@ jobs:
         run: |
           docker run --rm --volume "$PWD:/work" --workdir /work "python:${PYTHON_VERSION}-alpine" \
             sh -c 'pip install --root-user-action=ignore dist/*.whl && python -P smoke.py'
+
+  build-sdist:
+    name: build-sdist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # to check out the repository
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python 3.11
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.11"
+          enable-cache: "false"
+
+      - name: Build the source distribution
+        run: uv build --sdist
+
+      - name: Print the contents of the source distribution
+        run: tar -tzf dist/*.tar.gz
+
+      - name: Upload the source distribution
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: streampile-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  verify-sdist:
+    name: verify-sdist (${{ matrix.python-version }})
+    needs: build-sdist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # to check out the smoke test
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
+    steps:
+      - name: Download the source distribution
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: streampile-sdist
+          path: dist/
+
+      - name: Check out the smoke test
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/smoke.py
+          sparse-checkout-cone-mode: false
+          path: repository
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: "false"
+
+      - name: Build and install the source distribution and run the smoke test
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: |
+          cp repository/.github/smoke.py smoke.py
+          uv venv --python "$PYTHON_VERSION" .venv
+          uv pip install --python .venv dist/*.tar.gz
+          uv run --no-project --python .venv python -P smoke.py

@@ -47,6 +47,14 @@ jobs:
       - name: Test the Rust code
         run: cargo test --locked
 
+      - name: Test the Rust code without libdeflate
+        run: cargo test --locked --no-default-features
+
+      - name: Build the Rust docs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --no-deps
+
       - name: Package the crate as crates.io would publish it
         run: cargo publish --dry-run --locked
 
