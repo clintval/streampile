@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, DefaultHasher, Hash, Hasher};
+
 use bstr::{BStr, ByteSlice};
 use noodles::bam;
 use noodles::sam::alignment::record::Flags;
@@ -63,7 +66,7 @@ pub(crate) struct LiveRecord {
     pub footprint: Footprint,
     pub other_end: OtherEnd,
     pub fields: Vec<Option<Field>>,
-    pub template: u32,
+    pub name_hash: u64,
 }
 
 impl Default for LiveRecord {
@@ -77,9 +80,95 @@ impl Default for LiveRecord {
             footprint: Footprint::default(),
             other_end: OtherEnd::None,
             fields: Vec::new(),
-            template: NONE,
+            name_hash: 0,
         }
     }
+}
+
+impl LiveRecord {
+    /// The record's template, by name.
+    pub fn template(&self) -> Template<'_> {
+        Template {
+            hash: self.name_hash,
+            name: self.record.name().map_or(b"*", |name| name.as_bytes()),
+        }
+    }
+}
+
+/// A read's template: its name, and a hash of it worked out once.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Template<'n> {
+    pub hash: u64,
+    pub name: &'n [u8],
+}
+
+impl Hash for Template<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.hash);
+    }
+}
+
+impl PartialEq for Template<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Template<'_> {}
+
+/// A hasher of [`Template`] keys, which are hashed already.
+#[derive(Default)]
+struct Prehashed(u64);
+
+impl Hasher for Prehashed {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = self.0.rotate_left(8) ^ u64::from(byte);
+        }
+    }
+
+    fn write_u64(&mut self, hash: u64) {
+        self.0 = hash;
+    }
+}
+
+/// The hash of a record's name, `*` for a record with none.
+pub(crate) fn name_hash(record: &bam::Record) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    hasher.write(record.name().map_or(b"*", |name| name.as_bytes()));
+    hasher.finish()
+}
+
+/// Which entries of a pileup to keep so that each template has one read.
+///
+/// `describe` gives an entry's template, its read's identity, and whether the entry has a
+/// quality at the floor. The read kept for a template is the first of its name whose entry
+/// passes, or else the first of its name, and every entry of that read is kept.
+pub(crate) fn templates_kept<'n, T>(
+    entries: &'n [T],
+    describe: impl Fn(&'n T) -> (Template<'n>, usize, bool),
+) -> Vec<bool> {
+    let mut chosen: HashMap<Template<'n>, (usize, Option<usize>), BuildHasherDefault<Prehashed>> =
+        HashMap::with_capacity_and_hasher(entries.len(), BuildHasherDefault::default());
+    for entry in entries {
+        let (template, read, passes) = describe(entry);
+        let choice = chosen.entry(template).or_insert((read, None));
+        if passes && choice.1.is_none() {
+            choice.1 = Some(read);
+        }
+    }
+    entries
+        .iter()
+        .map(|entry| {
+            let (template, read, _) = describe(entry);
+            let (first, passing) = chosen[&template];
+            read == passing.unwrap_or(first)
+        })
+        .collect()
 }
 
 /// An entry as a builder stores it: the record's slot and what it holds at the position.

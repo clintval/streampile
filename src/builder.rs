@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::io::{self, Read};
 use std::mem;
 
@@ -10,7 +10,8 @@ use crate::auxiliary::{self, AuxValue};
 use crate::error::{Error, Result};
 use crate::footprint::Located;
 use crate::pileup::{
-    EntryKind, LiveRecord, NONE, OtherEnd, Pileup, RawEntry, quality_of, record_name,
+    EntryKind, LiveRecord, NONE, OtherEnd, Pileup, RawEntry, name_hash, quality_of, record_name,
+    templates_kept,
 };
 
 /// Secondary, QC-fail, duplicate, and supplementary reads, which are left out by default.
@@ -103,13 +104,6 @@ enum Stage {
     Closed,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-struct TemplateMark {
-    stamp: u32,
-    first: u32,
-    passing: u32,
-}
-
 /// Builds pileups from coordinate-sorted records in one forward pass.
 ///
 /// Ask for pileups at positions that never move backwards: the same position again returns the
@@ -162,10 +156,6 @@ pub struct StreamingPileupBuilder<'f, S: RecordSource> {
     at: Option<(usize, usize)>,
     built: bool,
     entries: Vec<RawEntry>,
-    templates: HashMap<Vec<u8>, (u32, u32)>,
-    free_templates: Vec<u32>,
-    template_marks: Vec<TemplateMark>,
-    stamp: u32,
     stage: Stage,
 }
 
@@ -201,10 +191,6 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
             at: None,
             built: false,
             entries: Vec::new(),
-            templates: HashMap::new(),
-            free_templates: Vec::new(),
-            template_marks: Vec::new(),
-            stamp: 0,
             stage: Stage::Open,
         })
     }
@@ -530,6 +516,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         if live.footprint.end <= pos {
             return Ok(false);
         }
+        live.name_hash = name_hash(&live.record);
         index_fields(live, &self.options.aux_tags).map_err(|error| match error {
             Error::Io(source) => Error::InvalidRecord {
                 name: record_name(&live.record),
@@ -544,9 +531,6 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         let end = self.slots[index as usize].footprint.end;
         self.min_active_end = self.min_active_end.min(end);
         self.active.push(index);
-        if self.options.without_overlaps {
-            self.register(index);
-        }
     }
 
     fn evict(&mut self, before: Option<i64>) {
@@ -560,11 +544,8 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
                 active[kept] = index;
                 kept += 1;
                 min_end = min_end.min(end);
-            } else {
-                self.unregister(index);
-                if self.tap.is_none() {
-                    self.free.push(index);
-                }
+            } else if self.tap.is_none() {
+                self.free.push(index);
             }
         }
         active.truncate(kept);
@@ -625,78 +606,15 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     }
 
     fn keep_one_per_template(&mut self) {
-        self.stamp = self.stamp.wrapping_add(1);
-        if self.stamp == 0 {
-            self.template_marks.fill(TemplateMark::default());
-            self.stamp = 1;
-        }
-        let stamp = self.stamp;
         let floor = self.options.min_base_quality;
-        for raw in &self.entries {
-            let live = &self.slots[raw.slot as usize];
-            let mark = &mut self.template_marks[live.template as usize];
-            if mark.stamp != stamp {
-                *mark = TemplateMark {
-                    stamp,
-                    first: raw.slot,
-                    passing: NONE,
-                };
-            }
-            if mark.passing == NONE
-                && quality_of(&live.record, raw.kind, raw.offset).is_some_and(|q| q >= floor)
-            {
-                mark.passing = raw.slot;
-            }
-        }
-        let (slots, marks) = (&self.slots, &self.template_marks);
-        self.entries.retain(|raw| {
-            let mark = marks[slots[raw.slot as usize].template as usize];
-            raw.slot
-                == if mark.passing == NONE {
-                    mark.first
-                } else {
-                    mark.passing
-                }
+        let slots = &self.slots;
+        let kept = templates_kept(&self.entries, |raw| {
+            let live = &slots[raw.slot as usize];
+            let passes = quality_of(&live.record, raw.kind, raw.offset).is_some_and(|q| q >= floor);
+            (live.template(), raw.slot as usize, passes)
         });
-    }
-
-    fn register(&mut self, index: u32) {
-        let live = &self.slots[index as usize];
-        let name = live
-            .record
-            .name()
-            .map_or(b"*".as_slice(), |name| name.as_bytes());
-        let id = if let Some((id, count)) = self.templates.get_mut(name) {
-            *count += 1;
-            *id
-        } else {
-            let id = self.free_templates.pop().unwrap_or_else(|| {
-                self.template_marks.push(TemplateMark::default());
-                (self.template_marks.len() - 1) as u32
-            });
-            self.templates.insert(name.to_vec(), (id, 1));
-            id
-        };
-        self.slots[index as usize].template = id;
-    }
-
-    fn unregister(&mut self, index: u32) {
-        let live = &mut self.slots[index as usize];
-        if live.template == NONE {
-            return;
-        }
-        live.template = NONE;
-        let name = live
-            .record
-            .name()
-            .map_or(b"*".as_slice(), |name| name.as_bytes());
-        if let Some((id, count)) = self.templates.get_mut(name) {
-            *count -= 1;
-            if *count == 0 {
-                self.free_templates.push(*id);
-                self.templates.remove(name);
-            }
-        }
+        let mut kept = kept.into_iter();
+        self.entries.retain(|_| kept.next().unwrap_or(true));
     }
 }
 
@@ -741,7 +659,6 @@ fn describe(live: &mut LiveRecord, tapped: bool) -> io::Result<()> {
         .transpose()?
         .map_or(-1, |start| usize::from(start) as i64 - 1);
     live.flags = record.flags();
-    live.template = NONE;
     live.other_end = OtherEnd::None;
     if tapped {
         let cigar = record.cigar();
