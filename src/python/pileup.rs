@@ -238,10 +238,11 @@ impl Held {
     }
 
     fn template(&self) -> TemplateName<'_> {
-        TemplateName {
-            hash: self.name_hash,
-            name: name_of(self.bam()),
-        }
+        TemplateName::of(
+            self.bam(),
+            self.name_hash,
+            Arc::as_ptr(&self.record) as usize,
+        )
     }
 
     /// What the read holds here, as its template's vote counts it.
@@ -962,7 +963,8 @@ impl Pileup {
     }
 
     /// One observation per template at this position, its reads grouped by query name, in the
-    /// order of each template's first entry in `pileups`.
+    /// order of each template's first entry in `pileups`. A read with no name is a template of its
+    /// own.
     ///
     /// Where two reads of a template hold bases, they are called into one as fgbio's
     /// `CallOverlappingConsensusBases` calls them, as fgumi implements it: `agreement` makes the
@@ -1037,7 +1039,8 @@ impl Pileup {
 /// fragment's only read, worked out from its second read where the first holds no base here.
 ///
 /// Attributes:
-///     query_name: the name of the template's reads.
+///     query_name: the name of the template's reads, `*` for a read with none, which is a
+///         template of its own.
 ///     reads: the entries of the template's reads at the position, usually one or two.
 ///     pileup_type: whether the template holds a base, a deletion, or a skip.
 ///     base: the template's base, its reads' bases called into one.
@@ -1050,14 +1053,10 @@ pub(crate) struct PileupTemplate {
 
 #[pymethods]
 impl PileupTemplate {
-    /// The name of the template's reads.
+    /// The name of the template's reads, `*` for a read with none, which is a template of its own.
     #[getter]
-    fn query_name(&self) -> Option<String> {
-        self.template
-            .first()
-            .bam()
-            .name()
-            .map(|name| String::from_utf8_lossy(name).into_owned())
+    fn query_name(&self) -> String {
+        String::from_utf8_lossy(name_of(self.template.first().bam())).into_owned()
     }
 
     /// The entries of the template's reads at the position, usually one or two, as in `pileups`.

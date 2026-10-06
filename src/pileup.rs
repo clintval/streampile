@@ -73,20 +73,35 @@ impl<R: Default> Default for LiveRecord<R> {
 }
 
 impl<R: AlignmentRecord> LiveRecord<R> {
-    /// The record's template, by name.
-    pub fn template(&self) -> TemplateName<'_> {
-        TemplateName {
-            hash: self.name_hash,
-            name: name_of(self.record.bam()),
-        }
+    /// The template of the record held in a slot.
+    pub fn template(&self, slot: u32) -> TemplateName<'_> {
+        TemplateName::of(self.record.bam(), self.name_hash, slot as usize)
     }
 }
 
-/// A read's template: its name, and a hash of it worked out once.
+/// A read's template: its name and a hash of it worked out once, or for a read with no name,
+/// which is a template of its own, a number unique to the read.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TemplateName<'n> {
-    pub hash: u64,
-    pub name: &'n [u8],
+    hash: u64,
+    name: Option<&'n [u8]>,
+    read: usize,
+}
+
+impl<'n> TemplateName<'n> {
+    /// The template of a record, from the hash of its name and a number unique to the read.
+    pub(crate) fn of(record: &'n bam::Record, name_hash: u64, read: usize) -> Self {
+        let name = record.name().map(|name| name.as_bytes());
+        Self {
+            hash: if name.is_some() {
+                name_hash
+            } else {
+                read as u64
+            },
+            name,
+            read,
+        }
+    }
 }
 
 impl Hash for TemplateName<'_> {
@@ -97,7 +112,11 @@ impl Hash for TemplateName<'_> {
 
 impl PartialEq for TemplateName<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        match (self.name, other.name) {
+            (Some(name), Some(other)) => name == other,
+            (None, None) => self.read == other.read,
+            _ => false,
+        }
     }
 }
 
@@ -284,7 +303,7 @@ impl<'a, R: AlignmentRecord> Pileup<'a, R> {
     }
 
     /// One observation per template here, its reads grouped by name, in the order of each
-    /// template's first entry.
+    /// template's first entry. A read with no name is a template of its own.
     ///
     /// Where two reads of a template hold bases, they are called into one as fgbio's
     /// `CallOverlappingConsensusBases` calls them, as fgumi implements it: `agreement` makes the
@@ -315,7 +334,7 @@ impl<'a, R: AlignmentRecord> Pileup<'a, R> {
     ) -> Vec<PileupTemplate<'a, R>> {
         let slots = self.slots;
         let numbers = number_templates(self.entries, |raw| {
-            (raw.kind != EntryKind::Insertion).then(|| slots[raw.slot as usize].template())
+            (raw.kind != EntryKind::Insertion).then(|| slots[raw.slot as usize].template(raw.slot))
         });
         let entries = self
             .entries

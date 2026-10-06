@@ -250,6 +250,19 @@ def test_strategies_are_named_by_their_values() -> None:
         pileup.templates(disagreement="bogus")  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]
 
 
+def test_each_unnamed_read_is_a_template_named_star_of_its_own() -> None:
+    reads = [
+        AlignedSegment.fromstring(f"*\t0\tchr1\t11\t60\t4M\t*\t0\t0\t{bases}\tIIII", HEADER)
+        for bases in ("AAAA", "AAAA", "CCCC")
+    ]
+    pileup = StreamingPileupBuilder(reads).pileup("chr1", 11)
+    assert [called(template) for template in pileup.templates()] == [
+        ("*", "base", "A", 40),
+        ("*", "base", "A", 40),
+        ("*", "base", "C", 40),
+    ]
+
+
 def test_a_no_call_leaves_the_other_reads_base_at_its_own_quality() -> None:
     assert called(mates("N", 40, "A", 20).templates()[0]) == ("t", "base", "A", 20)
     assert called(mates("N", 10, "N", 30).templates()[0]) == ("t", "base", "N", 30)

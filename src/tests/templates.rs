@@ -101,6 +101,28 @@ fn test_templates_group_reads_by_name_in_the_order_of_their_first_entries() {
 }
 
 #[test]
+fn test_each_unnamed_read_is_a_template_of_its_own() {
+    let reads = [
+        read("*", 10, "4M", "AAAA"),
+        read("*", 10, "4M", "AAAA"),
+        read("*", 10, "4M", "CCCC"),
+    ];
+    assert_eq!(
+        templates_at(
+            &reads,
+            11,
+            AgreementStrategy::default(),
+            DisagreementStrategy::default()
+        ),
+        [
+            ("*".into(), EntryKind::Base, Some('A'), Some(40)),
+            ("*".into(), EntryKind::Base, Some('A'), Some(40)),
+            ("*".into(), EntryKind::Base, Some('C'), Some(40)),
+        ]
+    );
+}
+
+#[test]
 fn test_the_strategies_default_to_consensus_as_in_fgbio_and_fgumi() {
     assert_eq!(AgreementStrategy::default(), AgreementStrategy::Consensus);
     assert_eq!(

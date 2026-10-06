@@ -151,8 +151,8 @@ class PileupTemplate:
     """One template at one pileup position: the reads of one query name, their bases called into one."""
 
     @property
-    def query_name(self) -> str | None:
-        """The name of the template's reads."""
+    def query_name(self) -> str:
+        """The name of the template's reads, `*` for a read with none, which is a template of its own."""
     @property
     def reads(self) -> tuple[PileupRead, ...]:
         """The entries of the template's reads at the position, usually one or two."""
