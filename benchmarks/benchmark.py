@@ -1,4 +1,4 @@
-"""Time piling up every base of a territory with streampile, its Rust core, and pysam's htslib.
+"""Time piling up every base of a territory with streampile and pysam's htslib.
 
 Each engine counts, at every base, the reads holding each base at the quality floor, the reads
 with a deletion there, and the reads with an insertion after it. The pileup engines' counts agree
@@ -26,12 +26,11 @@ from pysam import FastaFile
 
 from streampile import StreamingPileupBuilder
 from streampile import tabulate
-from streampile._native import ColumnCounts
 
 MIN_BASE_QUALITY = 30
 MIN_MAPPING_QUALITY = 20
 EXCLUDE_FLAGS = 0xF04
-ENGINES = ("htslib", "streampile", "rust", "tabulate", "rebuild")
+ENGINES = ("htslib", "streampile", "tabulate", "rebuild")
 
 
 def read_territory(bed: Path) -> Territory:
@@ -66,17 +65,6 @@ def streampile_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
                         continue
                     counts["-" if entry.is_del else entry.base or "N"] += 1
                 yield counts
-
-
-def rust_counts(bam: Path, spans: list[Bed3]) -> Iterator[dict[str, int]]:
-    """Count each column of the territory from one forward sweep of the Rust builder."""
-    return ColumnCounts(
-        bam,
-        [(span.refname, span.start, span.end) for span in spans],
-        min_mapping_quality=MIN_MAPPING_QUALITY,
-        exclude_flags=EXCLUDE_FLAGS,
-        quality_floor=MIN_BASE_QUALITY,
-    )
 
 
 def htslib_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
@@ -184,8 +172,6 @@ def run(engine: str, bam: Path, reference: Path, bed: Path, rebuild_columns: int
             counts = rebuilt_counts(bam, spans, rebuild_columns)
         elif engine == "streampile":
             counts = streampile_counts(bam, spans)
-        elif engine == "rust":
-            counts = rust_counts(bam, spans)
         else:
             counts = htslib_counts(bam, spans)
         for column in counts:

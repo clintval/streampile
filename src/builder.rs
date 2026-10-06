@@ -373,6 +373,19 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         Ok(())
     }
 
+    /// Stops without handing any more records to the tap, so dropping the builder runs no tap.
+    #[cfg(feature = "python")]
+    pub(crate) fn abandon(&mut self) {
+        self.stage = Stage::Closed;
+        self.built = false;
+        self.active.clear();
+        self.entries.clear();
+        self.slots.clear();
+        self.free.clear();
+        self.waiting.clear();
+        self.next = None;
+    }
+
     fn passes(&self, flags: Flags, mapping_quality: u8) -> bool {
         !(flags.intersects(self.options.exclude_flags)
             || mapping_quality < self.options.min_mapping_quality

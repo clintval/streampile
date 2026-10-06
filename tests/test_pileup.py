@@ -1,5 +1,4 @@
 from array import array
-from dataclasses import replace
 
 import pytest
 from pysam import AlignedSegment
@@ -236,8 +235,44 @@ def test_from_alignments_drops_reads_on_other_contigs() -> None:
         assert pileup.bases == [base]
 
 
-def test_a_pileup_is_frozen_to_type_checkers_and_hashed_by_its_fields() -> None:
-    pileup = Pileup("chr1", 10, ())
-    assert hash(pileup) == hash(replace(pileup))
-    # Each checker fails on an unused ignore, so all three must reject this assignment.
-    pileup.reference_pos = 11  # type: ignore[misc]  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[invalid-assignment]
+def test_a_pileup_is_frozen_and_compared_and_hashed_by_its_fields() -> None:
+    read = record("r", 10, "4M", "ACGT")
+    pileup = Pileup("chr1", 11, (PileupRead(read, 1, 1, BASE),))
+    same = Pileup("chr1", 11, [PileupRead(read, 1, 1, BASE)], min_base_quality=13)
+    assert (pileup, hash(pileup)) == (same, hash(same))
+    assert pileup != Pileup("chr1", 11, (PileupRead(read, 1, 1, BASE),), min_base_quality=14)
+    assert repr(pileup).startswith("Pileup(reference_name='chr1', reference_pos=11, pileups=(")
+    with pytest.raises(AttributeError):
+        # Each checker fails on an unused ignore, so all three must reject this assignment.
+        pileup.reference_pos = 12  # type: ignore[misc]  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[invalid-assignment]
+
+
+def test_a_pileup_read_behaves_as_the_tuple_of_its_fields() -> None:
+    read = record("r", 10, "2M2I2M", "ACGTAC")
+    entry = PileupRead(read, None, None, INSERTION, insertion_offset=2, insertion_length=2)
+    fields = (read, None, None, INSERTION, 2, 2)
+    assert (entry == fields, tuple(entry), len(entry), entry[3], entry[-1]) == (
+        True,
+        fields,
+        6,
+        INSERTION,
+        2,
+    )
+    assert hash(entry) == hash(fields)
+    assert entry._fields == (
+        "alignment",
+        "query_position",
+        "query_position_or_next",
+        "pileup_type",
+        "insertion_offset",
+        "insertion_length",
+    )
+    assert entry._asdict() == dict(zip(entry._fields, fields, strict=True))
+    moved = entry._replace(insertion_offset=3, insertion_length=1)
+    assert (moved.inserted_bases, moved.alignment) == ("T", read)
+    assert entry < moved and moved != entry
+    assert repr(entry).startswith("PileupRead(alignment=")
+    with pytest.raises(ValueError, match="Got unexpected field names"):
+        entry._replace(base="A")  # type: ignore[call-arg]  # pyright: ignore[reportCallIssue]  # ty: ignore[unknown-argument]
+    with pytest.raises(ValueError, match="'bogus' is not a valid PileupReadType"):
+        PileupRead(read, 0, 0, "bogus")  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]  # ty: ignore[invalid-argument-type]

@@ -827,7 +827,7 @@ dev = [
 requires-dist = [
     { name = "bedspec", specifier = ">=4.0.0" },
     { name = "pybgzf", specifier = ">=0.1.2" },
-    { name = "pysam", specifier = ">=0.23" },
+    { name = "pysam", specifier = ">=0.23,<0.25" },
     { name = "typeline", specifier = ">=2.4.0" },
     { name = "typing-extensions", specifier = ">=4.12" },
 ]

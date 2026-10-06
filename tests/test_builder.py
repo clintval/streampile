@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pysam
 import pytest
 from pysam import AlignedSegment
 from pysam import AlignmentFile
@@ -712,3 +713,183 @@ def test_entries_report_offsets_in_alignment_order_on_both_strands() -> None:
         entry = pileup.pileups[0]
         seen.append((entry.base, entry.qual, entry.query_position, entry.alignment.is_reverse))
     assert seen == [("A", 35, 4, False), ("C", 35, 4, True)]
+
+
+def test_entries_measure_their_distances_to_both_fragment_ends() -> None:
+    reads = pair("q1", 100, 150)
+    for read in reads:
+        read.set_tag("MC", f"{READ_LENGTH}M")  # pyright: ignore[reportUnknownMemberType]
+    distances: list[tuple[bool, int | None, int | None]] = []
+    with StreamingPileupBuilder(reads) as builder:
+        for pos in (100, 149, 150, 199):
+            for entry in builder.pileup("chr1", pos).pileups:
+                distances.append((
+                    entry.alignment.is_reverse,
+                    entry.five_prime_distance,
+                    entry.template_end_distance,
+                ))
+    assert distances == [
+        (False, 0, 99),
+        (False, 49, 50),
+        (True, 49, 50),
+        (True, 0, 99),
+    ]
+
+
+def test_a_forward_read_needs_its_mate_cigar_for_its_template_end() -> None:
+    reads = pair("q1", 100, 120)
+    reads[0].template_length = 7
+    pileup = StreamingPileupBuilder(reads).pileup("chr1", 130)
+    forward, reverse = pileup.pileups
+    assert (reverse.alignment.is_reverse, reverse.template_end_distance) == (True, 30)
+    with pytest.raises(ValueError, match="Read q1 has no MC tag to find its mate's 5' end with."):
+        _ = forward.template_end_distance
+    reads[0].set_tag("MC", "4Q")  # pyright: ignore[reportUnknownMemberType]
+    forward = StreamingPileupBuilder(reads).pileup("chr1", 130).pileups[0]
+    with pytest.raises(ValueError, match="Read q1 has an invalid MC tag: 4Q."):
+        _ = forward.template_end_distance
+
+
+def test_an_entry_made_by_hand_measures_its_distances_from_its_read() -> None:
+    reads = pair("q1", 100, 150)
+    reads[0].set_tag("MC", f"{READ_LENGTH}M")  # pyright: ignore[reportUnknownMemberType]
+    entry = PileupRead(reads[0], 4, 4, BASE)
+    assert (entry.five_prime_distance, entry.template_end_distance) == (4, 95)
+    reverse = PileupRead(reads[1], 4, 4, BASE)
+    assert (reverse.five_prime_distance, reverse.template_end_distance) == (45, 54)
+    deletion = PileupRead(reads[0], None, 4, PileupReadType.deletion)
+    assert (deletion.five_prime_distance, deletion.template_end_distance) == (None, None)
+
+
+def test_a_pileup_is_a_snapshot_that_outlives_the_builder_moving_on() -> None:
+    reads = [record("one", 10, "4M", "ACGT"), record("two", 20, "4M", "TTTT")]
+    with StreamingPileupBuilder(reads) as builder:
+        first = builder.pileup("chr1", 11)
+        later = builder.pileup("chr1", 21)
+    assert (first.bases, [entry.alignment for entry in first.pileups]) == (["C"], [reads[0]])
+    assert (later.bases, later.unfiltered_depth) == (["T"], 1)
+
+
+def test_the_options_of_a_builder_are_read_only() -> None:
+    def keep(_read: AlignedSegment) -> bool:
+        return True
+
+    tapped: list[AlignedSegment] = []
+    builder = StreamingPileupBuilder(
+        [record("r", 10, "4M", "ACGT")],
+        min_mapping_quality=5,
+        exclude_flags=0x400,
+        min_base_quality=20,
+        proper_pairs_only=True,
+        read_filter=keep,
+        tap=tapped.append,
+    )
+    assert (
+        builder.min_mapping_quality,
+        builder.exclude_flags,
+        builder.min_base_quality,
+        builder.proper_pairs_only,
+        builder.read_filter,
+        builder.tap,
+        builder.previous_pileup,
+    ) == (5, 0x400, 20, True, keep, tapped.append, None)
+    with pytest.raises(AttributeError):
+        builder.min_base_quality = 30  # type: ignore[misc]  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[invalid-assignment]
+
+
+def test_closing_again_after_a_tap_raises_hands_over_the_rest() -> None:
+    reads = [record(f"r{start}", start, "4M", "ACGT") for start in (10, 20, 30)]
+    tapped: list[str] = []
+
+    def tap(read: AlignedSegment) -> None:
+        if read.query_name == "r10" and "failed" not in tapped:
+            tapped.append("failed")
+            raise OSError("disk full")
+        tapped.append(read.query_name or "")
+
+    builder = StreamingPileupBuilder(reads, tap=tap)
+    builder.pileup("chr1", 10)
+    with pytest.raises(OSError, match="disk full"):
+        builder.close()
+    with pytest.raises(ValueError, match="The builder is closed."):
+        builder.pileup("chr1", 40)
+    builder.close()
+    builder.close()
+    assert tapped == ["failed", "r20", "r30"]
+
+
+def test_a_failed_advance_is_retried_and_never_returns_a_stale_pileup() -> None:
+    reads = [record("one", 10, "4M", "ACGT"), record("two", 20, "4M", "GGGG")]
+    failures = ["disk full"]
+
+    def tap(_read: AlignedSegment) -> None:
+        if failures:
+            raise OSError(failures.pop())
+
+    builder = StreamingPileupBuilder(reads, tap=tap)
+    assert builder.pileup("chr1", 10).bases == ["A"]
+    with pytest.raises(OSError, match="disk full"):
+        builder.pileup("chr1", 20)
+    assert builder.pileup("chr1", 20).bases == ["G"]
+
+
+def test_exceptions_of_the_records_read_filter_and_tap_reach_the_caller_unchanged() -> None:
+    class CallbackError(Exception):
+        pass
+
+    def broken() -> Iterator[AlignedSegment]:
+        yield record("one", 10, "4M", "ACGT")
+        raise CallbackError("source")
+
+    def refuse(_read: AlignedSegment) -> bool:
+        raise CallbackError("filter")
+
+    def tap(_read: AlignedSegment) -> None:
+        raise CallbackError("tap")
+
+    reads = [record("one", 10, "4M", "ACGT"), record("two", 20, "4M", "ACGT")]
+    with pytest.raises(CallbackError, match="source"):
+        StreamingPileupBuilder(broken()).pileup("chr1", 10)
+    with pytest.raises(CallbackError, match="filter"):
+        StreamingPileupBuilder(reads, read_filter=refuse).pileup("chr1", 10)
+    with pytest.raises(CallbackError, match="filter"):
+        StreamingPileupBuilder([], read_filter=refuse).accepts(reads[0])
+    with pytest.raises(CallbackError, match="tap"):
+        StreamingPileupBuilder(reads, tap=tap).pileup("chr1", 20)
+
+
+def test_a_read_whose_cigar_and_sequence_differ_in_length_is_refused() -> None:
+    reads = [record("bad", 10, "4M", "ACGTA")]
+    with pytest.raises(
+        ValueError, match="Read bad is invalid: CIGAR and query sequence lengths differ."
+    ):
+        StreamingPileupBuilder(reads).pileup("chr1", 10)
+
+
+def test_builder_reads_a_cram_through_pysam(tmp_path: Path) -> None:
+    contigs = {"chr1": "ACGT" * 250, "chr2": "TTGG" * 250}
+    fasta = tmp_path / "reference.fa"
+    fasta.write_text("".join(f">{name}\n{bases}\n" for name, bases in contigs.items()))
+    pysam.faidx(str(fasta))
+    cram = tmp_path / "reads.cram"
+    with AlignmentFile(str(cram), "wc", header=HEADER, reference_filename=str(fasta)) as sink:
+        sink.write(record("r", 10, "4M", "GTAC"))
+    with (
+        AlignmentFile(str(cram), reference_filename=str(fasta), threads=2) as reads,
+        StreamingPileupBuilder(reads) as builder,
+    ):
+        assert [pileup.bases for pileup in builder.columns("chr1", 10, 14)] == [
+            ["G"],
+            ["T"],
+            ["A"],
+            ["C"],
+        ]
+
+
+def test_dropping_a_builder_without_closing_it_hands_no_more_reads_to_the_tap() -> None:
+    reads = [record(f"r{start}", start, "4M", "ACGT") for start in (10, 20, 30)]
+    tapped: list[AlignedSegment] = []
+    builder = StreamingPileupBuilder(reads, tap=tapped.append)
+    builder.pileup("chr1", 20)
+    del builder
+    assert tapped == reads[:1]
