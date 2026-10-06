@@ -193,18 +193,18 @@ fn test_templates_call_overlapping_mates_as_fgumi_does() {
         let (cigar2, bases2, quals2) = read(&mut random, &reference, start2, length2);
         let flipped = random.chance(30);
         let mut builder = SamBuilder::new();
-        let records = builder.add_pair(Pair {
-            name: Some(format!("p{index}")),
-            bases1: Some(bases1),
-            bases2: Some(bases2),
-            quals1: Some(quals1),
-            quals2: Some(quals2),
-            cigar1: Some(cigar1.clone()),
-            cigar2: Some(cigar2.clone()),
-            strand1: if flipped { Strand::Minus } else { Strand::Plus },
-            strand2: if flipped { Strand::Plus } else { Strand::Minus },
-            ..Pair::at(start1 + 1, start2 + 1)
-        });
+        let records = builder.add_pair(
+            Pair::at(start1 + 1, start2 + 1)
+                .name(format!("p{index}"))
+                .bases1(bases1)
+                .bases2(bases2)
+                .quals1(quals1)
+                .quals2(quals2)
+                .cigar1(cigar1.clone())
+                .cigar2(cigar2.clone())
+                .strand1(if flipped { Strand::Minus } else { Strand::Plus })
+                .strand2(if flipped { Strand::Plus } else { Strand::Minus }),
+        );
         let header = builder.header().clone();
         for (agreement, fgumi_agreement) in AGREEMENTS {
             for (disagreement, fgumi_disagreement) in DISAGREEMENTS {

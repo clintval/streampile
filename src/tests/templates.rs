@@ -454,49 +454,29 @@ fn template_ends(pair: Pair, positions: &[usize]) -> Vec<(Option<usize>, Option<
 
 #[test]
 fn test_a_templates_distances_are_its_first_reads_and_else_its_second_reads() {
-    let pair = Pair {
-        cigar1: Some("10M".into()),
-        cigar2: Some("10M".into()),
-        ..Pair::at(101, 106)
-    };
+    let pair = Pair::at(101, 106).cigar1("10M").cigar2("10M");
     let expected = [(0, 14), (4, 10), (5, 9), (9, 5), (10, 4), (14, 0)];
     assert_eq!(
         template_ends(pair, &[100, 104, 105, 109, 110, 114]),
         expected.map(|(five, end)| (Some(five), Some(end)))
     );
-    let deleted = Pair {
-        cigar1: Some("2M1D7M".into()),
-        cigar2: Some("10M".into()),
-        ..Pair::at(101, 101)
-    };
+    let deleted = Pair::at(101, 101).cigar1("2M1D7M").cigar2("10M");
     assert_eq!(template_ends(deleted, &[102]), [(Some(2), Some(7))]);
 }
 
 #[test]
 fn test_a_template_has_both_distances_where_it_holds_a_deletion_or_a_skip() {
-    let deleted = Pair {
-        cigar1: Some("50M2D50M".into()),
-        cigar2: Some("100M".into()),
-        ..Pair::at(1000, 1200)
-    };
+    let deleted = Pair::at(1000, 1200).cigar1("50M2D50M").cigar2("100M");
     assert_eq!(
         template_ends(deleted, &[1049, 1050]),
         [(Some(50), Some(248)); 2]
     );
-    let skipped = Pair {
-        cigar1: Some("50M100N50M".into()),
-        cigar2: Some("100M".into()),
-        ..Pair::at(1000, 1300)
-    };
+    let skipped = Pair::at(1000, 1300).cigar1("50M100N50M").cigar2("100M");
     assert_eq!(
         template_ends(skipped, &[1049, 1148]),
         [(Some(50), Some(250)); 2]
     );
-    let deleted_second = Pair {
-        cigar1: Some("100M".into()),
-        cigar2: Some("50M2D50M".into()),
-        ..Pair::at(1000, 1100)
-    };
+    let deleted_second = Pair::at(1000, 1100).cigar1("100M").cigar2("50M2D50M");
     assert_eq!(
         template_ends(deleted_second, &[1149]),
         [(Some(150), Some(50))]
@@ -551,13 +531,11 @@ fn test_a_pileup_without_a_base_deletion_or_skip_has_no_templates() {
 
 #[test]
 fn test_a_template_of_a_pair_that_is_not_fr_has_no_template_end() {
-    let outward = Pair {
-        cigar1: Some("10M".into()),
-        cigar2: Some("10M".into()),
-        strand1: Strand::Minus,
-        strand2: Strand::Plus,
-        ..Pair::at(101, 201)
-    };
+    let outward = Pair::at(101, 201)
+        .cigar1("10M")
+        .cigar2("10M")
+        .strand1(Strand::Minus)
+        .strand2(Strand::Plus);
     assert_eq!(
         template_ends(outward, &[105, 205]),
         [(Some(4), None), (None, None)]

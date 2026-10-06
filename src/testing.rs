@@ -48,44 +48,37 @@ pub enum Strand {
 
 /// A read pair to build, with the defaults of fgbio's `SamBuilder.addPair`: an FR pair, the
 /// first read forward.
+///
+/// Start from [`Pair::at`] or [`Pair::default`], whose reads are unmapped, and set what differs
+/// from the defaults:
+///
+/// ```
+/// use streampile::testing::{Pair, SamBuilder};
+///
+/// let mut builder = SamBuilder::new();
+/// let reads = builder.add_pair(Pair::at(101, 151).name("q").cigar1("50M2D50M"));
+/// assert_eq!(reads.len(), 2);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Pair {
-    /// The name of both reads, or the next sequential name.
-    pub name: Option<String>,
-    /// The first read's bases, or random bases, as many as its CIGAR reads.
-    pub bases1: Option<String>,
-    /// The second read's bases, or random bases, as many as its CIGAR reads.
-    pub bases2: Option<String>,
-    /// The first read's qualities, or the builder's base quality at every base.
-    pub quals1: Option<Vec<u8>>,
-    /// The second read's qualities, or the builder's base quality at every base.
-    pub quals2: Option<Vec<u8>>,
-    /// The index of both reads' contig in the header.
-    pub contig: usize,
-    /// The index of the second read's contig, if not `contig`.
-    pub contig2: Option<usize>,
-    /// The first read's 1-based start, or 0 for an unmapped read.
-    pub start1: usize,
-    /// The second read's 1-based start, or 0 for an unmapped read.
-    pub start2: usize,
-    /// Whether the first read is unmapped.
-    pub unmapped1: bool,
-    /// Whether the second read is unmapped.
-    pub unmapped2: bool,
-    /// The first read's CIGAR, or the builder's read length of matches.
-    pub cigar1: Option<String>,
-    /// The second read's CIGAR, or the builder's read length of matches.
-    pub cigar2: Option<String>,
-    /// The first read's mapping quality.
-    pub mapq1: u8,
-    /// The second read's mapping quality.
-    pub mapq2: u8,
-    /// The first read's strand.
-    pub strand1: Strand,
-    /// The second read's strand.
-    pub strand2: Strand,
-    /// Auxiliary fields of both reads.
-    pub attrs: Vec<(Tag, Value)>,
+    name: Option<String>,
+    bases1: Option<String>,
+    bases2: Option<String>,
+    quals1: Option<Vec<u8>>,
+    quals2: Option<Vec<u8>>,
+    contig: usize,
+    contig2: Option<usize>,
+    start1: usize,
+    start2: usize,
+    unmapped1: bool,
+    unmapped2: bool,
+    cigar1: Option<String>,
+    cigar2: Option<String>,
+    mapq1: u8,
+    mapq2: u8,
+    strand1: Strand,
+    strand2: Strand,
+    attrs: Vec<(Tag, Value)>,
 }
 
 impl Default for Pair {
@@ -125,39 +118,140 @@ impl Pair {
 
     /// A default FR pair at two 1-based starts with one base repeated along both reads.
     pub fn filled(start1: usize, start2: usize, base: char, read_length: usize) -> Self {
-        Self {
-            start1,
-            start2,
-            bases1: Some(base.to_string().repeat(read_length)),
-            bases2: Some(base.to_string().repeat(read_length)),
-            ..Self::default()
-        }
+        Self::at(start1, start2)
+            .bases1(base.to_string().repeat(read_length))
+            .bases2(base.to_string().repeat(read_length))
+    }
+
+    /// Names both reads, which are otherwise named in sequence.
+    #[must_use]
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// Sets the first read's bases, which are otherwise random, as many as its CIGAR reads.
+    #[must_use]
+    pub fn bases1(mut self, bases: impl Into<String>) -> Self {
+        self.bases1 = Some(bases.into());
+        self
+    }
+
+    /// Sets the second read's bases, which are otherwise random, as many as its CIGAR reads.
+    #[must_use]
+    pub fn bases2(mut self, bases: impl Into<String>) -> Self {
+        self.bases2 = Some(bases.into());
+        self
+    }
+
+    /// Sets the first read's qualities, otherwise the builder's base quality at every base.
+    #[must_use]
+    pub fn quals1(mut self, quals: impl Into<Vec<u8>>) -> Self {
+        self.quals1 = Some(quals.into());
+        self
+    }
+
+    /// Sets the second read's qualities, otherwise the builder's base quality at every base.
+    #[must_use]
+    pub fn quals2(mut self, quals: impl Into<Vec<u8>>) -> Self {
+        self.quals2 = Some(quals.into());
+        self
+    }
+
+    /// Sets the index in the header of both reads' contig, otherwise the first.
+    #[must_use]
+    pub fn contig(mut self, contig: usize) -> Self {
+        self.contig = contig;
+        self
+    }
+
+    /// Sets the index of the second read's contig, otherwise the first read's.
+    #[must_use]
+    pub fn contig2(mut self, contig: usize) -> Self {
+        self.contig2 = Some(contig);
+        self
+    }
+
+    /// Sets whether the first read is unmapped, as it is too with a start of 0.
+    #[must_use]
+    pub fn unmapped1(mut self, unmapped: bool) -> Self {
+        self.unmapped1 = unmapped;
+        self
+    }
+
+    /// Sets whether the second read is unmapped, as it is too with a start of 0.
+    #[must_use]
+    pub fn unmapped2(mut self, unmapped: bool) -> Self {
+        self.unmapped2 = unmapped;
+        self
+    }
+
+    /// Sets the first read's CIGAR, otherwise the builder's read length of matches.
+    #[must_use]
+    pub fn cigar1(mut self, cigar: impl Into<String>) -> Self {
+        self.cigar1 = Some(cigar.into());
+        self
+    }
+
+    /// Sets the second read's CIGAR, otherwise the builder's read length of matches.
+    #[must_use]
+    pub fn cigar2(mut self, cigar: impl Into<String>) -> Self {
+        self.cigar2 = Some(cigar.into());
+        self
+    }
+
+    /// Sets the first read's mapping quality, otherwise 60.
+    #[must_use]
+    pub fn mapq1(mut self, mapq: u8) -> Self {
+        self.mapq1 = mapq;
+        self
+    }
+
+    /// Sets the second read's mapping quality, otherwise 60.
+    #[must_use]
+    pub fn mapq2(mut self, mapq: u8) -> Self {
+        self.mapq2 = mapq;
+        self
+    }
+
+    /// Sets the first read's strand, otherwise forward.
+    #[must_use]
+    pub fn strand1(mut self, strand: Strand) -> Self {
+        self.strand1 = strand;
+        self
+    }
+
+    /// Sets the second read's strand, otherwise reverse.
+    #[must_use]
+    pub fn strand2(mut self, strand: Strand) -> Self {
+        self.strand2 = strand;
+        self
+    }
+
+    /// Adds an auxiliary field to both reads.
+    #[must_use]
+    pub fn attr(mut self, tag: Tag, value: impl Into<Value>) -> Self {
+        self.attrs.push((tag, value.into()));
+        self
     }
 }
 
 /// An unpaired read to build, with the defaults of fgbio's `SamBuilder.addFrag`.
+///
+/// Start from [`Frag::at`] or [`Frag::default`], whose read is unmapped, and set what differs
+/// from the defaults.
 #[derive(Clone, Debug)]
 pub struct Frag {
-    /// The read's name, or the next sequential name.
-    pub name: Option<String>,
-    /// The read's bases, or random bases, as many as its CIGAR reads.
-    pub bases: Option<String>,
-    /// The read's qualities, or the builder's base quality at every base.
-    pub quals: Option<Vec<u8>>,
-    /// The index of the read's contig in the header.
-    pub contig: usize,
-    /// The read's 1-based start, or 0 for an unmapped read.
-    pub start: usize,
-    /// Whether the read is unmapped.
-    pub unmapped: bool,
-    /// The read's CIGAR, or the builder's read length of matches.
-    pub cigar: Option<String>,
-    /// The read's mapping quality.
-    pub mapq: u8,
-    /// The read's strand.
-    pub strand: Strand,
-    /// Auxiliary fields of the read.
-    pub attrs: Vec<(Tag, Value)>,
+    name: Option<String>,
+    bases: Option<String>,
+    quals: Option<Vec<u8>>,
+    contig: usize,
+    start: usize,
+    unmapped: bool,
+    cigar: Option<String>,
+    mapq: u8,
+    strand: Strand,
+    attrs: Vec<(Tag, Value)>,
 }
 
 impl Default for Frag {
@@ -184,6 +278,69 @@ impl Frag {
             start,
             ..Self::default()
         }
+    }
+
+    /// Names the read, which is otherwise named in sequence.
+    #[must_use]
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// Sets the read's bases, which are otherwise random, as many as its CIGAR reads.
+    #[must_use]
+    pub fn bases(mut self, bases: impl Into<String>) -> Self {
+        self.bases = Some(bases.into());
+        self
+    }
+
+    /// Sets the read's qualities, otherwise the builder's base quality at every base.
+    #[must_use]
+    pub fn quals(mut self, quals: impl Into<Vec<u8>>) -> Self {
+        self.quals = Some(quals.into());
+        self
+    }
+
+    /// Sets the index in the header of the read's contig, otherwise the first.
+    #[must_use]
+    pub fn contig(mut self, contig: usize) -> Self {
+        self.contig = contig;
+        self
+    }
+
+    /// Sets whether the read is unmapped, as it is too with a start of 0.
+    #[must_use]
+    pub fn unmapped(mut self, unmapped: bool) -> Self {
+        self.unmapped = unmapped;
+        self
+    }
+
+    /// Sets the read's CIGAR, otherwise the builder's read length of matches.
+    #[must_use]
+    pub fn cigar(mut self, cigar: impl Into<String>) -> Self {
+        self.cigar = Some(cigar.into());
+        self
+    }
+
+    /// Sets the read's mapping quality, otherwise 60.
+    #[must_use]
+    pub fn mapq(mut self, mapq: u8) -> Self {
+        self.mapq = mapq;
+        self
+    }
+
+    /// Sets the read's strand, otherwise forward.
+    #[must_use]
+    pub fn strand(mut self, strand: Strand) -> Self {
+        self.strand = strand;
+        self
+    }
+
+    /// Adds an auxiliary field to the read.
+    #[must_use]
+    pub fn attr(mut self, tag: Tag, value: impl Into<Value>) -> Self {
+        self.attrs.push((tag, value.into()));
+        self
     }
 }
 

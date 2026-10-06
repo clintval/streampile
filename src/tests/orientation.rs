@@ -24,14 +24,14 @@ fn pair(
 ) -> (sam::Header, Vec<RecordBuf>) {
     let strand = |reverse: bool| if reverse { Strand::Minus } else { Strand::Plus };
     let mut builder = SamBuilder::new();
-    let records = builder.add_pair(Pair {
-        name: Some("q".into()),
-        cigar1: Some(cigar1.into()),
-        cigar2: Some(cigar2.into()),
-        strand1: strand(reverse1),
-        strand2: strand(reverse2),
-        ..Pair::at(start1, start2)
-    });
+    let records = builder.add_pair(
+        Pair::at(start1, start2)
+            .name("q")
+            .cigar1(cigar1)
+            .cigar2(cigar2)
+            .strand1(strand(reverse1))
+            .strand2(strand(reverse2)),
+    );
     (builder.header().clone(), records)
 }
 
@@ -179,10 +179,7 @@ fn test_the_template_length_is_never_read() {
 fn test_fgbio_reads_not_of_a_mapped_pair_are_not_fr() {
     let mut builder = SamBuilder::new().read_length(10).base_quality(20);
     let mut records = builder.add_frag(Frag::at(100));
-    records.extend(builder.add_pair(Pair {
-        unmapped2: true,
-        ..Pair::at(100, 100)
-    }));
+    records.extend(builder.add_pair(Pair::at(100, 100).unmapped2(true)));
     assert_eq!(fr(builder.header(), &records), [false, false, false]);
 }
 
@@ -211,11 +208,7 @@ fn test_fgbio_only_an_actual_fr_pair_is_fr() {
     ];
     for (strand1, strand2, expected) in strands {
         let mut builder = SamBuilder::new().read_length(10).base_quality(20);
-        let records = builder.add_pair(Pair {
-            strand1,
-            strand2,
-            ..Pair::at(100, 200)
-        });
+        let records = builder.add_pair(Pair::at(100, 200).strand1(strand1).strand2(strand2));
         assert_eq!(fr(builder.header(), &records), [expected, expected]);
     }
 }

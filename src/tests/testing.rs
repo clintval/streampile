@@ -101,20 +101,20 @@ fn test_add_pair_sets_mate_information_as_htsjdk_does() {
 #[test]
 fn test_add_pair_takes_the_reads_it_is_given() {
     let mut builder = SamBuilder::new();
-    let pair = builder.add_pair(Pair {
-        name: Some("q".into()),
-        bases1: Some("ACGTA".into()),
-        bases2: Some("TTGCA".into()),
-        quals1: Some(vec![10, 20, 30, 40, 50]),
-        cigar1: Some("2S3M".into()),
-        cigar2: Some("3M2I".into()),
-        contig2: Some(1),
-        mapq1: 5,
-        strand1: Strand::Minus,
-        strand2: Strand::Minus,
-        attrs: vec![(Tag::ALIGNMENT_HIT_COUNT, Value::from(2_u8))],
-        ..Pair::at(10, 20)
-    });
+    let pair = builder.add_pair(
+        Pair::at(10, 20)
+            .name("q")
+            .bases1("ACGTA")
+            .bases2("TTGCA")
+            .quals1(vec![10, 20, 30, 40, 50])
+            .cigar1("2S3M")
+            .cigar2("3M2I")
+            .contig2(1)
+            .mapq1(5)
+            .strand1(Strand::Minus)
+            .strand2(Strand::Minus)
+            .attr(Tag::ALIGNMENT_HIT_COUNT, Value::from(2_u8)),
+    );
     let (r1, r2) = (&pair[0], &pair[1]);
     assert_eq!(r1.name().map(|name| name.to_vec()), Some(b"q".to_vec()));
     assert_eq!(r1.quality_scores().as_ref(), [10, 20, 30, 40, 50]);
@@ -136,10 +136,7 @@ fn test_add_pair_takes_the_reads_it_is_given() {
 #[test]
 fn test_an_unmapped_read_of_a_pair_takes_its_mates_position() {
     let mut builder = SamBuilder::new().read_length(10);
-    let pair = builder.add_pair(Pair {
-        unmapped2: true,
-        ..Pair::at(100, 200)
-    });
+    let pair = builder.add_pair(Pair::at(100, 200).unmapped2(true));
     let (mapped, unmapped) = (&pair[0], &pair[1]);
     assert!(unmapped.flags().is_unmapped() && mapped.flags().is_mate_unmapped());
     assert_eq!(
@@ -178,11 +175,7 @@ fn test_an_unmapped_read_of_a_pair_takes_its_mates_position() {
 fn test_add_frag_builds_an_unpaired_read_with_sequential_names() {
     let mut builder = SamBuilder::new().read_length(8).base_quality(20);
     let first = builder.add_frag(Frag::at(5)).remove(0);
-    let second = builder.add_frag(Frag {
-        strand: Strand::Minus,
-        cigar: Some("4M2D4M".into()),
-        ..Frag::at(9)
-    });
+    let second = builder.add_frag(Frag::at(9).strand(Strand::Minus).cigar("4M2D4M"));
     assert_eq!(
         first.name().map(|name| name.to_vec()),
         Some(b"0000".to_vec())
@@ -194,10 +187,7 @@ fn test_add_frag_builds_an_unpaired_read_with_sequential_names() {
     assert_eq!(first.flags(), Flags::empty());
     assert_eq!(second[0].flags(), Flags::REVERSE_COMPLEMENTED);
     assert_eq!(first.quality_scores().as_ref(), [20; 8]);
-    let placed = builder.add_frag(Frag {
-        unmapped: true,
-        ..Frag::at(7)
-    });
+    let placed = builder.add_frag(Frag::at(7).unmapped(true));
     assert!(placed[0].flags().is_unmapped());
     assert_eq!(
         (start(&placed[0]), placed[0].mapping_quality()),
@@ -208,34 +198,16 @@ fn test_add_frag_builds_an_unpaired_read_with_sequential_names() {
 #[test]
 #[should_panic(expected = "the bases of q do not agree with its CIGAR on length")]
 fn test_a_read_whose_bases_disagree_with_its_cigar_is_refused() {
-    SamBuilder::new().add_frag(Frag {
-        name: Some("q".into()),
-        bases: Some("ACGT".into()),
-        cigar: Some("5M".into()),
-        ..Frag::at(1)
-    });
+    SamBuilder::new().add_frag(Frag::at(1).name("q").bases("ACGT").cigar("5M"));
 }
 
 #[test]
 fn test_records_come_out_in_coordinate_order_with_unplaced_reads_last() {
     let mut builder = SamBuilder::new().read_length(10);
-    builder.add_frag(Frag {
-        name: Some("unplaced".into()),
-        ..Frag::default()
-    });
-    builder.add_frag(Frag {
-        name: Some("chr2".into()),
-        contig: 1,
-        ..Frag::at(5)
-    });
-    builder.add_pair(Pair {
-        name: Some("pair".into()),
-        ..Pair::at(50, 20)
-    });
-    builder.add_frag(Frag {
-        name: Some("late".into()),
-        ..Frag::at(20)
-    });
+    builder.add_frag(Frag::default().name("unplaced"));
+    builder.add_frag(Frag::at(5).name("chr2").contig(1));
+    builder.add_pair(Pair::at(50, 20).name("pair"));
+    builder.add_frag(Frag::at(20).name("late"));
     let names: Vec<String> = builder.to_bam_records().iter().map(name).collect();
     assert_eq!(names, ["pair", "late", "pair", "chr2", "unplaced"]);
     let added: Vec<String> = builder
@@ -301,11 +273,7 @@ fn test_the_record_helpers_change_one_field() {
 #[test]
 fn test_random_bases_are_as_many_as_the_cigar_reads() {
     let mut builder = SamBuilder::new().read_length(10);
-    let pair = builder.add_pair(Pair {
-        cigar1: Some("5S10M2D3M".into()),
-        cigar2: Some("4M1I4M".into()),
-        ..Pair::at(10, 20)
-    });
+    let pair = builder.add_pair(Pair::at(10, 20).cigar1("5S10M2D3M").cigar2("4M1I4M"));
     let lengths: Vec<usize> = pair.iter().map(|record| record.sequence().len()).collect();
     assert_eq!(lengths, [18, 9]);
     assert_eq!(builder.add_frag(Frag::at(30))[0].sequence().len(), 10);

@@ -33,14 +33,14 @@ fn pair(
     strand1: Strand,
     strand2: Strand,
 ) -> Vec<RecordBuf> {
-    reads().add_pair(Pair {
-        name: Some(name.into()),
-        bases1: Some(repeat('A')),
-        bases2: Some(repeat('C')),
-        strand1,
-        strand2,
-        ..Pair::at(start1, start2)
-    })
+    reads().add_pair(
+        Pair::at(start1, start2)
+            .name(name)
+            .bases1(repeat('A'))
+            .bases2(repeat('C'))
+            .strand1(strand1)
+            .strand2(strand2),
+    )
 }
 
 /// A pileup builder over built records, changed or not, in coordinate order.
@@ -144,19 +144,9 @@ fn test_builder_piles_up_every_edge_case_of_indels() {
 #[test]
 fn test_builder_piles_up_only_reads_of_mapped_pairs_with_a_read_filter() {
     let mut builder = reads();
-    builder.add_frag(Frag {
-        name: Some("q1".into()),
-        ..Frag::at(101)
-    });
-    builder.add_pair(Pair {
-        name: Some("q2".into()),
-        unmapped2: true,
-        ..Pair::at(101, 101)
-    });
-    builder.add_pair(Pair {
-        name: Some("q3".into()),
-        ..Pair::at(101, 300)
-    });
+    builder.add_frag(Frag::at(101).name("q1"));
+    builder.add_pair(Pair::at(101, 101).name("q2").unmapped2(true));
+    builder.add_pair(Pair::at(101, 300).name("q3"));
     let mapped_pair = |record: &noodles::bam::Record| {
         let flags = record.flags();
         flags.is_segmented() && !flags.is_unmapped() && !flags.is_mate_unmapped()
@@ -238,12 +228,12 @@ fn test_builder_composes_a_read_filter_with_an_entry_filter() {
 #[test]
 fn test_entries_report_offsets_and_positions_in_read_order() {
     let mut builder = reads().base_quality(35);
-    builder.add_pair(Pair {
-        name: Some("q1".into()),
-        bases1: Some(repeat('A')),
-        bases2: Some(repeat('C')),
-        ..Pair::at(101, 201)
-    });
+    builder.add_pair(
+        Pair::at(101, 201)
+            .name("q1")
+            .bases1(repeat('A'))
+            .bases2(repeat('C')),
+    );
     let mut builder = builder.to_pileup_builder();
     let mut seen = Vec::new();
     for position in [104, 204] {
@@ -270,14 +260,8 @@ fn test_entries_report_offsets_and_positions_in_read_order() {
 #[test]
 fn test_a_template_end_needs_a_mapped_fr_mate_on_the_same_contig() {
     let fragment = reads().add_frag(Frag::at(101));
-    let unmapped_mate = reads().add_pair(Pair {
-        unmapped2: true,
-        ..Pair::at(101, 101)
-    });
-    let other_contig = reads().add_pair(Pair {
-        contig2: Some(1),
-        ..Pair::at(101, 201)
-    });
+    let unmapped_mate = reads().add_pair(Pair::at(101, 101).unmapped2(true));
+    let other_contig = reads().add_pair(Pair::at(101, 201).contig2(1));
     let cases = [
         fragment,
         unmapped_mate,
@@ -334,10 +318,7 @@ fn test_a_template_end_is_measured_from_the_mate_cigar_alone() {
         (true, Some(89)),
         (true, Some(99)),
     ];
-    let with_mate_cigar = reads().add_pair(Pair {
-        name: Some("q".into()),
-        ..Pair::at(101, 151)
-    });
+    let with_mate_cigar = reads().add_pair(Pair::at(101, 151).name("q"));
     let mut any_template_length = with_mate_cigar.clone();
     for (record, tlen) in any_template_length.iter_mut().zip([7, 0]) {
         *record.template_length_mut() = tlen;
@@ -406,12 +387,12 @@ fn test_a_template_end_from_an_invalid_mate_cigar_is_an_error_naming_the_read() 
 /// A forward read and its reverse mate at fgbio's 1-based starts, as fgbio's `SamBuilder.addPair`
 /// makes them, each with the other's CIGAR in its `MC` tag.
 fn mates(start1: usize, cigar1: &str, start2: usize, cigar2: &str) -> Vec<RecordBuf> {
-    SamBuilder::new().add_pair(Pair {
-        name: Some("q".into()),
-        cigar1: Some(cigar1.into()),
-        cigar2: Some(cigar2.into()),
-        ..Pair::at(start1, start2)
-    })
+    SamBuilder::new().add_pair(
+        Pair::at(start1, start2)
+            .name("q")
+            .cigar1(cigar1)
+            .cigar2(cigar2),
+    )
 }
 
 /// The template-end distance of the forward or the reverse read at each 0-based position.
@@ -563,12 +544,8 @@ fn test_a_mate_cigar_must_span_a_base_with_operators_bam_allows() {
 #[test]
 fn test_the_template_ends_of_a_record_buf() -> crate::Result<()> {
     let mut builder = SamBuilder::new();
-    let record = builder.add_pair(Pair {
-        cigar1: Some("2S124M1D3M".into()),
-        cigar2: Some("3S124M2S".into()),
-        ..Pair::at(101, 100)
-    })[0]
-        .clone();
+    let record =
+        builder.add_pair(Pair::at(101, 100).cigar1("2S124M1D3M").cigar2("3S124M2S"))[0].clone();
     let header = builder.header();
     let ends: Vec<_> = [223, 224, 225, 226]
         .into_iter()
