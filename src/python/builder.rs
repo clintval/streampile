@@ -98,6 +98,8 @@ type Builder = crate::StreamingPileupBuilder<'static, PySource>;
 /// Every read, filtered or not, is handed to `tap` exactly once and in input order, as soon as
 /// the builder has moved past it and every read before it, or when the builder closes. A read
 /// can therefore be changed, e.g. tagged, while it is in a pileup and then written by `tap`.
+/// Pileups see each read as it was when the builder read it; changes made after that,
+/// including in `read_filter`, reach `tap` and `alignment` but not later pileups.
 /// Keeping input order means a read is held until every read before it has been passed, so a
 /// long read, e.g. one with a long reference skip, holds back every read that starts within it:
 /// with a `tap`, buffering behind the longest active read is inherent. Without a `tap`, a read

@@ -74,6 +74,7 @@ Each entry also measures its base's distance from the read's 5′ end and to the
 
 `tap` receives every record, in input order, once the builder has moved past it, so a record can be changed, e.g. tagged, while it is piled up.
 Each entry's `alignment` is the very record read, so pass `tap=writer.write` to write the changed records to an `AlignmentFile` opened with `template=reads`.
+Pileups see each read as it was when the builder read it; changes made after that, including in `read_filter`, reach `tap` and `alignment` but not later pileups.
 
 ```pycon
 >>> passed = []
