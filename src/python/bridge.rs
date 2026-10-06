@@ -2,9 +2,12 @@
 //!
 //! An `AlignedSegment` holds its record as htslib's `bam1_t`, behind the `_delegate` pointer that
 //! pysam's `libcalignedsegment.pxd` declares first in the object, after the Python object header
-//! and Cython's vtable pointer. Reading the record from there takes one copy, where reading it
-//! through the object's attributes takes a dozen Python calls. The layout is checked once, against
-//! a record made from known SAM text, and if it differs, records are read through attributes.
+//! and Cython's vtable pointer, and just before its `header`. Reading the record from there takes
+//! one copy, where reading it through the object's attributes takes a dozen Python calls. The
+//! layout is checked once, on a record made from known SAM text: the word after `_delegate` must
+//! be the record's header before `_delegate` is followed, and the record read from it must then
+//! match the record read through attributes. If either differs, records are read through
+//! attributes.
 
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -128,12 +131,26 @@ pub(crate) fn verify(py: Python<'_>) -> PyResult<()> {
             .map_err(|error| PyValueError::new_err(format!("invalid record: {error}")))?;
         Ok(())
     })?;
+    let header_at = DELEGATE_OFFSET + size_of::<*const c_void>();
+    let laid_out = basic_size >= header_at + size_of::<*const c_void>() && {
+        // SAFETY: the object is at least `basic_size` bytes long, so the word read lies within it,
+        // and it is only compared, never followed.
+        let word = unsafe {
+            segment
+                .as_ptr()
+                .byte_add(header_at)
+                .cast::<*const c_void>()
+                .read_unaligned()
+        };
+        word == segment.getattr("header")?.as_ptr().cast::<c_void>()
+    };
     let mut direct = bam::Record::default();
-    let agrees = basic_size >= DELEGATE_OFFSET + size_of::<*const c_void>()
+    let agrees = laid_out
         && STAGED.with_borrow_mut(|staged| {
             staged.clear();
-            // SAFETY: the object is large enough to hold the pointer read, and the pointer read is
-            // checked for null; what it points to is compared with the attributes below.
+            // SAFETY: `header` lies where pysam declares it, right after `_delegate`, so the word
+            // before it is `_delegate`, which is checked for null; what it points to is compared
+            // with the attributes below.
             unsafe { stage_delegate(&segment, staged) }.is_ok()
                 && bam::io::Reader::from(&staged[..])
                     .read_record(&mut direct)
