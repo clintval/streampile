@@ -23,15 +23,28 @@ use pyo3::types::{PyIterator, PyString};
 use super::bridge;
 use super::pileup::{Held, Pileup};
 use super::to_python;
+use crate::pileup::Derived;
 use crate::source::{AlignmentRecord, RecordSource};
 use crate::{DEFAULT_EXCLUDE_FLAGS, DEFAULT_MIN_BASE_QUALITY, Error};
 
 static EMPTY: LazyLock<bam::Record> = LazyLock::new(bam::Record::default);
 
-/// A pysam record and the BAM record copied from it when it was read.
+/// A pysam record, the BAM record copied from it when it was read, and what is worked out about
+/// the copy when first asked for.
 pub(crate) struct Bridged {
     pub object: Py<PyAny>,
     pub record: bam::Record,
+    pub derived: Derived,
+}
+
+impl Bridged {
+    pub(crate) fn new(object: Py<PyAny>, record: bam::Record) -> Self {
+        Self {
+            object,
+            record,
+            derived: Derived::default(),
+        }
+    }
 }
 
 /// A record a Python source reads, shared with the pileups that hold it.
@@ -114,10 +127,7 @@ impl RecordSource for PySource {
             };
             let mut bam = bam::Record::default();
             bridge::read(&object, &mut bam).map_err(io::Error::other)?;
-            *record = PyRecord(Some(Arc::new(Bridged {
-                object: object.unbind(),
-                record: bam,
-            })));
+            *record = PyRecord(Some(Arc::new(Bridged::new(object.unbind(), bam))));
             Ok(true)
         })
     }
@@ -368,10 +378,7 @@ impl StreamingPileupBuilder {
     fn accepts(&mut self, record: &Bound<'_, PyAny>) -> PyResult<bool> {
         let mut bam = bam::Record::default();
         bridge::read(record, &mut bam)?;
-        let record = PyRecord(Some(Arc::new(Bridged {
-            object: record.clone().unbind(),
-            record: bam,
-        })));
+        let record = PyRecord(Some(Arc::new(Bridged::new(record.clone().unbind(), bam))));
         exclusive(&mut self.inner)
             .accepts(&record)
             .map_err(to_python)

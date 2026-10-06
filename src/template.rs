@@ -280,6 +280,34 @@ pub fn template_end_distance<R: Record + ?Sized>(
     header: &sam::Header,
     position: usize,
 ) -> Result<Option<usize>> {
+    Ok(ends(record, header)?.and_then(|ends| ends.distance(position)))
+}
+
+/// A read of an FR pair and its mate laid along the reference, from which the template's bases
+/// between a position and the mate's 5′ end are counted.
+#[derive(Clone, Debug)]
+pub(crate) struct Ends {
+    read: Alignment,
+    mate: Alignment,
+    reverse: bool,
+}
+
+impl Ends {
+    /// The template's bases between a 0-based position and the mate's 5′ end, or `None` past it.
+    pub(crate) fn distance(&self, position: usize) -> Option<usize> {
+        usize::try_from(distance(
+            &self.read,
+            &self.mate,
+            self.reverse,
+            position as i64,
+        ))
+        .ok()
+    }
+}
+
+/// The ends of a read of an FR pair, as [`template_end_distance`] counts from them, or `None` for
+/// any other record or a read that spans no reference.
+pub(crate) fn ends<R: Record + ?Sized>(record: &R, header: &sam::Header) -> Result<Option<Ends>> {
     let Some(pairing) = pairing(record, header)? else {
         return Ok(None);
     };
@@ -301,11 +329,12 @@ pub fn template_end_distance<R: Record + ?Sized>(
         .map(|op| op.map(|op| (op.kind(), op.len() as i64)))
         .collect::<io::Result<Vec<_>>>()?;
     let read = Alignment::new(pairing.start, ops);
-    if !read.spans_reference() {
-        return Ok(None);
-    }
     let reverse = record.flags()?.is_reverse_complemented();
-    Ok(usize::try_from(distance(&read, &mate, reverse, position as i64)).ok())
+    Ok(read.spans_reference().then_some(Ends {
+        read,
+        mate,
+        reverse,
+    }))
 }
 
 /// The template's bases between a position of a read and its mate's 5′ end, which is past the

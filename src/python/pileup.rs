@@ -19,12 +19,11 @@ use noodles::sam::alignment::record::Flags;
 use crate::footprint::Footprint;
 use crate::overlap::{AgreementStrategy, DisagreementStrategy, Observation};
 use crate::pileup::{
-    EntryKind, MISSING_BASE_QUALITY, NONE, Template, TemplateName, TemplateRead, name_hash,
-    name_of, number_templates, templates,
+    EntryKind, MISSING_BASE_QUALITY, NONE, Template, TemplateName, TemplateRead, name_of,
+    number_templates, templates,
 };
 use crate::template::from_five_prime;
 use crate::{DEFAULT_MIN_BASE_QUALITY, PileupEntry};
-use crate::{is_fr_pair, template_end_distance};
 
 const ABSENT: i64 = i64::MIN;
 
@@ -51,7 +50,6 @@ pub(crate) struct Held {
     insertion_length: i64,
     position: Option<i64>,
     query_length: Option<u32>,
-    name_hash: u64,
 }
 
 impl Held {
@@ -68,7 +66,6 @@ impl Held {
             insertion_length: entry.insertion_length() as i64,
             position: Some(position),
             query_length: Some(live.footprint.query_length),
-            name_hash: live.name_hash,
         }
     }
 
@@ -110,7 +107,6 @@ impl Held {
             },
             position: Some(position),
             query_length: None,
-            name_hash: name_hash(&record.record),
         }
     }
 
@@ -196,17 +192,16 @@ impl Held {
     }
 
     fn template_end_distance(&self) -> crate::Result<Option<usize>> {
-        let Some(position) = self.position.or_else(|| self.position_of_base()) else {
+        let position = self.position.or_else(|| self.position_of_base());
+        let Some(position) = position.and_then(|position| usize::try_from(position).ok()) else {
             return Ok(None);
         };
-        let Ok(position) = usize::try_from(position) else {
-            return Ok(None);
-        };
-        template_end_distance(self.bam(), &noodles::sam::Header::default(), position)
+        let ends = self.record.derived.ends(self.bam())?;
+        Ok(ends.and_then(|ends| ends.distance(position)))
     }
 
     fn is_fr_pair(&self) -> crate::Result<bool> {
-        is_fr_pair(self.bam(), &noodles::sam::Header::default())
+        self.record.derived.is_fr_pair(self.bam())
     }
 
     /// The reference position of the read's base at the query position, for an entry made by
@@ -240,7 +235,7 @@ impl Held {
     fn template(&self) -> TemplateName<'_> {
         TemplateName::of(
             self.bam(),
-            self.name_hash,
+            &self.record.derived,
             Arc::as_ptr(&self.record) as usize,
         )
     }
@@ -437,13 +432,9 @@ impl PileupRead {
     ) -> PyResult<Self> {
         let mut record = bam::Record::default();
         bridge::read(alignment, &mut record)?;
-        let name_hash = name_hash(&record);
         Ok(Self {
             held: Held {
-                record: Arc::new(Bridged {
-                    object: alignment.clone().unbind(),
-                    record,
-                }),
+                record: Arc::new(Bridged::new(alignment.clone().unbind(), record)),
                 kind: kind_of(pileup_type)?,
                 query_position: optional(query_position),
                 query_position_or_next: optional(query_position_or_next),
@@ -451,7 +442,6 @@ impl PileupRead {
                 insertion_length,
                 position: None,
                 query_length: None,
-                name_hash,
             },
         })
     }
@@ -861,10 +851,7 @@ impl Pileup {
                 continue;
             }
             let query_length = footprint.query_length;
-            let record = Arc::new(Bridged {
-                object: alignment.unbind(),
-                record,
-            });
+            let record = Arc::new(Bridged::new(alignment.unbind(), record));
             footprint.entries_at(pos, |kind, offset, length| {
                 let mut held = Held::located(&record, pos, kind, offset, length);
                 held.query_length = Some(query_length);

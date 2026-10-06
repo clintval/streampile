@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, DefaultHasher, Hash, Hasher};
+use std::sync::OnceLock;
 
 use bstr::{BStr, ByteSlice};
 use noodles::bam;
@@ -10,6 +11,7 @@ use crate::error::Result;
 use crate::footprint::Footprint;
 use crate::overlap::{AgreementStrategy, DisagreementStrategy, Observation, Vote};
 use crate::source::AlignmentRecord;
+use crate::template::{self, Ends};
 
 /// The base quality of every base of a read with no stored qualities (QUAL `*`), as in htslib.
 pub const MISSING_BASE_QUALITY: u8 = 255;
@@ -54,7 +56,7 @@ pub(crate) struct LiveRecord<R = bam::Record> {
     pub flags: Flags,
     pub footprint: Footprint,
     pub fields: Vec<Option<Field>>,
-    pub name_hash: u64,
+    pub derived: Derived,
 }
 
 impl<R: Default> Default for LiveRecord<R> {
@@ -67,7 +69,7 @@ impl<R: Default> Default for LiveRecord<R> {
             flags: Flags::empty(),
             footprint: Footprint::default(),
             fields: Vec::new(),
-            name_hash: 0,
+            derived: Derived::default(),
         }
     }
 }
@@ -75,7 +77,43 @@ impl<R: Default> Default for LiveRecord<R> {
 impl<R: AlignmentRecord> LiveRecord<R> {
     /// The template of the record held in a slot.
     pub fn template(&self, slot: u32) -> TemplateName<'_> {
-        TemplateName::of(self.record.bam(), self.name_hash, slot as usize)
+        TemplateName::of(self.record.bam(), &self.derived, slot as usize)
+    }
+}
+
+/// What is worked out about a record only when it is first asked for, and then kept.
+#[derive(Debug, Default)]
+pub(crate) struct Derived {
+    name_hash: OnceLock<u64>,
+    ends: OnceLock<Option<Ends>>,
+}
+
+impl Derived {
+    /// The hash of the record's name.
+    fn name_hash(&self, record: &bam::Record) -> u64 {
+        *self.name_hash.get_or_init(|| {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(name_of(record));
+            hasher.finish()
+        })
+    }
+
+    /// The record's ends, kept once worked out, or the error of a record missing them, worked
+    /// out again each time.
+    pub(crate) fn ends(&self, record: &bam::Record) -> Result<Option<&Ends>> {
+        if let Some(ends) = self.ends.get() {
+            return Ok(ends.as_ref());
+        }
+        let ends = template::ends(record, &noodles::sam::Header::default())?;
+        Ok(self.ends.get_or_init(|| ends).as_ref())
+    }
+
+    /// Whether the record is a read of an FR pair, from its ends where it has them.
+    pub(crate) fn is_fr_pair(&self, record: &bam::Record) -> Result<bool> {
+        match self.ends(record) {
+            Ok(ends) => Ok(ends.is_some()),
+            Err(_) => crate::is_fr_pair(record, &noodles::sam::Header::default()),
+        }
     }
 }
 
@@ -89,14 +127,13 @@ pub(crate) struct TemplateName<'n> {
 }
 
 impl<'n> TemplateName<'n> {
-    /// The template of a record, from the hash of its name and a number unique to the read.
-    pub(crate) fn of(record: &'n bam::Record, name_hash: u64, read: usize) -> Self {
+    /// The template of a record, and of a read with no name, a number unique to the read.
+    pub(crate) fn of(record: &'n bam::Record, derived: &Derived, read: usize) -> Self {
         let name = record.name().map(|name| name.as_bytes());
         Self {
-            hash: if name.is_some() {
-                name_hash
-            } else {
-                read as u64
+            hash: match name {
+                Some(_) => derived.name_hash(record),
+                None => read as u64,
             },
             name,
             read,
@@ -145,13 +182,6 @@ impl Hasher for Prehashed {
 /// A record's name, `*` for a record with none.
 pub(crate) fn name_of(record: &bam::Record) -> &[u8] {
     record.name().map_or(b"*", |name| name.as_bytes())
-}
-
-/// The hash of a record's name, `*` for a record with none.
-pub(crate) fn name_hash(record: &bam::Record) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    hasher.write(name_of(record));
-    hasher.finish()
 }
 
 /// The template of each entry, numbered in the order of each template's first entry, or `None`
@@ -551,11 +581,8 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
     /// A read of an FR pair with no `MC` tag, or one that is not a CIGAR string spanning at least
     /// one base, is an error naming the read.
     pub fn template_end_distance(&self) -> Result<Option<usize>> {
-        crate::template_end_distance(
-            self.record(),
-            &noodles::sam::Header::default(),
-            self.position as usize,
-        )
+        let ends = self.live.derived.ends(self.record())?;
+        Ok(ends.and_then(|ends| ends.distance(self.position as usize)))
     }
 
     /// Whether the read is a read of an FR pair, as htsjdk 5.0.0's
@@ -565,7 +592,7 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
     /// A forward read of a pair otherwise FR with no `MC` tag, or one that is not a CIGAR string,
     /// is an error naming the read.
     pub fn is_fr_pair(&self) -> Result<bool> {
-        crate::is_fr_pair(self.record(), &noodles::sam::Header::default())
+        self.live.derived.is_fr_pair(self.record())
     }
 
     /// The value of one of the record's auxiliary fields, borrowed from the record.

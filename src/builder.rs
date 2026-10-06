@@ -8,7 +8,7 @@ use noodles::sam::{self, alignment::record::Cigar as _, alignment::record::Flags
 use crate::auxiliary;
 use crate::error::{Error, Result};
 use crate::footprint::Footprint;
-use crate::pileup::{LiveRecord, Pileup, RawEntry, name_hash, record_name};
+use crate::pileup::{Derived, LiveRecord, Pileup, RawEntry, record_name};
 use crate::source::{AlignmentRecord, RecordSource};
 
 /// Secondary, QC-fail, duplicate, and supplementary reads, which are left out by default.
@@ -523,7 +523,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         if live.footprint.end <= pos {
             return Ok(false);
         }
-        live.name_hash = name_hash(live.record.bam());
+        live.derived = Derived::default();
         index_fields(live, &self.options.aux_tags).map_err(|error| match error {
             Error::Io(source) => Error::InvalidRecord {
                 name: record_name(live.record.bam()),
