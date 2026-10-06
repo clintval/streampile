@@ -1,18 +1,21 @@
 //! Sweeps every base of a BED territory of a BAM, as `benchmarks/benchmark.py` does, and prints
-//! the time, the number of columns, and the digest of the counts the Python engines print.
+//! the time, the number of columns, and the digest of the counts the Python engines print, with
+//! as many threads decompressing the BAM as given, or one.
 //!
 //! ```console
-//! cargo run --release --example sweep -- reads.bam territory.bed
+//! cargo run --release --example sweep -- reads.bam territory.bed 4
 //! ```
 
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::Write as _;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
+use std::num::NonZero;
 use std::time::Instant;
 
-use noodles::bam;
 use noodles::sam::alignment::record::Flags;
+use noodles::{bam, bgzf};
 use sha2::{Digest, Sha256};
 use streampile::{EntryKind, StreamingPileupBuilder};
 
@@ -23,13 +26,23 @@ const EXCLUDE_FLAGS: u16 = 0xF04;
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args().skip(1);
     let (Some(bam_path), Some(bed_path)) = (args.next(), args.next()) else {
-        return Err("usage: sweep <reads.bam> <territory.bed>".into());
+        return Err("usage: sweep <reads.bam> <territory.bed> [threads]".into());
     };
-    let mut reader = bam::io::reader::Builder.build_from_path(&bam_path)?;
+    let threads = args
+        .next()
+        .map_or(Ok(1), |threads| threads.parse::<usize>())?;
+    let started = Instant::now();
+    let file = File::open(&bam_path)?;
+    let decoder: Box<dyn Read> = match NonZero::new(threads).filter(|threads| threads.get() > 1) {
+        Some(workers) => Box::new(bgzf::io::MultithreadedReader::with_worker_count(
+            workers, file,
+        )),
+        None => Box::new(bgzf::io::Reader::new(file)),
+    };
+    let mut reader = bam::io::Reader::from(decoder);
     let header = reader.read_header()?;
     let spans = territory(&fs::read_to_string(&bed_path)?, &header)?;
 
-    let started = Instant::now();
     let mut builder = StreamingPileupBuilder::new(reader, &header)?
         .min_mapping_quality(MIN_MAPPING_QUALITY)
         .exclude_flags(Flags::from_bits_retain(EXCLUDE_FLAGS));

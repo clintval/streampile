@@ -1,9 +1,10 @@
-"""Time piling up every base of a territory with streampile and pysam's htslib.
+"""Time piling up every base of a territory with streampile and with pysam's htslib pileup.
 
 Each engine counts, at every base, the reads holding each base at the quality floor, the reads
 with a deletion there, and the reads with an insertion after it. The pileup engines' counts agree
 unless a read opens with an insertion or has no stored qualities. Each engine runs in its own
-process, so its peak resident memory is its own.
+process, so its peak resident memory is its own, and reads the BAM with `--threads` threads
+decompressing it.
 """
 
 import argparse
@@ -45,10 +46,10 @@ def spans_in_header_order(bam: Path, territory: Territory) -> list[Bed3]:
         return sorted(territory, key=lambda span: (reads.get_tid(span.refname), span.start))
 
 
-def streampile_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
-    """Count each column of the territory from one forward sweep of the reads."""
+def streampile_counts(bam: Path, spans: list[Bed3], threads: int) -> Iterator[Counter[str]]:
+    """Count each entry of each column of the territory in Python, from one forward sweep."""
     with (
-        AlignmentFile(str(bam)) as reads,
+        AlignmentFile(str(bam), threads=threads) as reads,
         StreamingPileupBuilder(
             reads, min_mapping_quality=MIN_MAPPING_QUALITY, exclude_flags=EXCLUDE_FLAGS
         ) as builder,
@@ -67,13 +68,13 @@ def streampile_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
                 yield counts
 
 
-def htslib_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
+def htslib_counts(bam: Path, spans: list[Bed3], threads: int) -> Iterator[Counter[str]]:
     """Count each column of the territory with pysam's pileup over each span.
 
     The "all" stepper drops reads by flag in htslib, but only the "samtools" stepper applies
     `min_mapping_quality`, so mapping quality is checked here.
     """
-    with AlignmentFile(str(bam)) as reads:
+    with AlignmentFile(str(bam), threads=threads) as reads:
         for span in spans:
             columns = reads.pileup(
                 span.refname,
@@ -117,11 +118,13 @@ def htslib_counts(bam: Path, spans: list[Bed3]) -> Iterator[Counter[str]]:
                 yield Counter()
 
 
-def rebuilt_counts(bam: Path, spans: list[Bed3], limit: int) -> Iterator[Counter[str]]:
+def rebuilt_counts(
+    bam: Path, spans: list[Bed3], limit: int, threads: int
+) -> Iterator[Counter[str]]:
     """Count evenly spaced columns, each rebuilt from every overlapping read's aligned pairs."""
     positions = [(span.refname, pos) for span in spans for pos in range(span.start, span.end)]
     step = max(len(positions) // limit, 1)
-    with AlignmentFile(str(bam)) as reads:
+    with AlignmentFile(str(bam), threads=threads) as reads:
         for contig, pos in positions[::step][:limit]:
             counts: Counter[str] = Counter()
             for read in reads.fetch(contig, pos, pos + 1):
@@ -136,9 +139,9 @@ def rebuilt_counts(bam: Path, spans: list[Bed3], limit: int) -> Iterator[Counter
             yield counts
 
 
-def tabulate_rows(bam: Path, reference: Path, territory: Territory) -> Iterator[str]:
+def tabulate_rows(bam: Path, reference: Path, territory: Territory, threads: int) -> Iterator[str]:
     """Tabulate the territory, as `streampile tabulate` does, without writing a table."""
-    with AlignmentFile(str(bam)) as reads, FastaFile(str(reference)) as fasta:
+    with AlignmentFile(str(bam), threads=threads) as reads, FastaFile(str(reference)) as fasta:
         for base in tabulate(
             reads,
             fasta,
@@ -155,7 +158,9 @@ def peak_megabytes() -> float:
     return peak / 1e6 if sys.platform == "darwin" else peak / 1e3
 
 
-def run(engine: str, bam: Path, reference: Path, bed: Path, rebuild_columns: int) -> None:
+def run(
+    engine: str, bam: Path, reference: Path, bed: Path, rebuild_columns: int, threads: int
+) -> None:
     """Run one engine and print its time, peak memory, columns, and a digest of its counts."""
     territory = read_territory(bed)
     spans = spans_in_header_order(bam, territory)
@@ -163,17 +168,17 @@ def run(engine: str, bam: Path, reference: Path, bed: Path, rebuild_columns: int
     digest = hashlib.sha256()
     columns = 0
     if engine == "tabulate":
-        for row in tabulate_rows(bam, reference, territory):
+        for row in tabulate_rows(bam, reference, territory, threads):
             digest.update(row.encode())
             columns += 1
     else:
         counts: Iterator[Mapping[str, int]]
         if engine == "rebuild":
-            counts = rebuilt_counts(bam, spans, rebuild_columns)
+            counts = rebuilt_counts(bam, spans, rebuild_columns, threads)
         elif engine == "streampile":
-            counts = streampile_counts(bam, spans)
+            counts = streampile_counts(bam, spans, threads)
         else:
-            counts = htslib_counts(bam, spans)
+            counts = htslib_counts(bam, spans, threads)
         for column in counts:
             digest.update(repr(sorted(column.items())).encode())
             columns += 1
@@ -197,16 +202,17 @@ def main() -> None:
     parser.add_argument("--engines", choices=ENGINES, nargs="+", default=list(ENGINES))
     parser.add_argument("--runs", type=int, default=1, help="report the best of this many runs")
     parser.add_argument("--rebuild-columns", type=int, default=2000)
+    parser.add_argument("--threads", type=int, default=1, help="threads decompressing the BAM")
     # fmt: on
     args = parser.parse_args()
     if args.engine is not None:
-        run(args.engine, args.bam, args.ref, args.intervals, args.rebuild_columns)
+        run(args.engine, args.bam, args.ref, args.intervals, args.rebuild_columns, args.threads)
         return
     print("engine\tseconds\tpeak_mb\tcolumns\tdigest", flush=True)
     for engine in args.engines:
         command = [sys.executable, __file__, "--bam", str(args.bam), "--ref", str(args.ref)]
         command += ["--intervals", str(args.intervals), "--engine", engine]
-        command += ["--rebuild-columns", str(args.rebuild_columns)]
+        command += ["--rebuild-columns", str(args.rebuild_columns), "--threads", str(args.threads)]
         rows: list[str] = [
             subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
             for _ in range(args.runs)
