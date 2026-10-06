@@ -107,6 +107,7 @@ Each entry also counts the template's bases from its base to the read's 5′ end
 ```
 
 The unpaired read has no template end, and the two mates of the pair mirror each other.
+A read has one only when `is_fr_pair` calls its pair FR, as htsjdk 5.0.0 does: the forward read's aligned 5′ position is at or before the reverse read's.
 
 ### Tapping Every Record
 
