@@ -1,5 +1,6 @@
 mod builder;
 mod fgbio;
+mod fgumi;
 mod fixture;
 mod footprint;
 mod orientation;

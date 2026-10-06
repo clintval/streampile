@@ -76,8 +76,9 @@ jobs:
           rustup toolchain install "$version" --profile minimal
           rustup default "$version"
 
-      - name: Test the Rust code with the oldest supported toolchain
-        run: cargo test --locked
+      # The tests' dev-dependencies need a newer toolchain than the crate's rust-version.
+      - name: Check the library with the oldest supported toolchain
+        run: cargo check --locked --all-features --lib
 
   lint:
     name: lint
