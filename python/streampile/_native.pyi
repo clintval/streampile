@@ -48,6 +48,18 @@ class Tabulation:
         min_mapping_quality: int = 0,
         exclude_flags: int = ...,
     ) -> Self: ...
+    @property
+    def reference(self) -> FastaFile:
+        """The indexed reference the reads are aligned to."""
+    @property
+    def min_base_quality(self) -> int:
+        """The lowest base quality of an informative base."""
+    @property
+    def min_mapping_quality(self) -> int:
+        """The lowest mapping quality of a counted read."""
+    @property
+    def exclude_flags(self) -> int:
+        """The SAM flags of reads that are not counted."""
     def accepts(self, record: AlignedSegment) -> bool:
         """Whether a read passes the flag and mapping-quality filters and has bases to count."""
     def alleles(

@@ -194,14 +194,24 @@ fn is_aligned_segment(object: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(kind.is(aligned_segment.bind(py)) || kind.is_subclass(aligned_segment.bind(py))?)
 }
 
-/// Stages the record of an `AlignedSegment` from its `bam1_t`, keeping, of its tags, only the
-/// `MC` tag a pileup reads, or all of them when they cannot be read.
+/// The 0-based start of a pysam `AlignedSegment`, or of any object with its attributes, read
+/// without copying its record: -1 for a record with none.
+pub(crate) fn reference_start(object: &Bound<'_, PyAny>) -> PyResult<i64> {
+    if DIRECT.load(Ordering::Relaxed) && is_aligned_segment(object)? {
+        // SAFETY: the object is an `AlignedSegment`, whose layout was checked at import.
+        if let Some(delegate) = unsafe { delegate(object) } {
+            return Ok(delegate.core.pos);
+        }
+    }
+    object.getattr("reference_start")?.extract()
+}
+
+/// The `bam1_t` of an `AlignedSegment`, or `None` for a null `_delegate`.
 ///
 /// # Safety
 ///
 /// `object` must be a pysam `AlignedSegment` laid out as [`verify`] checks.
-unsafe fn stage_delegate(object: &Bound<'_, PyAny>, staged: &mut Vec<u8>) -> PyResult<()> {
-    let invalid = || PyValueError::new_err("an AlignedSegment holds no valid record");
+unsafe fn delegate<'a>(object: &'a Bound<'_, PyAny>) -> Option<&'a Delegate> {
     // SAFETY: the caller guarantees `_delegate` is at this offset of the object.
     let delegate = unsafe {
         object
@@ -210,8 +220,21 @@ unsafe fn stage_delegate(object: &Bound<'_, PyAny>, staged: &mut Vec<u8>) -> PyR
             .byte_add(DELEGATE_OFFSET)
             .read()
     };
-    // SAFETY: a non-null `_delegate` points at the `bam1_t` the object owns.
-    let delegate = unsafe { delegate.as_ref() }.ok_or_else(invalid)?;
+    // SAFETY: a non-null `_delegate` points at the `bam1_t` the object owns, which lives as long
+    // as the object.
+    unsafe { delegate.as_ref() }
+}
+
+/// Stages the record of an `AlignedSegment` from its `bam1_t`, keeping, of its tags, only the
+/// `MC` tag a pileup reads, or all of them when they cannot be read.
+///
+/// # Safety
+///
+/// `object` must be a pysam `AlignedSegment` laid out as [`verify`] checks.
+unsafe fn stage_delegate(object: &Bound<'_, PyAny>, staged: &mut Vec<u8>) -> PyResult<()> {
+    let invalid = || PyValueError::new_err("an AlignedSegment holds no valid record");
+    // SAFETY: the caller guarantees the layout.
+    let delegate = unsafe { delegate(object) }.ok_or_else(invalid)?;
     let core = &delegate.core;
     let length = usize::try_from(delegate.l_data).map_err(|_| invalid())?;
     let data = if length == 0 || delegate.data.is_null() {

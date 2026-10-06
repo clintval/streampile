@@ -113,10 +113,6 @@ class Tabulator:
         Raises:
             ValueError: if a quality is not from 0 to 255, or `exclude_flags` from 0 to 65535.
         """
-        self._reference: FastaFile = reference
-        self._min_base_quality: int = min_base_quality
-        self._min_mapping_quality: int = min_mapping_quality
-        self._exclude_flags: int = exclude_flags
         self._tabulation: _native.Tabulation = _native.Tabulation(
             reference,
             min_base_quality=min_base_quality,
@@ -127,22 +123,22 @@ class Tabulator:
     @property
     def reference(self) -> FastaFile:
         """The indexed reference the reads are aligned to."""
-        return self._reference
+        return self._tabulation.reference
 
     @property
     def min_base_quality(self) -> int:
         """The lowest base quality of an informative base."""
-        return self._min_base_quality
+        return self._tabulation.min_base_quality
 
     @property
     def min_mapping_quality(self) -> int:
         """The lowest mapping quality of a counted read."""
-        return self._min_mapping_quality
+        return self._tabulation.min_mapping_quality
 
     @property
     def exclude_flags(self) -> int:
         """The SAM flags of reads that are not counted."""
-        return self._exclude_flags
+        return self._tabulation.exclude_flags
 
     def accepts(self, record: AlignedSegment) -> bool:
         """Whether a read passes the flag and mapping-quality filters and has bases to count."""
@@ -164,7 +160,7 @@ class Tabulator:
                 reference, or has another length in each, or a span runs past the end of its
                 contig.
         """
-        contigs = _by_header(alignments, self._reference, territory)
+        contigs = _by_header(alignments, self.reference, territory)
         return (
             base
             for contig, spans in contigs

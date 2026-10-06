@@ -471,7 +471,8 @@ impl Read {
     }
 }
 
-/// The options of a tabulation, and the reference windows of each contig it has read.
+/// The options of a tabulation.
+#[derive(Clone, Copy)]
 struct Options {
     min_base_quality: u8,
     min_mapping_quality: u8,
@@ -479,7 +480,7 @@ struct Options {
 }
 
 impl Options {
-    fn accepts(&self, record: &bam::Record) -> bool {
+    fn accepts(self, record: &bam::Record) -> bool {
         let flags = record.flags();
         !flags.is_unmapped()
             && flags.bits() & self.exclude_flags == 0
@@ -490,7 +491,7 @@ impl Options {
 
     /// The alleles a read is counted for, and the stretches of the alleles it is not counted
     /// for and of those that spell the reference.
-    fn alleles(&self, py: Python<'_>, read: &Read, reference: &mut Reference) -> PyResult<Counted> {
+    fn alleles(self, py: Python<'_>, read: &Read, reference: &mut Reference) -> PyResult<Counted> {
         let qualities =
             (self.min_base_quality > 0 && !read.qualities.is_empty()).then_some(&read.qualities);
         let mut counted = Counted::default();
@@ -573,7 +574,7 @@ impl Options {
 
     /// The aligned positions of a read under the floor or over a non-ACGT base, and its `N`s.
     fn uninformative(
-        &self,
+        self,
         py: Python<'_>,
         read: &Read,
         reference: &mut Reference,
@@ -696,7 +697,7 @@ pub(crate) fn normalize_allele(
 pub(crate) struct Tabulation {
     fasta: Py<PyAny>,
     options: Options,
-    contigs: HashMap<String, Reference>,
+    reference: Option<Reference>,
 }
 
 #[pymethods]
@@ -726,8 +727,32 @@ impl Tabulation {
                 min_mapping_quality: min_mapping_quality.of("min_mapping_quality", u8::MAX)?,
                 exclude_flags: exclude_flags.of("exclude_flags", u16::MAX)?,
             },
-            contigs: HashMap::new(),
+            reference: None,
         })
+    }
+
+    /// The indexed reference the reads are aligned to.
+    #[getter]
+    fn reference(&self, py: Python<'_>) -> Py<PyAny> {
+        self.fasta.clone_ref(py)
+    }
+
+    /// The lowest base quality of an informative base.
+    #[getter]
+    fn min_base_quality(&self) -> u8 {
+        self.options.min_base_quality
+    }
+
+    /// The lowest mapping quality of a counted read.
+    #[getter]
+    fn min_mapping_quality(&self) -> u8 {
+        self.options.min_mapping_quality
+    }
+
+    /// The SAM flags of reads that are not counted.
+    #[getter]
+    fn exclude_flags(&self) -> u16 {
+        self.options.exclude_flags
     }
 
     /// Whether a read passes the flag and mapping-quality filters and has bases to count.
@@ -755,13 +780,11 @@ impl Tabulation {
             )));
         }
         let contig = contig.cast_into::<PyString>()?;
-        let key = contig.to_str()?.to_owned();
-        let reference = match self.contigs.entry(key) {
-            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
-            std::collections::hash_map::Entry::Vacant(entry) => {
-                entry.insert(Reference::new(self.fasta.bind(py), &contig)?)
-            }
+        let reference = match self.reference.take() {
+            Some(reference) if reference.contig.bind(py).to_cow()? == contig.to_cow()? => reference,
+            _ => Reference::new(self.fasta.bind(py), &contig)?,
         };
+        let reference = self.reference.insert(reference);
         let mut read = Read::default();
         read.fill(py, &bam, reference)?;
         let counted = self.options.alleles(py, &read, reference)?;
@@ -797,11 +820,7 @@ impl Tabulation {
             alignments: alignments.clone().unbind(),
             contig: contig.clone().unbind(),
             reference: Reference::new(self.fasta.bind(py), contig)?,
-            options: Options {
-                min_base_quality: self.options.min_base_quality,
-                min_mapping_quality: self.options.min_mapping_quality,
-                exclude_flags: self.options.exclude_flags,
-            },
+            options: self.options,
             starts: spans.iter().map(|&(start, _)| start).collect(),
             spans,
             ledgers: BTreeMap::new(),
@@ -854,8 +873,12 @@ impl ContigRows {
                 .bind(py)
                 .call_method1("fetch", (self.contig.bind(py), start, end))?;
             for record in records.try_iter()? {
-                bridge::read(&record?, &mut self.record)?;
-                self.count()?;
+                let record = record?;
+                if bridge::reference_start(&record)? < self.fetched_to {
+                    continue;
+                }
+                bridge::read(&record, &mut self.record)?;
+                self.count(py)?;
             }
             self.fetched_to = end;
             let ledger = self
@@ -868,77 +891,75 @@ impl ContigRows {
 }
 
 impl ContigRows {
-    fn count(&mut self) -> PyResult<()> {
+    /// Counts the read last fetched, unless a filter leaves it out.
+    fn count(&mut self, py: Python<'_>) -> PyResult<()> {
         let record = &self.record;
+        if !self.options.accepts(record) {
+            return Ok(());
+        }
         let start = record
             .alignment_start()
             .transpose()
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .map_or(-1, |start| usize::from(start) as i64 - 1);
-        if start < self.fetched_to || !self.options.accepts(record) {
-            return Ok(());
-        }
         let end = end_of(record, start);
         let touched = self.touch(start, end);
         if touched.is_empty() {
             return Ok(());
         }
-        Python::attach(|py| {
-            self.read.fill(py, &self.record, &mut self.reference)?;
-            let read = &self.read;
-            let reverse = read.reverse;
-            let counted = self.options.alleles(py, read, &mut self.reference)?;
-            let (uninformative, no_calls) =
-                self.options.uninformative(py, read, &mut self.reference)?;
-            let mut excluded = uninformative;
-            excluded.extend_from_slice(&no_calls);
-            let ledgers = &mut self.ledgers;
-            let mut each = |apply: &mut dyn FnMut(&mut Ledger)| {
-                for index in &touched {
-                    if let Some(ledger) = ledgers.get_mut(index) {
-                        apply(ledger);
-                    }
+        self.read.fill(py, &self.record, &mut self.reference)?;
+        let read = &self.read;
+        let reverse = read.reverse;
+        let counted = self.options.alleles(py, read, &mut self.reference)?;
+        let (uninformative, no_calls) =
+            self.options.uninformative(py, read, &mut self.reference)?;
+        let mut excluded = uninformative;
+        excluded.extend_from_slice(&no_calls);
+        let ledgers = &mut self.ledgers;
+        let mut each = |apply: &mut dyn FnMut(&mut Ledger)| {
+            for index in &touched {
+                if let Some(ledger) = ledgers.get_mut(index) {
+                    apply(ledger);
                 }
-            };
-            for &pos in &no_calls {
-                each(&mut |ledger| ledger.add_no_call(pos));
             }
-            for &(start, end) in &counted.dropped {
-                excluded.extend(start..end);
+        };
+        for &pos in &no_calls {
+            each(&mut |ledger| ledger.add_no_call(pos));
+        }
+        for &(start, end) in &counted.dropped {
+            excluded.extend(start..end);
+        }
+        for allele in &counted.alleles {
+            let after = allele.pos + allele.reference.len() as i64;
+            each(&mut |ledger| {
+                ledger.add(allele.start, allele.pos, true, reverse);
+                ledger.add(allele.pos, after, false, reverse);
+                ledger.add(after, allele.end, true, reverse);
+                ledger.add_allele(allele, reverse);
+            });
+            excluded.extend(allele.start..allele.end);
+        }
+        for &(start, end) in &counted.matched {
+            each(&mut |ledger| ledger.add(start, end, true, reverse));
+            excluded.extend(start..end);
+        }
+        excluded.sort_unstable();
+        excluded.dedup();
+        for segment in &read.segments {
+            if segment.kind != SegmentKind::Aligned {
+                continue;
             }
-            for allele in &counted.alleles {
-                let after = allele.pos + allele.reference.len() as i64;
-                each(&mut |ledger| {
-                    ledger.add(allele.start, allele.pos, true, reverse);
-                    ledger.add(allele.pos, after, false, reverse);
-                    ledger.add(after, allele.end, true, reverse);
-                    ledger.add_allele(allele, reverse);
-                });
-                excluded.extend(allele.start..allele.end);
+            let (block_start, block_end) = (segment.reference, segment.reference + segment.length);
+            let from = excluded.partition_point(|&pos| pos < block_start);
+            let to = excluded.partition_point(|&pos| pos < block_end);
+            let mut cursor = block_start;
+            for &pos in &excluded[from..to] {
+                each(&mut |ledger| ledger.add(cursor, pos, true, reverse));
+                cursor = pos + 1;
             }
-            for &(start, end) in &counted.matched {
-                each(&mut |ledger| ledger.add(start, end, true, reverse));
-                excluded.extend(start..end);
-            }
-            excluded.sort_unstable();
-            excluded.dedup();
-            for segment in &read.segments {
-                if segment.kind != SegmentKind::Aligned {
-                    continue;
-                }
-                let (block_start, block_end) =
-                    (segment.reference, segment.reference + segment.length);
-                let from = excluded.partition_point(|&pos| pos < block_start);
-                let to = excluded.partition_point(|&pos| pos < block_end);
-                let mut cursor = block_start;
-                for &pos in &excluded[from..to] {
-                    each(&mut |ledger| ledger.add(cursor, pos, true, reverse));
-                    cursor = pos + 1;
-                }
-                each(&mut |ledger| ledger.add(cursor, block_end, true, reverse));
-            }
-            Ok(())
-        })
+            each(&mut |ledger| ledger.add(cursor, block_end, true, reverse));
+        }
+        Ok(())
     }
 
     /// The indices of the spans a read from `start` to `end` overlaps, with their ledgers opened
