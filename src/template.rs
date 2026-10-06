@@ -21,7 +21,7 @@ use noodles::sam::alignment::record::cigar::op::Kind;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 
 use crate::error::{Error, Result};
-use crate::pileup::record_name;
+use crate::pileup::{EntryKind, record_name};
 
 const LONGEST_OPERATOR: usize = (1 << 28) - 1;
 
@@ -161,6 +161,29 @@ pub fn five_prime_distance<R: Record + ?Sized>(
     let length = record.cigar().read_length()?;
     let reverse = record.flags()?.is_reverse_complemented();
     Ok(from_five_prime(reverse, length, query_offset))
+}
+
+/// The distance from the 5′ end of a read of a query length on a strand of what an entry holds:
+/// of its base, at a query offset, or for a deletion or a skip, the read's bases sequenced before
+/// it, given the offset of its next base, `None` with no next base.
+pub(crate) fn entry_from_five_prime(
+    kind: EntryKind,
+    reverse: bool,
+    length: usize,
+    offset: Option<usize>,
+) -> Option<usize> {
+    match kind {
+        EntryKind::Base => from_five_prime(reverse, length, offset?),
+        EntryKind::Deletion | EntryKind::Skip => {
+            let next = offset.unwrap_or(length);
+            if reverse {
+                length.checked_sub(next)
+            } else {
+                (next <= length).then_some(next)
+            }
+        }
+        EntryKind::Insertion => None,
+    }
 }
 
 /// The distance of a query offset from the 5′ end of a read of a query length on a strand.

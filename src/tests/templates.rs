@@ -468,6 +468,37 @@ fn test_a_templates_distances_are_its_first_reads_and_else_its_second_reads() {
 }
 
 #[test]
+fn test_a_template_has_both_distances_where_it_holds_a_deletion_or_a_skip() {
+    let deleted = Pair {
+        cigar1: Some("50M2D50M".into()),
+        cigar2: Some("100M".into()),
+        ..Pair::at(1000, 1200)
+    };
+    assert_eq!(
+        template_ends(deleted, &[1049, 1050]),
+        [(Some(50), Some(248)); 2]
+    );
+    let skipped = Pair {
+        cigar1: Some("50M100N50M".into()),
+        cigar2: Some("100M".into()),
+        ..Pair::at(1000, 1300)
+    };
+    assert_eq!(
+        template_ends(skipped, &[1049, 1148]),
+        [(Some(50), Some(250)); 2]
+    );
+    let deleted_second = Pair {
+        cigar1: Some("100M".into()),
+        cigar2: Some("50M2D50M".into()),
+        ..Pair::at(1000, 1100)
+    };
+    assert_eq!(
+        template_ends(deleted_second, &[1149]),
+        [(Some(150), Some(50))]
+    );
+}
+
+#[test]
 fn test_a_fragment_has_no_template_end() {
     let reads = [read("f", 10, "4M", "ACGT").flag(16)];
     let mut builder = unfiltered(&reads);

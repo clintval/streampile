@@ -342,6 +342,33 @@ def test_a_templates_strand_and_distances_are_its_first_reads() -> None:
     assert template.template_end_distance == 4
 
 
+def test_a_template_has_both_distances_where_it_holds_a_deletion_or_a_skip() -> None:
+    def mated(cigar1: str, start2: int, cigar2: str) -> list[AlignedSegment]:
+        reads = [
+            record("t", 999, cigar1, "A" * 100, flag=99),
+            record("t", start2, cigar2, "C" * 100, flag=147),
+        ]
+        for read, mate in ((reads[0], reads[1]), (reads[1], reads[0])):
+            read.next_reference_id = 0
+            read.next_reference_start = mate.reference_start
+            read.set_tag("MC", mate.cigarstring)  # pyright: ignore[reportUnknownMemberType]
+        return reads
+
+    def distances(reads: list[AlignedSegment], pos: int) -> tuple[int | None, int | None]:
+        template = Pileup.from_alignments(reads, "chr1", pos).templates()[0]
+        assert template.pileup_type in (DELETION, SKIP)
+        return template.five_prime_distance, template.template_end_distance
+
+    deleted = mated("50M2D50M", 1199, "100M")
+    assert [distances(deleted, pos) for pos in (1049, 1050)] == [(50, 248)] * 2
+    skipped = mated("50M100N50M", 1299, "100M")
+    assert [distances(skipped, pos) for pos in (1049, 1148)] == [(50, 250)] * 2
+    deleted_second = mated("100M", 1099, "50M2D50M")
+    assert distances(deleted_second, 1149) == (150, 50)
+    (entry,) = Pileup.from_alignments(deleted_second, "chr1", 1149).pileups
+    assert (entry.five_prime_distance, entry.template_end_distance) == (50, 150)
+
+
 def test_a_read_is_of_an_fr_pair_when_its_forward_5_prime_end_is_at_or_before_its_reverse() -> None:
     def mated(start1: int, flag1: int, start2: int, flag2: int) -> list[AlignedSegment]:
         reads = [

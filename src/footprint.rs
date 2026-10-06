@@ -158,15 +158,23 @@ impl Footprint {
     }
 
     /// Hands `push` the entries of the read at a position, moving the cursors forward to it: its
-    /// base, deletion, or skip there, with the query offset of its base or next base, and then
-    /// the bases it inserts right after the position, with their offset and length.
+    /// base, deletion, or skip there, with the query offset of its base or next base, [`NONE`]
+    /// with no next base, and then the bases it inserts right after the position, with their
+    /// offset and length.
     ///
     /// Positions asked of one footprint must never decrease.
     pub fn entries_at(&mut self, pos: i64, mut push: impl FnMut(EntryKind, u32, u32)) {
         match self.locate(pos) {
             Some(Located::Base(offset)) => push(EntryKind::Base, offset, 0),
             Some(Located::Deletion(next)) => push(EntryKind::Deletion, next.unwrap_or(NONE), 0),
-            Some(Located::Skip) => push(EntryKind::Skip, NONE, 0),
+            Some(Located::Skip) => {
+                let next = self.blocks[self.block].query;
+                push(
+                    EntryKind::Skip,
+                    if next < self.query_length { next } else { NONE },
+                    0,
+                );
+            }
             None => {}
         }
         if let Some(insertion) = self.insertion_at(pos) {

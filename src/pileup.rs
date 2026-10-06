@@ -561,10 +561,14 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
     ///
     /// It is the query offset for a forward read, counted from the other end for a reverse read,
     /// so soft-clipped bases count, and 0 is the first base sequenced: fgbio's
-    /// `positionInReadInReadOrder` minus one. It is `None` for an entry with no base.
+    /// `positionInReadInReadOrder` minus one. For a deletion or a skip, which holds no base, it is
+    /// the number of the read's bases sequenced before the position, as
+    /// [`template_end_distance`](PileupEntry::template_end_distance) counts the bases after it.
+    /// It is `None` for an insertion entry.
     pub fn five_prime_distance(&self) -> Option<usize> {
         let length = self.live.footprint.query_length as usize;
-        crate::template::from_five_prime(self.is_reverse(), length, self.query_position()?)
+        let offset = (self.raw.offset != NONE).then_some(self.raw.offset as usize);
+        crate::template::entry_from_five_prime(self.raw.kind, self.is_reverse(), length, offset)
     }
 
     /// The number of the template's bases between this position and the template's other end,

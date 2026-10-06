@@ -22,7 +22,7 @@ use crate::pileup::{
     EntryKind, MISSING_BASE_QUALITY, NONE, Template, TemplateName, TemplateRead, name_of,
     number_templates, templates,
 };
-use crate::template::from_five_prime;
+use crate::template::{entry_from_five_prime, from_five_prime};
 use crate::{DEFAULT_MIN_BASE_QUALITY, PileupEntry};
 
 const ABSENT: i64 = i64::MIN;
@@ -49,14 +49,13 @@ pub(crate) struct Held {
     insertion_offset: i64,
     insertion_length: i64,
     position: Option<i64>,
-    query_length: Option<u32>,
+    five_prime_distance: Option<usize>,
 }
 
 impl Held {
     /// The entry of a builder's pileup at a position.
     pub(crate) fn of(entry: &PileupEntry<'_, super::builder::PyRecord>, position: i64) -> Self {
         let present = |value: Option<usize>| value.map_or(ABSENT, |value| value as i64);
-        let live = entry.live;
         Self {
             record: Arc::clone(entry.source_record().shared()),
             kind: entry.kind(),
@@ -65,18 +64,24 @@ impl Held {
             insertion_offset: present(entry.insertion_offset()),
             insertion_length: entry.insertion_length() as i64,
             position: Some(position),
-            query_length: Some(live.footprint.query_length),
+            five_prime_distance: entry.five_prime_distance(),
         }
     }
 
-    /// An entry of a read placed by its footprint at a position, as a builder would make it.
+    /// An entry of a read of a query length placed by its footprint at a position, as a builder
+    /// would make it.
     fn located(
         record: &Arc<Bridged>,
+        query_length: u32,
         position: i64,
-        kind: EntryKind,
-        offset: u32,
-        length: u32,
+        (kind, offset, length): (EntryKind, u32, u32),
     ) -> Self {
+        let five_prime_distance = entry_from_five_prime(
+            kind,
+            record.record.flags().is_reverse_complemented(),
+            query_length as usize,
+            (offset != NONE).then_some(offset as usize),
+        );
         let offset = if offset == NONE {
             ABSENT
         } else {
@@ -106,7 +111,40 @@ impl Held {
                 0
             },
             position: Some(position),
-            query_length: None,
+            five_prime_distance,
+        }
+    }
+
+    /// An entry made by hand from the fields of a `PileupRead`.
+    fn by_hand(
+        record: Arc<Bridged>,
+        kind: EntryKind,
+        [
+            query_position,
+            query_position_or_next,
+            insertion_offset,
+            insertion_length,
+        ]: [i64; 4],
+    ) -> Self {
+        let bam = &record.record;
+        let five_prime_distance = bam
+            .cigar()
+            .read_length()
+            .ok()
+            .filter(|_| kind == EntryKind::Base)
+            .and_then(|length| {
+                let reverse = bam.flags().is_reverse_complemented();
+                from_five_prime(reverse, length, usize::try_from(query_position).ok()?)
+            });
+        Self {
+            record,
+            kind,
+            query_position,
+            query_position_or_next,
+            insertion_offset,
+            insertion_length,
+            position: None,
+            five_prime_distance,
         }
     }
 
@@ -179,16 +217,6 @@ impl Held {
             qualities.len(),
         );
         Some(qualities[start..end].to_vec())
-    }
-
-    fn five_prime_distance(&self) -> Option<usize> {
-        let offset = usize::try_from(self.query_position).ok()?;
-        let record = self.bam();
-        let length = match self.query_length {
-            Some(length) => length as usize,
-            None => record.cigar().read_length().ok()?,
-        };
-        from_five_prime(record.flags().is_reverse_complemented(), length, offset)
     }
 
     fn template_end_distance(&self) -> crate::Result<Option<usize>> {
@@ -269,7 +297,7 @@ impl TemplateRead for Held {
     }
 
     fn five_prime_distance(&self) -> Option<usize> {
-        Held::five_prime_distance(self)
+        self.five_prime_distance
     }
 
     fn template_end_distance(&self) -> crate::Result<Option<usize>> {
@@ -433,16 +461,16 @@ impl PileupRead {
         let mut record = bam::Record::default();
         bridge::read(alignment, &mut record)?;
         Ok(Self {
-            held: Held {
-                record: Arc::new(Bridged::new(alignment.clone().unbind(), record)),
-                kind: kind_of(pileup_type)?,
-                query_position: optional(query_position),
-                query_position_or_next: optional(query_position_or_next),
-                insertion_offset: optional(insertion_offset),
-                insertion_length,
-                position: None,
-                query_length: None,
-            },
+            held: Held::by_hand(
+                Arc::new(Bridged::new(alignment.clone().unbind(), record)),
+                kind_of(pileup_type)?,
+                [
+                    optional(query_position),
+                    optional(query_position_or_next),
+                    optional(insertion_offset),
+                    insertion_length,
+                ],
+            ),
         })
     }
 
@@ -549,7 +577,10 @@ impl PileupRead {
     ///
     /// It is the query offset for a forward read, counted from the other end for a reverse read,
     /// so soft-clipped bases count, and 0 is the first base sequenced: fgbio's
-    /// `positionInReadInReadOrder` minus one. It is `None` for an entry with no base.
+    /// `positionInReadInReadOrder` minus one. For a deletion or a skip, which holds no base, it is
+    /// the number of the read's bases sequenced before the position, as `template_end_distance`
+    /// counts the bases after it. It is `None` for an insertion entry, and for an entry made by hand
+    /// that holds no base, whose position is unknown.
     #[getter]
     fn five_prime_distance(&self) -> Option<usize> {
         self.held.five_prime_distance()
@@ -632,7 +663,6 @@ impl PileupRead {
                 held: Held {
                     record: Arc::clone(&self.held.record),
                     position: self.held.position,
-                    query_length: self.held.query_length,
                     ..read.held
                 },
             }
@@ -853,9 +883,12 @@ impl Pileup {
             let query_length = footprint.query_length;
             let record = Arc::new(Bridged::new(alignment.unbind(), record));
             footprint.entries_at(pos, |kind, offset, length| {
-                let mut held = Held::located(&record, pos, kind, offset, length);
-                held.query_length = Some(query_length);
-                entries.push(held);
+                entries.push(Held::located(
+                    &record,
+                    query_length,
+                    pos,
+                    (kind, offset, length),
+                ));
             });
         }
         Ok(Self::of(contig.unbind(), pos, min_base_quality, entries))
