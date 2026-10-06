@@ -402,6 +402,97 @@ fn test_a_template_end_is_the_unclipped_five_prime_end_of_the_mate() {
     assert_eq!((forward.unwrap(), reverse.unwrap()), (Some(75), Some(65)));
 }
 
+/// A pair at fgbio's 1-based starts 10 and 50, forward then reverse, with these CIGARs, reads of
+/// `length` bases, and each read's `MC` tag set to its mate's CIGAR.
+fn clipped_pair(cigar1: &str, cigar2: &str, length: usize) -> Vec<Read> {
+    let mut reads = pair("q", 9, 49, false, true);
+    for (read, (cigar, mate)) in reads.iter_mut().zip([(cigar1, cigar2), (cigar2, cigar1)]) {
+        read.cigar = cigar.into();
+        read.bases = "A".repeat(length);
+        read.quals = Some(vec![40; length]);
+        read.tags = vec![format!("MC:Z:{mate}")];
+    }
+    reads
+}
+
+/// The template-end distances of the forward and the reverse read of a pair at 0-based position 50.
+fn template_ends_at_50(reads: &[Read]) -> Vec<(bool, Option<usize>)> {
+    let mut builder = builder(reads);
+    let pileup = builder.pileup("chr1", 50).unwrap();
+    pileup
+        .iter()
+        .map(|entry| (entry.is_reverse(), entry.template_end_distance().unwrap()))
+        .collect()
+}
+
+/// fgbio's `SamRecordTest`: "SamRecord.mateUnclippedStart/End should return None if no mate cigar
+/// set". A missing `MC` tag is an error naming the read here, for either read of the pair.
+#[test]
+fn test_a_template_end_without_a_mate_cigar_is_an_error_for_either_read() {
+    let mut reads = pair("q", 9, 49, false, true);
+    for read in &mut reads {
+        read.tags.clear();
+    }
+    let mut builder = builder(&reads);
+    let pileup = builder.pileup("chr1", 50).unwrap();
+    assert_eq!(pileup.len(), 2);
+    for entry in pileup.iter() {
+        let refused = entry.template_end_distance();
+        assert!(
+            matches!(&refused, Err(Error::MissingMateCigar { name }) if name == "q"),
+            "{refused:?}"
+        );
+    }
+}
+
+/// fgbio's `SamRecordTest`: "SamRecord.mateUnclippedStart/End should return the mate's unclipped
+/// start/end". The forward read's mate ends at 1-based 94 and the reverse read's mate starts at
+/// 1-based 5, both counting clips.
+#[test]
+fn test_a_template_end_is_the_mates_unclipped_start_or_end() {
+    let reads = clipped_pair("5S45M10H", "10S40M5H", 50);
+    assert_eq!(
+        template_ends_at_50(&reads),
+        [(false, Some(93 - 50)), (true, Some(50 - 4))]
+    );
+}
+
+/// fgbio's `SamRecordTest`: "SamRecord.mateUnSoftClippedStart/End should return the mate's
+/// un-soft-clipped start/end", with hard clips counted too: the forward read's mate ends at 1-based
+/// 95, past its soft-clipped end of 90, and the reverse read's mate starts at 1-based -5, before
+/// the contig.
+#[test]
+fn test_a_template_end_counts_hard_clips_and_may_lie_before_the_contig() {
+    let reads = clipped_pair("10H5S45M1S10H", "10H10S40M1S5H", 51);
+    assert_eq!(
+        template_ends_at_50(&reads),
+        [(false, Some(94 - 50)), (true, Some(50 + 6))]
+    );
+}
+
+/// fgbio's `AlignmentTest`: "Cigar.clippedBases should return 0 if not bases are clipped" and
+/// "should return 50 bases for cigar", as the clips before and after a mate's alignment.
+#[test]
+fn test_the_clips_of_a_mate_cigar_add_up_as_fgbio_counts_them() {
+    let clips = |text: &str| {
+        let extent = mate_extent(AuxValue::String(text.as_bytes())).unwrap();
+        extent.leading + extent.trailing
+    };
+    assert_eq!(clips("100M"), 0);
+    for cigar in [
+        "100M50S",
+        "50S100M",
+        "25S100M25S",
+        "50H100M",
+        "100M50H",
+        "25S25H100M",
+        "100M25S25H",
+        "10H15S100M15S10H",
+    ] {
+        assert_eq!(clips(cigar), 50, "{cigar}");
+    }
+}
+
 #[test]
 fn test_the_extent_of_a_mate_cigar() {
     let extent = |text: &str| mate_extent(AuxValue::String(text.as_bytes()));
