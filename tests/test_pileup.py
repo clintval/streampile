@@ -272,8 +272,10 @@ def test_a_read_with_a_deletion_or_a_skip_holds_no_base() -> None:
     base = record("t", 10, "4M", "ACGT", flag=99, quals=[30, 30, 15, 30])
     deletion = record("t", 10, "2M1D2M", "ACTT", flag=147, quals=[30, 30, 25, 30])
     skip = record("t", 10, "2M1N2M", "ACTT", flag=147)
+    no_call = record("t", 10, "4M", "ACNT", flag=99)
     for reads, expected in (
         ([base, deletion], ("t", "base", "G", 15)),
+        ([no_call, deletion], ("t", "base", "N", 40)),
         ([base, skip], ("t", "base", "G", 15)),
         ([deletion], ("t", "deletion", None, 25)),
         ([skip], ("t", "skip", None, None)),

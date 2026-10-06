@@ -993,15 +993,16 @@ impl Pileup {
     ///
     /// fgumi defines no more than that, so at each position a no-call (`N`) is left alone, as fgumi
     /// leaves it: the other read's base stands at its own quality, and two no-calls are an `N` at
-    /// the higher quality. A read with a deletion or a skip holds no base, so a template whose other
-    /// read holds one has that base at its own quality; a template with no base is a deletion if
-    /// either read holds one, at the higher of their qualities, or else a skip. Insertion entries
-    /// are no part of a template, so a read whose only entry here is an insertion adds nothing to
-    /// its template. A read under `min_base_quality` does not vote, as `bases`, `qualities`, and
-    /// `filtered_depth` leave it out: a base, or a deletion judged by its next base, under the
-    /// floor. So a mate under the floor neither masks nor lowers the other mate's base, and a
-    /// template none of whose reads votes has no `base` or `qual`. A template with more than two
-    /// reads here, as when supplementary records are piled up, calls them in the order of
+    /// the higher quality. A no-call is still a base, so it stands over the other read's deletion,
+    /// which fgumi leaves alone too. A read with a deletion or a skip holds no base, so a template
+    /// whose other read holds one has that base at its own quality; a template with no base is a
+    /// deletion if either read holds one, at the higher of their qualities, or else a skip.
+    /// Insertion entries are no part of a template, so a read whose only entry here is an insertion
+    /// adds nothing to its template. A read under `min_base_quality` does not vote, as `bases`,
+    /// `qualities`, and `filtered_depth` leave it out: a base, or a deletion judged by its next
+    /// base, under the floor. So a mate under the floor neither masks nor lowers the other mate's
+    /// base, and a template none of whose reads votes has no `base` or `qual`. A template with more
+    /// than two reads here, as when supplementary records are piled up, calls them in the order of
     /// `pileups`.
     ///
     /// Args:

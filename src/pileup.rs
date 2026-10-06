@@ -343,7 +343,8 @@ impl<'a, R: AlignmentRecord> Pileup<'a, R> {
     /// fgumi defines no more than that, so at each position:
     ///
     /// - A no-call (`N`) is left alone, as fgumi leaves it, so the other read's base stands at its
-    ///   own quality, and two no-calls are an `N` at the higher quality.
+    ///   own quality, and two no-calls are an `N` at the higher quality. A no-call is still a
+    ///   base, so it stands over the other read's deletion, which fgumi leaves alone too.
     /// - A read with a deletion or a skip holds no base, so a template whose other read holds one
     ///   has that base at its own quality. A template with no base is a deletion if either read
     ///   holds one, at the higher of their qualities, or else a skip.

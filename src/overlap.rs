@@ -76,10 +76,11 @@ pub(crate) struct Observation {
 /// Only a read whose quality is at the floor votes: its base, or its deletion, judged by the
 /// quality of its next base. The voting bases are called into one by the strategies, in input
 /// order. A no-call is left alone, so the other read's base stands, and two no-calls are an `N` at
-/// the higher quality. A read with a deletion or a skip holds no base, so a template with a voting
-/// base has it at its own quality. A template with no voting base holds a deletion at the higher
-/// of the voting deletions' qualities, or, with no vote at all, what its reads hold, a base if any
-/// of them does or else a deletion or a skip, with no base or quality.
+/// the higher quality, but it is a base, so it stands over a deletion. A read with a deletion or a
+/// skip holds no base, so a template with a voting base has it at its own quality. A template with
+/// no voting base holds a deletion at the higher of the voting deletions' qualities, or, with no
+/// vote at all, what its reads hold, a base if any of them does or else a deletion or a skip, with
+/// no base or quality.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Vote {
     held: EntryKind,

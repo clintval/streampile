@@ -242,6 +242,11 @@ fn test_a_read_with_a_deletion_or_a_skip_holds_no_base() {
         called(&[base.clone(), deletion.clone()]),
         expected(EntryKind::Base, Some('G'), Some(15))
     );
+    let no_call = read("t", 10, "4M", "ACNT").flag(99);
+    assert_eq!(
+        called(&[no_call, deletion.clone()]),
+        expected(EntryKind::Base, Some('N'), Some(40))
+    );
     assert_eq!(
         called(&[base, skip.clone()]),
         expected(EntryKind::Base, Some('G'), Some(15))
