@@ -1,6 +1,7 @@
 import random
 from collections import Counter
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
@@ -530,3 +531,20 @@ def test_an_allele_is_frozen_to_type_checkers_and_hashed_by_its_fields() -> None
     assert hash(allele) == hash(replace(allele))
     # Each checker fails on an unused ignore, so all three must reject this assignment.
     allele.pos = 2  # type: ignore[misc]  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[invalid-assignment]
+
+
+def test_a_tabulator_and_its_rows_are_used_on_other_threads(reference: FastaFile) -> None:
+    tabulator = Tabulator(reference)
+    spans = territory(("chr1", 0, 60))
+
+    def depth() -> int:
+        with AlignmentFile(str(DATA / "reads.bam")) as alignments:
+            return sum(base.depth for base in tabulator.tabulate(alignments, spans))
+
+    with (
+        AlignmentFile(str(DATA / "reads.bam")) as alignments,
+        ThreadPoolExecutor(1) as pool,
+    ):
+        rows = tabulator.tabulate(alignments, spans)
+        assert pool.submit(lambda: sum(base.depth for base in rows)).result() == depth()
+        assert pool.submit(depth).result() == depth()

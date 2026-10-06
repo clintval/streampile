@@ -678,7 +678,7 @@ pub(crate) fn normalize_allele(
 }
 
 /// The per-read and per-base work of a `Tabulator`, over one reference.
-#[pyclass(module = "streampile._native", unsendable)]
+#[pyclass(module = "streampile._native")]
 pub(crate) struct Tabulation {
     fasta: Py<PyAny>,
     options: Options,
@@ -798,7 +798,7 @@ impl Tabulation {
 }
 
 /// The rows of every base of the spans of one contig, made one at a time.
-#[pyclass(module = "streampile._native", unsendable)]
+#[pyclass(module = "streampile._native")]
 pub(crate) struct ContigRows {
     alignments: Py<PyAny>,
     contig: Py<PyString>,

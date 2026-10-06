@@ -3,6 +3,7 @@ from array import array
 from collections import Counter
 from collections import deque
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -921,3 +922,23 @@ def test_a_builder_accepts_only_mapped_reads() -> None:
     builder = StreamingPileupBuilder([])
     assert not builder.accepts(unmapped("u"))
     assert not builder.accepts(record("r", 10, "4M", "ACGT", flag=4))
+
+
+def test_a_builder_is_used_and_dropped_on_other_threads() -> None:
+    class Sink:
+        def write(self, _read: AlignedSegment) -> None:
+            pass
+
+    reads = [record("r", 10, "4M", "ACGT")]
+    sink = Sink()
+    alive = weakref.ref(sink)
+    builders = [StreamingPileupBuilder(reads, tap=sink.write)]
+    del sink
+    with ThreadPoolExecutor(1) as pool:
+        assert pool.submit(lambda: builders[0].pileup("chr1", 11).bases).result() == ["C"]
+        columns = builders[0].columns("chr1", 12, 14)
+        swept = pool.submit(list, columns).result()
+        assert [pileup.bases for pileup in swept] == [["G"], ["T"]]
+        del columns
+        pool.submit(builders.clear).result()
+    assert alive() is None

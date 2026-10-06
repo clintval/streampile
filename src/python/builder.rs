@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::num::NonZeroUsize;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 
 use noodles::bam;
 use noodles::sam::{
@@ -113,9 +113,9 @@ type Builder = crate::StreamingPileupBuilder<'static, PySource>;
 /// ):
 ///     pileup = builder.pileup("chr1", 100)
 /// ```
-#[pyclass(module = "streampile", name = "StreamingPileupBuilder", unsendable)]
+#[pyclass(module = "streampile", name = "StreamingPileupBuilder")]
 pub(crate) struct StreamingPileupBuilder {
-    inner: Builder,
+    inner: Mutex<Builder>,
     header: Option<Py<PyAny>>,
     names: Vec<Py<PyString>>,
     ids: HashMap<String, usize>,
@@ -254,7 +254,7 @@ impl StreamingPileupBuilder {
             });
         }
         Ok(Self {
-            inner,
+            inner: Mutex::new(inner),
             header: header.map(Bound::unbind),
             names,
             ids,
@@ -286,7 +286,7 @@ impl StreamingPileupBuilder {
     /// `tap` raises, and closing again hands over the reads after it.
     fn close(&mut self) -> PyResult<()> {
         self.closed = true;
-        self.inner.close().map_err(to_python)
+        exclusive(&mut self.inner).close().map_err(to_python)
     }
 
     /// Whether a read passes the built-in filters, is placed, and then passes `read_filter`.
@@ -297,7 +297,9 @@ impl StreamingPileupBuilder {
             object: record.clone().unbind(),
             record: bam,
         })));
-        self.inner.accepts(&record).map_err(to_python)
+        exclusive(&mut self.inner)
+            .accepts(&record)
+            .map_err(to_python)
     }
 
     /// Advance to a position, at or after the last one, and pile up the reads there.
@@ -328,7 +330,7 @@ impl StreamingPileupBuilder {
                 .ids
                 .get(contig)
                 .ok_or_else(|| to_python(Error::UnknownContig(contig.to_owned())))?;
-            let pileup = match self.inner.pileup_at(id, pos as usize) {
+            let pileup = match exclusive(&mut self.inner).pileup_at(id, pos as usize) {
                 Ok(pileup) => pileup,
                 Err(Error::Backwards { .. }) => return Err(self.backwards(py, contig, pos)),
                 Err(error) => return Err(to_python(error)),
@@ -429,7 +431,7 @@ impl StreamingPileupBuilder {
 
 impl Drop for StreamingPileupBuilder {
     fn drop(&mut self) {
-        self.inner.abandon();
+        exclusive(&mut self.inner).abandon();
     }
 }
 
@@ -446,7 +448,7 @@ impl StreamingPileupBuilder {
 }
 
 /// The pileup at every position of a span, from `StreamingPileupBuilder.columns`.
-#[pyclass(module = "streampile", unsendable)]
+#[pyclass(module = "streampile")]
 pub(crate) struct Columns {
     builder: Py<StreamingPileupBuilder>,
     contig: String,
@@ -479,6 +481,12 @@ impl Columns {
             .pileup(py, &self.contig, position)
             .map(Some)
     }
+}
+
+/// The Rust builder, borrowed without locking: PyO3 lends a builder mutably to one caller at a
+/// time, and the mutex only makes the class shareable between threads.
+fn exclusive(inner: &mut Mutex<Builder>) -> &mut Builder {
+    inner.get_mut().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The sort order an `@HD` line of a SAM header declares, if any.
