@@ -208,6 +208,7 @@ preview = true
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D"]
+"python/streampile/_cli.py" = ["E501"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 13

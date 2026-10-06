@@ -1017,3 +1017,19 @@ def test_a_reference_cycle_through_a_builder_is_collected(through: str) -> None:
     del owner
     gc.collect()
     assert alive() is None
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "most"),
+    [
+        ("min_mapping_quality", -1, 255),
+        ("min_base_quality", 256, 255),
+        ("min_base_quality", 2**70, 255),
+        ("exclude_flags", -1, 65535),
+        ("exclude_flags", 0x10000, 65535),
+    ],
+)
+def test_a_builder_refuses_options_out_of_range(option: str, value: int, most: int) -> None:
+    options: dict[str, Any] = {option: value}
+    with pytest.raises(ValueError, match=rf"^{option} must be from 0 to {most}, found: {value}$"):
+        StreamingPileupBuilder([], **options)

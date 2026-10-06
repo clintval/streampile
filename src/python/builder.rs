@@ -22,7 +22,7 @@ use pyo3::types::{PyIterator, PyString};
 
 use super::bridge;
 use super::pileup::{Held, Pileup};
-use super::to_python;
+use super::{Int, to_python};
 use crate::pileup::Derived;
 use crate::source::{AlignmentRecord, RecordSource};
 use crate::{DEFAULT_EXCLUDE_FLAGS, DEFAULT_MIN_BASE_QUALITY, Error};
@@ -211,29 +211,37 @@ impl StreamingPileupBuilder {
     ///     tap: a function given every read once the builder has moved past it.
     ///
     /// Raises:
-    ///     ValueError: if the header does not declare coordinate order.
+    ///     ValueError: if the header does not declare coordinate order, or a quality is not from 0
+    ///         to 255 or `exclude_flags` from 0 to 65535.
     #[new]
     #[pyo3(signature = (
         records,
         *,
-        min_mapping_quality = 0,
-        exclude_flags = DEFAULT_EXCLUDE_FLAGS.bits(),
-        min_base_quality = DEFAULT_MIN_BASE_QUALITY,
+        min_mapping_quality = Int::from(0),
+        exclude_flags = Int::from(i64::from(DEFAULT_EXCLUDE_FLAGS.bits())),
+        min_base_quality = Int::from(i64::from(DEFAULT_MIN_BASE_QUALITY)),
         proper_pairs_only = false,
         read_filter = None,
         tap = None,
     ))]
+    #[pyo3(
+        text_signature = "(records, *, min_mapping_quality=0, exclude_flags=3840, \
+        min_base_quality=13, proper_pairs_only=False, read_filter=None, tap=None)"
+    )]
     #[allow(clippy::too_many_arguments)]
     fn new(
         py: Python<'_>,
         records: &Bound<'_, PyAny>,
-        min_mapping_quality: u8,
-        exclude_flags: u16,
-        min_base_quality: u8,
+        min_mapping_quality: Int,
+        exclude_flags: Int,
+        min_base_quality: Int,
         proper_pairs_only: bool,
         read_filter: Option<Py<PyAny>>,
         tap: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
+        let min_mapping_quality = min_mapping_quality.of("min_mapping_quality", u8::MAX)?;
+        let exclude_flags = exclude_flags.of("exclude_flags", u16::MAX)?;
+        let min_base_quality = min_base_quality.of("min_base_quality", u8::MAX)?;
         let source_header = match records.getattr("header") {
             Ok(header) => Some(header),
             Err(error) if error.is_instance_of::<PyAttributeError>(py) => None,
@@ -282,40 +290,15 @@ impl StreamingPileupBuilder {
             records: records.share(),
             first: first.share(),
         };
-        let mut inner = Builder::new(source, &sam_header.build())
+        let read_filter = Shared::new(read_filter);
+        let tap = Shared::new(tap);
+        let inner = Builder::new(source, &sam_header.build())
             .map_err(to_python)?
             .min_mapping_quality(min_mapping_quality)
             .exclude_flags(Flags::from_bits_retain(exclude_flags))
             .min_base_quality(min_base_quality)
             .proper_pairs_only(proper_pairs_only);
-        let read_filter = Shared::new(read_filter);
-        let tap = Shared::new(tap);
-        if read_filter.lock().is_some() {
-            let read_filter = read_filter.share();
-            inner = inner.try_read_filter(move |record: &PyRecord| {
-                Python::attach(|py| match read_filter.get(py) {
-                    Some(read_filter) => read_filter
-                        .bind(py)
-                        .call1((record.object(py),))
-                        .and_then(|kept| kept.is_truthy())
-                        .map_err(io::Error::other),
-                    None => Ok(true),
-                })
-            });
-        }
-        if tap.lock().is_some() {
-            let tap = tap.share();
-            inner = inner.tap(move |record: PyRecord| {
-                Python::attach(|py| match tap.get(py) {
-                    Some(tap) => tap
-                        .bind(py)
-                        .call1((record.object(py),))
-                        .map(drop)
-                        .map_err(io::Error::other),
-                    None => Ok(()),
-                })
-            });
-        }
+        let inner = with_callbacks(inner, &read_filter, &tap);
         Ok(Self {
             inner: Mutex::new(inner),
             header: header.map(Bound::unbind),
@@ -567,6 +550,38 @@ impl Columns {
             .pileup(py, &self.contig, position)
             .map(Some)
     }
+}
+
+/// A Rust builder that asks the Python `read_filter` and hands records to the Python `tap`, where
+/// they are given.
+fn with_callbacks(mut inner: Builder, read_filter: &Shared, tap: &Shared) -> Builder {
+    if read_filter.lock().is_some() {
+        let read_filter = read_filter.share();
+        inner = inner.try_read_filter(move |record: &PyRecord| {
+            Python::attach(|py| match read_filter.get(py) {
+                Some(read_filter) => read_filter
+                    .bind(py)
+                    .call1((record.object(py),))
+                    .and_then(|kept| kept.is_truthy())
+                    .map_err(io::Error::other),
+                None => Ok(true),
+            })
+        });
+    }
+    if tap.lock().is_some() {
+        let tap = tap.share();
+        inner = inner.tap(move |record: PyRecord| {
+            Python::attach(|py| match tap.get(py) {
+                Some(tap) => tap
+                    .bind(py)
+                    .call1((record.object(py),))
+                    .map(drop)
+                    .map_err(io::Error::other),
+                None => Ok(()),
+            })
+        });
+    }
+    inner
 }
 
 /// The Rust builder, borrowed without locking: PyO3 lends a builder mutably to one caller at a

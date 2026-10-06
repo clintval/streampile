@@ -534,3 +534,12 @@ def test_a_pileup_matches_copies_and_replaces_as_its_dataclass_did() -> None:
     empty = Pileup("chr1", 3, ())
     assert pickle.loads(pickle.dumps(empty)) == empty
     assert weakref.ref(pileup)() is pileup
+
+
+@pytest.mark.parametrize("floor", [-1, 256])
+def test_a_pileup_refuses_a_quality_floor_out_of_range(floor: int) -> None:
+    error = rf"^min_base_quality must be from 0 to 255, found: {floor}$"
+    with pytest.raises(ValueError, match=error):
+        Pileup("chr1", 0, (), min_base_quality=floor)
+    with pytest.raises(ValueError, match=error):
+        Pileup.from_alignments([], "chr1", 0, min_base_quality=floor)

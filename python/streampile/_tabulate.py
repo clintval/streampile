@@ -108,6 +108,9 @@ class Tabulator:
             min_mapping_quality: the lowest mapping quality of a counted read.
             exclude_flags: reads with any of these SAM flags are not counted: by default,
                 secondary, QC-fail, duplicate, and supplementary reads. Unmapped reads never are.
+
+        Raises:
+            ValueError: if a quality is not from 0 to 255, or `exclude_flags` from 0 to 65535.
         """
         self._reference: FastaFile = reference
         self._min_base_quality: int = min_base_quality
@@ -262,8 +265,9 @@ def tabulate(
             QC-fail, duplicate, and supplementary reads.
 
     Raises:
-        ValueError: if a contig of the territory is not in the alignment header or the
-            reference, or has another length in each, or a span runs past the end of its contig.
+        ValueError: if a quality is not from 0 to 255, or `exclude_flags` from 0 to 65535, or a
+            contig of the territory is not in the alignment header or the reference, or has
+            another length in each, or a span runs past the end of its contig.
     """
     tabulator = Tabulator(
         reference,

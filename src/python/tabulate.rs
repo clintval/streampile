@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyString, PyTuple};
 
-use super::bridge;
+use super::{Int, bridge};
 use crate::DEFAULT_EXCLUDE_FLAGS;
 
 const REFERENCE_PADDING: i64 = 10_000;
@@ -691,25 +691,29 @@ impl Tabulation {
     #[pyo3(signature = (
         reference,
         *,
-        min_base_quality = 0,
-        min_mapping_quality = 0,
-        exclude_flags = DEFAULT_EXCLUDE_FLAGS.bits(),
+        min_base_quality = Int::from(0),
+        min_mapping_quality = Int::from(0),
+        exclude_flags = Int::from(i64::from(DEFAULT_EXCLUDE_FLAGS.bits())),
     ))]
+    #[pyo3(
+        text_signature = "(reference, *, min_base_quality=0, min_mapping_quality=0, \
+        exclude_flags=3840)"
+    )]
     fn new(
         reference: &Bound<'_, PyAny>,
-        min_base_quality: u8,
-        min_mapping_quality: u8,
-        exclude_flags: u16,
-    ) -> Self {
-        Self {
+        min_base_quality: Int,
+        min_mapping_quality: Int,
+        exclude_flags: Int,
+    ) -> PyResult<Self> {
+        Ok(Self {
             fasta: reference.clone().unbind(),
             options: Options {
-                min_base_quality,
-                min_mapping_quality,
-                exclude_flags,
+                min_base_quality: min_base_quality.of("min_base_quality", u8::MAX)?,
+                min_mapping_quality: min_mapping_quality.of("min_mapping_quality", u8::MAX)?,
+                exclude_flags: exclude_flags.of("exclude_flags", u16::MAX)?,
             },
             contigs: HashMap::new(),
-        }
+        })
     }
 
     /// Whether a read passes the flag and mapping-quality filters and has bases to count.

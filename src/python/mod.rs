@@ -11,7 +11,7 @@ mod tabulate;
 
 use std::io;
 
-use pyo3::exceptions::{PyOSError, PyValueError};
+use pyo3::exceptions::{PyOSError, PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 
 use crate::{DEFAULT_EXCLUDE_FLAGS, DEFAULT_MIN_BASE_QUALITY, Error};
@@ -47,6 +47,52 @@ fn from_io(error: io::Error) -> PyErr {
             PyValueError::new_err(sentence(&error.to_string()))
         }
         _ => PyOSError::new_err(error.to_string()),
+    }
+}
+
+/// A Python `int` given for an option, with its text, kept as a number when it fits an `i64`.
+pub(crate) struct Int {
+    value: Option<i64>,
+    text: String,
+}
+
+impl From<i64> for Int {
+    fn from(value: i64) -> Self {
+        Self {
+            value: Some(value),
+            text: value.to_string(),
+        }
+    }
+}
+
+impl<'py> FromPyObject<'_, 'py> for Int {
+    type Error = PyErr;
+
+    fn extract(object: Borrowed<'_, 'py, PyAny>) -> PyResult<Self> {
+        let value = match object.extract::<i64>() {
+            Ok(value) => Some(value),
+            Err(error) if error.is_instance_of::<PyOverflowError>(object.py()) => None,
+            Err(error) => return Err(error),
+        };
+        Ok(Self {
+            value,
+            text: object.str()?.to_string(),
+        })
+    }
+}
+
+impl Int {
+    /// The option's value as a `T`, or a `ValueError` naming the option when it is not one.
+    pub(crate) fn of<T: TryFrom<i64> + Into<i64> + Copy>(self, name: &str, most: T) -> PyResult<T> {
+        self.value
+            .and_then(|value| T::try_from(value).ok())
+            .ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "{name} must be from 0 to {}, found: {}",
+                    most.into(),
+                    self.text
+                ))
+            })
     }
 }
 

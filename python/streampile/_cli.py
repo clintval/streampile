@@ -87,8 +87,29 @@ def _tabulate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _bounded(text: str, most: int, base: int) -> int:
+    """An integer from 0 to `most`, written in a base, or with a prefix such as `0x` for base 0.
+
+    Raises:
+        argparse.ArgumentTypeError: if the text is not such an integer.
+    """
+    try:
+        value = int(text, base)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not an integer: {text}") from None
+    if not 0 <= value <= most:
+        raise argparse.ArgumentTypeError(f"must be from 0 to {most}, found: {text}")
+    return value
+
+
+def _quality(text: str) -> int:
+    """A base or mapping quality, from 0 to 255."""
+    return _bounded(text, 255, 10)
+
+
 def _flags(text: str) -> int:
-    return int(text, 0)
+    """SAM flags, from 0 to 0xFFFF, in any base Python reads."""
+    return _bounded(text, 0xFFFF, 0)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -104,48 +125,17 @@ def main(argv: list[str] | None = None) -> int:
             "allele anchored at the base, as parallel comma-separated lists."
         ),
     )
-    tabulate_parser.add_argument(
-        "--bam", type=Path, required=True, help="indexed, coordinate-sorted BAM or CRAM"
-    )
+    # fmt: off
+    tabulate_parser.add_argument("--bam", type=Path, required=True, help="indexed, coordinate-sorted BAM or CRAM")
     tabulate_parser.add_argument("--ref", type=Path, required=True, help="indexed reference FASTA")
-    tabulate_parser.add_argument(
-        "--intervals", type=Path, required=True, help="the territory, a BED file"
-    )
-    tabulate_parser.add_argument(
-        "--min-base-quality",
-        type=int,
-        default=0,
-        help="lowest base quality of an informative base (default: 0)",
-    )
-    tabulate_parser.add_argument(
-        "--min-mapping-quality",
-        type=int,
-        default=0,
-        help="lowest mapping quality of a counted read (default: 0)",
-    )
-    tabulate_parser.add_argument(
-        "--exclude-flags",
-        type=_flags,
-        default=DEFAULT_EXCLUDE_FLAGS,
-        help=f"leave out reads with any of these SAM flags (default: {DEFAULT_EXCLUDE_FLAGS:#x})",
-    )
-    tabulate_parser.add_argument(
-        "--index",
-        choices=["tbi", "csi"],
-        help="index a BGZF table as it is written (default: no index)",
-    )
-    tabulate_parser.add_argument(
-        "--threads",
-        type=int,
-        default=default_threads(),
-        help="threads for BGZF decompression and compression (default: available CPUs, at most 8)",
-    )
-    tabulate_parser.add_argument(
-        "--out",
-        type=Path,
-        required=True,
-        help="the table to write, as BGZF if it ends in .gz, .bgz, or .bgzf",
-    )
+    tabulate_parser.add_argument("--intervals", type=Path, required=True, help="the territory, a BED file")
+    tabulate_parser.add_argument("--min-base-quality", type=_quality, default=0, help="lowest base quality of an informative base (default: 0)")
+    tabulate_parser.add_argument("--min-mapping-quality", type=_quality, default=0, help="lowest mapping quality of a counted read (default: 0)")
+    tabulate_parser.add_argument("--exclude-flags", type=_flags, default=DEFAULT_EXCLUDE_FLAGS, help=f"leave out reads with any of these SAM flags (default: {DEFAULT_EXCLUDE_FLAGS:#x})")
+    tabulate_parser.add_argument("--index", choices=["tbi", "csi"], help="index a BGZF table as it is written (default: no index)")
+    tabulate_parser.add_argument("--threads", type=int, default=default_threads(), help="threads for BGZF decompression and compression (default: available CPUs, at most 8)")
+    tabulate_parser.add_argument("--out", type=Path, required=True, help="the table to write, as BGZF if it ends in .gz, .bgz, or .bgzf")
+    # fmt: on
     tabulate_parser.set_defaults(run=_tabulate)
     args = parser.parse_args(argv)
     return int(args.run(args))

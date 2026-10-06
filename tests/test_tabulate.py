@@ -548,3 +548,18 @@ def test_a_tabulator_and_its_rows_are_used_on_other_threads(reference: FastaFile
         rows = tabulator.tabulate(alignments, spans)
         assert pool.submit(lambda: sum(base.depth for base in rows)).result() == depth()
         assert pool.submit(depth).result() == depth()
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "most"),
+    [
+        ("min_base_quality", -1, 255),
+        ("min_mapping_quality", 256, 255),
+        ("exclude_flags", 0x10000, 65535),
+    ],
+)
+def test_a_tabulator_refuses_options_out_of_range(
+    reference: FastaFile, option: str, value: int, most: int
+) -> None:
+    with pytest.raises(ValueError, match=rf"^{option} must be from 0 to {most}, found: {value}$"):
+        Tabulator(reference, **{option: value})

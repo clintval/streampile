@@ -231,3 +231,21 @@ def test_default_threads_follow_the_cpu_affinity_on_linux(monkeypatch: pytest.Mo
 
     monkeypatch.setattr(os, "sched_getaffinity", affinity, raising=False)
     assert default_threads() == 3
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "error"),
+    [
+        ("--min-base-quality", "256", "must be from 0 to 255, found: 256"),
+        ("--min-mapping-quality", "-1", "must be from 0 to 255, found: -1"),
+        ("--exclude-flags", "0x10000", "must be from 0 to 65535, found: 0x10000"),
+        ("--min-base-quality", "1.5", "not an integer: 1.5"),
+    ],
+)
+def test_tabulate_refuses_options_out_of_range_with_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], option: str, value: str, error: str
+) -> None:
+    with pytest.raises(SystemExit) as exited:
+        run(tmp_path / "counts.tsv", option, value)
+    assert exited.value.code == 2
+    assert f"argument {option}: {error}" in capsys.readouterr().err

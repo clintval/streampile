@@ -13,7 +13,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{IntoPyDict, PyDict, PyList, PyString, PyTuple, PyType};
 
 use super::builder::Bridged;
-use super::{bridge, to_python};
+use super::{Int, bridge, to_python};
 use noodles::sam::alignment::record::Flags;
 
 use crate::footprint::Footprint;
@@ -912,15 +912,17 @@ impl Pileup {
         reference_name,
         reference_pos,
         pileups,
-        min_base_quality = i64::from(DEFAULT_MIN_BASE_QUALITY),
+        min_base_quality = Int::from(i64::from(DEFAULT_MIN_BASE_QUALITY)),
     ))]
+    #[pyo3(text_signature = "(reference_name, reference_pos, pileups, min_base_quality=13)")]
     fn new(
         py: Python<'_>,
         reference_name: Bound<'_, PyString>,
         reference_pos: i64,
         pileups: &Bound<'_, PyAny>,
-        min_base_quality: i64,
+        min_base_quality: Int,
     ) -> PyResult<Self> {
+        let min_base_quality = i64::from(min_base_quality.of("min_base_quality", u8::MAX)?);
         let pileups = PyTuple::new(py, pileups.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
         let entries = pileups
             .iter()
@@ -953,14 +955,21 @@ impl Pileup {
     ///     pos: the 0-based position on the contig.
     ///     min_base_quality: the quality floor of the pileup's filtered views.
     #[classmethod]
-    #[pyo3(signature = (alignments, contig, pos, min_base_quality = i64::from(DEFAULT_MIN_BASE_QUALITY)))]
+    #[pyo3(signature = (
+        alignments,
+        contig,
+        pos,
+        min_base_quality = Int::from(i64::from(DEFAULT_MIN_BASE_QUALITY)),
+    ))]
+    #[pyo3(text_signature = "(alignments, contig, pos, min_base_quality=13)")]
     fn from_alignments(
         _cls: &Bound<'_, PyType>,
         alignments: &Bound<'_, PyAny>,
         contig: Bound<'_, PyString>,
         pos: i64,
-        min_base_quality: i64,
+        min_base_quality: Int,
     ) -> PyResult<Self> {
+        let min_base_quality = i64::from(min_base_quality.of("min_base_quality", u8::MAX)?);
         let mut entries = Vec::new();
         let mut footprint = Footprint::default();
         for alignment in alignments.try_iter()? {
@@ -1214,7 +1223,7 @@ impl Pileup {
             self.reference_name.bind(py).clone(),
             self.reference_pos,
             &pileups,
-            self.min_base_quality,
+            Int::from(self.min_base_quality),
         )
     }
 
