@@ -1,5 +1,5 @@
 use super::{HEADER, read, records};
-use crate::footprint::{Footprint, Insertion, Located, reference_length_of_text};
+use crate::footprint::{Footprint, Insertion, Located};
 
 const SKIPPED: i64 = -1;
 const DELETED_AT_END: i64 = -2;
@@ -188,24 +188,6 @@ fn test_footprint_refuses_a_cigar_with_a_partial_operator() {
     let mut footprint = Footprint::default();
     assert!(footprint.fill(0, &[0x40, 0, 0], 4).is_err());
     assert!(footprint.fill(0, &[0x49, 0, 0, 0], 4).is_err());
-}
-
-#[test]
-fn test_the_reference_length_of_a_cigar_string() {
-    assert_eq!(
-        reference_length_of_text(b"10M2I3D4N1=1X5S2H1P").ok(),
-        Some(19)
-    );
-    assert_eq!(reference_length_of_text(b"").ok(), Some(0));
-    for invalid in [
-        &b"M"[..],
-        b"10",
-        b"10Q",
-        b"99999999999999999999M",
-        b"4294967295M1M",
-    ] {
-        assert!(reference_length_of_text(invalid).is_err());
-    }
 }
 
 #[test]

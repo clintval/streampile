@@ -72,7 +72,7 @@ fn test_the_fixture_reads_aux_fields_in_place() {
 }
 
 #[test]
-fn test_the_fixture_pair_measures_both_fragment_ends_from_its_template_length() {
+fn test_the_fixture_pair_measures_both_fragment_ends_from_its_mate_cigars() {
     let mut builder = open();
     let pileup = builder.pileup("chr1", 45).unwrap();
     let distances: Vec<(u16, Option<usize>, Option<usize>)> = pileup
@@ -81,7 +81,7 @@ fn test_the_fixture_pair_measures_both_fragment_ends_from_its_template_length() 
             (
                 entry.flags().bits(),
                 entry.five_prime_distance(),
-                entry.template_end_distance(),
+                entry.template_end_distance().unwrap(),
             )
         })
         .collect();

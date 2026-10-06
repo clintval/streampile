@@ -4,7 +4,8 @@
 use std::collections::BTreeMap;
 
 use super::{Read, bases, builder, name, names, read};
-use crate::EntryKind;
+use crate::builder::mate_span;
+use crate::{AuxValue, EntryKind, Error};
 
 const READ_LENGTH: usize = 50;
 
@@ -153,7 +154,10 @@ fn test_builder_keeps_a_fragment_and_positions_outside_the_insert_of_an_fr_pair(
     assert_eq!(fragment.pileup("chr1", 99).unwrap().unfiltered_depth(), 1);
     assert_eq!(fragment.pileup("chr1", 148).unwrap().unfiltered_depth(), 1);
     let pileup = fragment.pileup("chr1", 148).unwrap();
-    assert_eq!(pileup.get(0).unwrap().template_end_distance(), None);
+    assert_eq!(
+        pileup.get(0).unwrap().template_end_distance().unwrap(),
+        None
+    );
 
     let mut builder = builder(&pair("q2", 100, 99, false, true));
     let mut depths = Vec::new();
@@ -164,7 +168,7 @@ fn test_builder_keeps_a_fragment_and_positions_outside_the_insert_of_an_fr_pair(
         outside.push(
             pileup
                 .iter()
-                .filter(|entry| entry.template_end_distance().is_none())
+                .filter(|entry| entry.template_end_distance().unwrap().is_none())
                 .count(),
         );
     }
@@ -180,7 +184,11 @@ fn test_builder_keeps_every_position_of_a_pair_with_the_reverse_read_starting_la
     for position in [99, 100, 148, 149] {
         let pileup = builder.pileup("chr1", position).unwrap();
         depths.push(pileup.unfiltered_depth());
-        distances.extend(pileup.iter().map(|entry| entry.template_end_distance()));
+        distances.extend(
+            pileup
+                .iter()
+                .map(|entry| entry.template_end_distance().unwrap()),
+        );
     }
     assert_eq!(depths, [1, 2, 2, 1]);
     let expected = [50, 49, 1, 1, 49, 50].map(Some);
@@ -254,7 +262,7 @@ fn test_a_template_end_needs_a_mapped_fr_mate_on_the_same_contig() {
             assert!(
                 pileup
                     .iter()
-                    .all(|entry| entry.template_end_distance().is_none()),
+                    .all(|entry| entry.template_end_distance().unwrap().is_none()),
                 "{reads:?}"
             );
         }
@@ -284,19 +292,33 @@ fn test_a_template_end_spans_the_insert_of_an_fr_pair() {
         .unwrap()
         .get(0)
         .unwrap()
-        .template_end_distance();
+        .template_end_distance()
+        .unwrap();
     let last = builder
         .pileup("chr1", 199)
         .unwrap()
         .get(0)
         .unwrap()
-        .template_end_distance();
+        .template_end_distance()
+        .unwrap();
     assert_eq!((first, last), (Some(100), Some(100)));
 }
 
 #[test]
-fn test_a_template_end_is_measured_from_the_mate_cigar_or_else_the_template_length() {
+fn test_a_template_end_is_measured_from_the_mate_cigar_alone() {
+    let expected = [
+        (false, Some(99)),
+        (false, Some(89)),
+        (false, Some(50)),
+        (true, Some(50)),
+        (true, Some(89)),
+        (true, Some(99)),
+    ];
     let with_mate_cigar = pair("q", 100, 150, false, true);
+    let mut any_template_length = with_mate_cigar.clone();
+    for (read, tlen) in any_template_length.iter_mut().zip([7, 0]) {
+        read.tlen = tlen;
+    }
     let without: Vec<Read> = with_mate_cigar
         .iter()
         .cloned()
@@ -305,30 +327,78 @@ fn test_a_template_end_is_measured_from_the_mate_cigar_or_else_the_template_leng
             ..read
         })
         .collect();
-    let mut only_mate_cigar = with_mate_cigar.clone();
-    for read in &mut only_mate_cigar {
-        read.tlen = 0;
-    }
-    for reads in [with_mate_cigar, without, only_mate_cigar] {
+    for reads in [with_mate_cigar, any_template_length, without] {
+        let has_mate_cigar = !reads[0].tags.is_empty();
         let mut builder = builder(&reads);
         let mut distances = Vec::new();
         for position in [100, 110, 149, 150, 189, 199] {
             let pileup = builder.pileup("chr1", position).unwrap();
             for entry in pileup.iter() {
-                distances.push((entry.is_reverse(), entry.template_end_distance()));
+                match entry.template_end_distance() {
+                    Ok(distance) => distances.push((entry.is_reverse(), distance)),
+                    Err(Error::MissingMateCigar { name }) => {
+                        assert!(!has_mate_cigar && !entry.is_reverse() && name == "q");
+                    }
+                    Err(error) => panic!("{error}"),
+                }
             }
         }
-        assert_eq!(
-            distances,
-            [
-                (false, Some(99)),
-                (false, Some(89)),
-                (false, Some(50)),
-                (true, Some(50)),
-                (true, Some(89)),
-                (true, Some(99)),
-            ],
-            "{reads:?}"
+        let expected = if has_mate_cigar {
+            &expected[..]
+        } else {
+            &expected[3..]
+        };
+        assert_eq!(distances, expected, "{reads:?}");
+    }
+}
+
+#[test]
+fn test_a_template_end_from_an_invalid_mate_cigar_is_an_error_naming_the_read() {
+    for value in ["10M5", "4Q", "M", "0M", "2S", "*", "4294967295M1M"] {
+        let mut reads = pair("q", 100, 150, false, true);
+        reads[0].tags = vec![format!("MC:Z:{value}")];
+        let mut builder = builder(&reads);
+        let pileup = builder.pileup("chr1", 120).unwrap();
+        assert_eq!(pileup.len(), 1);
+        let refused = pileup.get(0).unwrap().template_end_distance();
+        assert!(
+            matches!(
+                &refused,
+                Err(Error::InvalidMateCigar { name, value: found }) if name == "q" && found == value
+            ),
+            "{value}: {refused:?}"
         );
     }
+    let mut reads = pair("q", 100, 150, false, true);
+    reads[0].tags = vec!["MC:i:50".into()];
+    let mut builder = builder(&reads);
+    let refused = builder
+        .pileup("chr1", 120)
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .template_end_distance();
+    assert!(matches!(refused, Err(Error::InvalidMateCigar { .. })));
+}
+
+#[test]
+fn test_the_span_of_a_mate_cigar() {
+    let span = |text: &str| mate_span(AuxValue::String(text.as_bytes()));
+    assert_eq!(span("10M2I3D4N1=1X5S2H1P"), Some(19));
+    assert_eq!(span("+3M"), Some(3));
+    for invalid in [
+        "",
+        "M",
+        "0M",
+        "2S",
+        "10",
+        "10Q",
+        "99999999999999999999M",
+        "9223372036854775807M9223372036854775807M",
+        "268435456M",
+    ] {
+        assert_eq!(span(invalid), None, "{invalid}");
+    }
+    assert_eq!(span("268435455M268435455N"), Some(536_870_910));
+    assert_eq!(mate_span(AuxValue::Integer(10)), None);
 }

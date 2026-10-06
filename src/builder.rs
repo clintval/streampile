@@ -4,12 +4,14 @@ use std::mem;
 
 use bstr::{BStr, ByteSlice};
 use noodles::bam;
-use noodles::sam::{self, alignment::record::Flags};
+use noodles::sam::{self, alignment::record::Cigar as _, alignment::record::Flags};
 
 use crate::auxiliary::{self, AuxValue};
 use crate::error::{Error, Result};
-use crate::footprint::{Located, reference_length, reference_length_of_text};
-use crate::pileup::{EntryKind, LiveRecord, NONE, Pileup, RawEntry, quality_of};
+use crate::footprint::Located;
+use crate::pileup::{
+    EntryKind, LiveRecord, NONE, OtherEnd, Pileup, RawEntry, quality_of, record_name,
+};
 
 /// Secondary, QC-fail, duplicate, and supplementary reads, which are left out by default.
 pub const DEFAULT_EXCLUDE_FLAGS: Flags = Flags::from_bits_retain(0xF00);
@@ -528,7 +530,13 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         if live.footprint.end <= pos {
             return Ok(false);
         }
-        index_fields(live, &self.options.aux_tags)?;
+        index_fields(live, &self.options.aux_tags).map_err(|error| match error {
+            Error::Io(source) => Error::InvalidRecord {
+                name: record_name(&live.record),
+                source,
+            },
+            error => error,
+        })?;
         Ok(true)
     }
 
@@ -721,13 +729,6 @@ impl<S: RecordSource> Columns<'_, '_, S> {
     }
 }
 
-/// The name of a record, or `*` for a record with none.
-fn record_name(record: &bam::Record) -> String {
-    record
-        .name()
-        .map_or_else(|| "*".to_owned(), |name| name.to_str_lossy().into_owned())
-}
-
 /// Reads a record's contig, start, and flags, and with a tap, where the builder is past it.
 fn describe(live: &mut LiveRecord, tapped: bool) -> io::Result<()> {
     let record = &live.record;
@@ -741,13 +742,13 @@ fn describe(live: &mut LiveRecord, tapped: bool) -> io::Result<()> {
         .map_or(-1, |start| usize::from(start) as i64 - 1);
     live.flags = record.flags();
     live.template = NONE;
-    live.other_end = None;
+    live.other_end = OtherEnd::None;
     if tapped {
         let cigar = record.cigar();
         let length = if live.flags.is_unmapped() || cigar.is_empty() {
             1
         } else {
-            reference_length(cigar.as_bytes()).max(1)
+            cigar.alignment_span()?.max(1) as i64
         };
         live.end = live.start + length;
     }
@@ -786,26 +787,33 @@ enum MateCigar {
     Found(auxiliary::Field),
 }
 
-/// The 0-based reference position of the 5′ end of the mate of a read in an FR pair.
-fn other_end(live: &LiveRecord, mate_cigar: MateCigar) -> Result<Option<i64>> {
+/// Where the 5′ end of the mate of a read in an FR pair is.
+///
+/// For a reverse read it is the mate's start. For a forward read it is the end of the mate's
+/// alignment, from its start and its `MC` tag alone, never from the template length (TLEN).
+fn other_end(live: &LiveRecord, mate_cigar: MateCigar) -> Result<OtherEnd> {
     let flags = live.flags;
     let reverse = flags.is_reverse_complemented();
     if !flags.is_segmented()
         || flags.is_mate_unmapped()
         || reverse == flags.is_mate_reverse_complemented()
     {
-        return Ok(None);
+        return Ok(OtherEnd::None);
     }
     let record = &live.record;
     if record.mate_reference_sequence_id().transpose()? != Some(live.reference_id) {
-        return Ok(None);
+        return Ok(OtherEnd::None);
     }
     let Some(mate_start) = record.mate_alignment_start().transpose()? else {
-        return Ok(None);
+        return Ok(OtherEnd::None);
     };
     let mate_start = usize::from(mate_start) as i64 - 1;
     if reverse {
-        return Ok((mate_start < live.footprint.end).then_some(mate_start));
+        return Ok(if mate_start < live.footprint.end {
+            OtherEnd::At(mate_start)
+        } else {
+            OtherEnd::None
+        });
     }
     let data = record.data().as_bytes();
     let mate_cigar = match mate_cigar {
@@ -813,14 +821,30 @@ fn other_end(live: &LiveRecord, mate_cigar: MateCigar) -> Result<Option<i64>> {
         MateCigar::Missing => None,
         MateCigar::Unsearched => auxiliary::find(data, *b"MC")?,
     };
-    let mate_end = match mate_cigar {
-        Some(AuxValue::String(cigar)) if cigar != b"*" => {
-            let length = reference_length_of_text(cigar)?;
-            (length > 0).then_some(mate_start + length - 1)
-        }
-        _ => None,
+    Ok(match mate_cigar {
+        None => OtherEnd::MissingMateCigar,
+        Some(value) => match mate_span(value) {
+            None => OtherEnd::InvalidMateCigar,
+            Some(span) if live.start < mate_start + span => OtherEnd::At(mate_start + span - 1),
+            Some(_) => OtherEnd::None,
+        },
+    })
+}
+
+/// The number of reference bases an `MC` value spans, or `None` for a value that is not a
+/// CIGAR string spanning at least one base with operators no longer than BAM allows.
+pub(crate) fn mate_span(value: AuxValue<'_>) -> Option<i64> {
+    const LONGEST_OPERATOR: usize = (1 << 28) - 1;
+    let AuxValue::String(text) = value else {
+        return None;
     };
-    let template_length = i64::from(record.template_length());
-    let mate_end = mate_end.or((template_length > 0).then_some(live.start + template_length - 1));
-    Ok(mate_end.filter(|&end| live.start <= end))
+    let cigar = sam::record::Cigar::new(text);
+    if cigar
+        .iter()
+        .any(|op| op.map_or(true, |op| op.len() > LONGEST_OPERATOR))
+    {
+        return None;
+    }
+    let span = cigar.alignment_span().ok()?;
+    i64::try_from(span).ok().filter(|&span| span > 0)
 }

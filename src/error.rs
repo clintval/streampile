@@ -24,6 +24,23 @@ pub enum Error {
         source: io::Error,
     },
 
+    /// A forward read of an FR pair has no `MC` tag to find its mate's 5′ end with.
+    #[error("read {name} has no MC tag to find its mate's 5' end with")]
+    MissingMateCigar {
+        /// The name of the read.
+        name: String,
+    },
+
+    /// A forward read of an FR pair has an `MC` tag that is not a CIGAR string spanning at least
+    /// one reference base.
+    #[error("read {name} has an invalid MC tag: {value}")]
+    InvalidMateCigar {
+        /// The name of the read.
+        name: String,
+        /// The value of the tag.
+        value: String,
+    },
+
     /// A record starts before the record read just before it.
     #[error("records are out of coordinate order at {name}")]
     OutOfOrder {
