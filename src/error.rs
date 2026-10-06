@@ -81,6 +81,10 @@ pub enum Error {
     /// The builder was asked for a pileup after it was closed.
     #[error("the builder is closed")]
     Closed,
+
+    /// The builder was asked for a pileup after an error stopped it while advancing.
+    #[error("the builder stopped at an earlier error")]
+    Stopped,
 }
 
 /// A result whose error is an [`Error`].

@@ -105,6 +105,10 @@ type Builder = crate::StreamingPileupBuilder<'static, PySource>;
 /// with a `tap`, buffering behind the longest active read is inherent. Without a `tap`, a read
 /// is dropped as soon as the builder has moved past it.
 ///
+/// An exception while advancing to a position, from `records`, a malformed read, `read_filter`,
+/// or `tap`, stops the builder, so a pileup never misses a read: every later pileup raises a
+/// `ValueError`, and closing still hands every read not yet handed over to `tap`.
+///
 /// A builder can be used from any thread, one call at a time: a call made while another runs,
 /// such as from `read_filter` or `tap`, raises a `RuntimeError`.
 ///
@@ -312,8 +316,9 @@ impl StreamingPileupBuilder {
     ///     pos: the 0-based position on the contig.
     ///
     /// Raises:
-    ///     ValueError: if the builder is closed, the contig is not in the header, the position is
-    ///         negative, or the position is before the last one asked for.
+    ///     ValueError: if the builder is closed or stopped by an earlier exception, the contig is
+    ///         not in the header, the position is negative, or the position is before the last
+    ///         one asked for.
     fn pileup(&mut self, py: Python<'_>, contig: &str, pos: i64) -> PyResult<Py<Pileup>> {
         if self.closed {
             return Err(to_python(Error::Closed));
@@ -336,7 +341,10 @@ impl StreamingPileupBuilder {
             let pileup = match exclusive(&mut self.inner).pileup_at(id, pos as usize) {
                 Ok(pileup) => pileup,
                 Err(Error::Backwards { .. }) => return Err(self.backwards(py, contig, pos)),
-                Err(error) => return Err(to_python(error)),
+                Err(error) => {
+                    self.previous = None;
+                    return Err(to_python(error));
+                }
             };
             let entries = pileup.iter().map(|entry| Held::of(&entry)).collect();
             Pileup::of(

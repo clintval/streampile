@@ -820,19 +820,41 @@ def test_closing_again_after_a_tap_raises_hands_over_the_rest() -> None:
     assert tapped == ["failed", "r20", "r30"]
 
 
-def test_a_failed_advance_is_retried_and_never_returns_a_stale_pileup() -> None:
-    reads = [record("one", 10, "4M", "ACGT"), record("two", 20, "4M", "GGGG")]
+def test_every_pileup_fails_after_a_failed_advance_until_the_builder_closes() -> None:
+    reads = [record(f"r{start}", start, "10M", "ACGTACGTAC") for start in range(6)]
+    asked: list[str] = []
+    tapped: list[str] = []
+
+    def keep(read: AlignedSegment) -> bool:
+        asked.append(read.query_name or "")
+        if asked == ["r0", "r1", "r2", "r3"]:
+            raise KeyError("transient")
+        return True
+
+    builder = StreamingPileupBuilder(
+        reads, read_filter=keep, tap=lambda read: tapped.append(read.query_name or "")
+    )
+    assert builder.pileup("chr1", 1).unfiltered_depth == 2
+    with pytest.raises(KeyError, match="transient"):
+        builder.pileup("chr1", 5)
+    for pos in (1, 5, 6):
+        with pytest.raises(ValueError, match="The builder stopped at an earlier error."):
+            builder.pileup("chr1", pos)
+    builder.close()
+    assert tapped == [f"r{start}" for start in range(6)]
+
     failures = ["disk full"]
 
     def tap(_read: AlignedSegment) -> None:
         if failures:
             raise OSError(failures.pop())
 
-    builder = StreamingPileupBuilder(reads, tap=tap)
+    builder = StreamingPileupBuilder([record("one", 10, "4M", "ACGT")], tap=tap)
     assert builder.pileup("chr1", 10).bases == ["A"]
     with pytest.raises(OSError, match="disk full"):
         builder.pileup("chr1", 20)
-    assert builder.pileup("chr1", 20).bases == ["G"]
+    with pytest.raises(ValueError, match="The builder stopped at an earlier error."):
+        builder.pileup("chr1", 20)
 
 
 def test_exceptions_of_the_records_read_filter_and_tap_reach_the_caller_unchanged() -> None:

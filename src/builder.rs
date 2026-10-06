@@ -44,10 +44,12 @@ impl Default for Options {
     }
 }
 
-/// Whether a builder takes pileups, is handing the rest of its records to the tap, or is done.
+/// Whether a builder takes pileups, was stopped by an error, is handing the rest of its records
+/// to the tap, or is done.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Stage {
     Open,
+    Stopped,
     Closing,
     Closed,
 }
@@ -67,6 +69,10 @@ enum Stage {
 /// before it has been passed, so a long record, such as one with a long reference skip, holds back
 /// every record that starts within it. Without a tap, a record is dropped, and its buffers reused,
 /// as soon as the builder has moved past it.
+///
+/// An error while advancing to a position, from the source, a malformed record, the read filter,
+/// or the tap, stops the builder, so a pileup never misses a record: every later pileup is an
+/// [`Error::Stopped`], and closing still hands every record not yet handed over to the tap.
 ///
 /// ```no_run
 /// use noodles::bam;
@@ -246,9 +252,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     /// Advances to a position on a contig, at or after the last one, and piles up the records
     /// there.
     pub fn pileup(&mut self, contig: &str, position: usize) -> Result<Pileup<'_, S::Record>> {
-        if self.stage != Stage::Open {
-            return Err(Error::Closed);
-        }
+        self.check_open()?;
         let reference_sequence_id = self.reference_sequence_id(contig)?;
         self.pileup_at(reference_sequence_id, position)
     }
@@ -260,9 +264,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         reference_sequence_id: usize,
         position: usize,
     ) -> Result<Pileup<'_, S::Record>> {
-        if self.stage != Stage::Open {
-            return Err(Error::Closed);
-        }
+        self.check_open()?;
         if self.built && self.at == Some((reference_sequence_id, position)) {
             return Ok(self.view(reference_sequence_id, position));
         }
@@ -281,7 +283,10 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         }
         self.at = Some((reference_sequence_id, position));
         self.built = false;
-        self.advance(reference_sequence_id, position as i64)?;
+        if let Err(error) = self.advance(reference_sequence_id, position as i64) {
+            self.stage = Stage::Stopped;
+            return Err(error);
+        }
         self.collect(position as i64);
         self.built = true;
         Ok(self.view(reference_sequence_id, position))
@@ -365,6 +370,14 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         self.free.clear();
         self.waiting.clear();
         self.next = None;
+    }
+
+    fn check_open(&self) -> Result<()> {
+        match self.stage {
+            Stage::Open => Ok(()),
+            Stage::Stopped => Err(Error::Stopped),
+            Stage::Closing | Stage::Closed => Err(Error::Closed),
+        }
     }
 
     fn passes(&self, flags: Flags, mapping_quality: u8) -> bool {

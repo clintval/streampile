@@ -971,7 +971,7 @@ fn test_the_kind_of_each_entry_is_named_as_in_python() {
 }
 
 #[test]
-fn test_a_pileup_is_built_again_after_a_failed_advance() {
+fn test_every_pileup_fails_after_a_failed_advance_until_the_builder_closes() {
     let reads = [
         read("one", 10, "4M", "ACGT"),
         read("two", 20, "4M", "GGGG"),
@@ -979,10 +979,14 @@ fn test_a_pileup_is_built_again_after_a_failed_advance() {
     ];
     let mut builder = builder(&reads);
     assert_eq!(names(&builder.pileup("chr1", 10).unwrap()), ["one"]);
-    for _ in 0..2 {
+    assert!(matches!(
+        builder.pileup("chr1", 21),
+        Err(Error::OutOfOrder { name }) if name == "three"
+    ));
+    for position in [21, 10] {
         assert!(matches!(
-            builder.pileup("chr1", 21),
-            Err(Error::OutOfOrder { name }) if name == "three"
+            builder.pileup("chr1", position),
+            Err(Error::Stopped)
         ));
     }
 
@@ -1001,13 +1005,37 @@ fn test_a_pileup_is_built_again_after_a_failed_advance() {
     });
     assert_eq!(names(&builder.pileup("chr1", 10).unwrap()), ["one"]);
     assert!(matches!(builder.pileup("chr1", 20), Err(Error::Io(_))));
-    let retried = builder.pileup("chr1", 20).unwrap();
-    assert_eq!(
-        (names(&retried), bases(&retried)),
-        (vec!["two".into()], "G".into())
-    );
+    assert!(matches!(builder.pileup("chr1", 20), Err(Error::Stopped)));
     builder.close().unwrap();
+    assert!(matches!(builder.pileup("chr1", 20), Err(Error::Closed)));
     assert_eq!(logged(&tapped), ["one", "two"]);
+}
+
+#[test]
+fn test_a_read_the_read_filter_fails_on_is_never_left_out_of_a_later_pileup() {
+    let reads: Vec<Read> = (0..6)
+        .map(|start| read(&format!("r{start}"), start, "10M", "ACGTACGTAC"))
+        .collect();
+    let tapped = log();
+    let mut failed = false;
+    let mut builder = builder(&reads)
+        .try_read_filter(move |record: &bam::Record| {
+            if name(record) == "r3" && !failed {
+                failed = true;
+                return Err(io::Error::other("transient"));
+            }
+            Ok(true)
+        })
+        .tap(tap_into(&tapped));
+    assert!(matches!(builder.pileup("chr1", 5), Err(Error::Io(_))));
+    for position in [5, 6] {
+        assert!(matches!(
+            builder.pileup("chr1", position),
+            Err(Error::Stopped)
+        ));
+    }
+    builder.close().unwrap();
+    assert_eq!(logged(&tapped), read_names(&reads));
 }
 
 #[test]
@@ -1028,7 +1056,7 @@ fn test_a_read_that_fails_to_be_accepted_still_reaches_the_tap() {
         builder.pileup("chr1", 12),
         Err(Error::InvalidRecord { name, .. }) if name == "bad"
     ));
-    assert_eq!(names(&builder.pileup("chr1", 31).unwrap()), ["after"]);
+    assert!(matches!(builder.pileup("chr1", 31), Err(Error::Stopped)));
     builder.close().unwrap();
     assert_eq!(logged(&evicted), ["before", "bad", "after"]);
 
