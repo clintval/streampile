@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use noodles::bam;
 use noodles::sam::alignment::record::cigar::op::Kind;
 use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyString, PyTuple};
@@ -191,14 +192,14 @@ impl Rows {
         self.ref_rev += ledger.ref_rev[offset];
         let pos = ledger.start + offset as i64;
         let fields = PyDict::new(py);
-        fields.set_item("contig", contig)?;
-        fields.set_item("pos", pos + 1)?;
-        fields.set_item("ref", char::from(base))?;
-        fields.set_item("depth", self.depth)?;
-        fields.set_item("no_calls", ledger.no_calls[offset])?;
-        fields.set_item("ref_reads", self.ref_fwd + self.ref_rev)?;
-        fields.set_item("ref_fwd", self.ref_fwd)?;
-        fields.set_item("ref_rev", self.ref_rev)?;
+        fields.set_item(intern!(py, "contig"), contig)?;
+        fields.set_item(intern!(py, "pos"), pos + 1)?;
+        fields.set_item(intern!(py, "ref"), char::from(base))?;
+        fields.set_item(intern!(py, "depth"), self.depth)?;
+        fields.set_item(intern!(py, "no_calls"), ledger.no_calls[offset])?;
+        fields.set_item(intern!(py, "ref_reads"), self.ref_fwd + self.ref_rev)?;
+        fields.set_item(intern!(py, "ref_fwd"), self.ref_fwd)?;
+        fields.set_item(intern!(py, "ref_rev"), self.ref_rev)?;
         if let Some(counts) = ledger.alleles.remove(&pos) {
             let mut alleles: Vec<(AlleleKey, Strands)> = counts.into_iter().collect();
             alleles.sort_by(|(a, [a_fwd, a_rev]), (b, [b_fwd, b_rev])| {
@@ -210,11 +211,13 @@ impl Rows {
             let count = |pick: fn(&Strands) -> i64| -> PyResult<Bound<'_, PyTuple>> {
                 PyTuple::new(py, alleles.iter().map(|(_, counts)| pick(counts)))
             };
-            fields.set_item("alt_refs", PyTuple::new(py, refs.collect::<Vec<_>>())?)?;
-            fields.set_item("alts", PyTuple::new(py, alts.collect::<Vec<_>>())?)?;
-            fields.set_item("alt_reads", count(|[fwd, rev]| fwd + rev)?)?;
-            fields.set_item("alt_fwd", count(|[fwd, _]| *fwd)?)?;
-            fields.set_item("alt_rev", count(|[_, rev]| *rev)?)?;
+            let refs = PyTuple::new(py, refs.collect::<Vec<_>>())?;
+            fields.set_item(intern!(py, "alt_refs"), refs)?;
+            let alts = PyTuple::new(py, alts.collect::<Vec<_>>())?;
+            fields.set_item(intern!(py, "alts"), alts)?;
+            fields.set_item(intern!(py, "alt_reads"), count(|[fwd, rev]| fwd + rev)?)?;
+            fields.set_item(intern!(py, "alt_fwd"), count(|[fwd, _]| *fwd)?)?;
+            fields.set_item(intern!(py, "alt_rev"), count(|[_, rev]| *rev)?)?;
         }
         let class = TABULATED_BASE.get_or_try_init(py, || {
             py.import("streampile._table")?
