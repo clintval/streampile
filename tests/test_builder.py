@@ -893,3 +893,30 @@ def test_dropping_a_builder_without_closing_it_hands_no_more_reads_to_the_tap() 
     builder.pileup("chr1", 20)
     del builder
     assert tapped == reads[:1]
+
+
+@pytest.mark.parametrize(
+    "cigar,bases,placed",
+    [
+        ("4M", "ACGT", True),
+        ("1D3M", "ACG", True),
+        ("2S2N2M", "ACGT", True),
+        ("1=1X2S", "ACGT", True),
+        ("4D", "*", True),
+        ("4S", "ACGT", False),
+        ("4I", "ACGT", False),
+        ("2S2I", "ACGT", False),
+        ("4H4S", "ACGT", False),
+        ("1S2I1S", "ACGT", False),
+    ],
+)
+def test_a_builder_accepts_only_reads_with_a_reference_consuming_operator(
+    cigar: str, bases: str, placed: bool
+) -> None:
+    assert StreamingPileupBuilder([]).accepts(record("r", 10, cigar, bases)) is placed
+
+
+def test_a_builder_accepts_only_mapped_reads() -> None:
+    builder = StreamingPileupBuilder([])
+    assert not builder.accepts(unmapped("u"))
+    assert not builder.accepts(record("r", 10, "4M", "ACGT", flag=4))
