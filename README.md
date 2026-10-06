@@ -22,10 +22,12 @@ pip install streampile
 
 ## Quickstart
 
+The examples read `tests/data/reads.bam`, whose reads are named for what they carry, such as `plain`, `snv`, `mnv`, `lowqual`, `insertion`, and `deletion`.
+
 ### Building Pileups
 
 A `StreamingPileupBuilder` reads records once and piles them up at the 0-based positions you ask for, moving forward only.
-Give the `AlignmentFile` threads to decompress the BAM with, which pays at depth, as the [benchmarks](https://github.com/clintval/streampile/blob/main/benchmarks/README.md) show.
+Give the `AlignmentFile` threads to decompress the BAM with, which pays at depth, as the [benchmarks](https://github.com/clintval/streampile/blob/main/benchmarks/README.md) show; for CRAM, also give it `reference_filename`.
 
 ```pycon
 >>> from pysam import AlignmentFile
@@ -38,12 +40,14 @@ Give the `AlignmentFile` threads to decompress the BAM with, which pays at depth
 ...     first = builder.pileup("chr1", 10)
 ...     second = builder.pileup("chr1", 12)
 >>>
->>> first.filtered_depth, first.bases
-(4, ['A', 'T', 'G', 'A'])
->>> second.filtered_depth, second.bases
-(3, ['G', 'G', 'G'])
+>>> first.unfiltered_depth, first.filtered_depth, first.bases
+(4, 4, ['A', 'T', 'G', 'A'])
+>>> second.unfiltered_depth, second.filtered_depth, second.bases
+(4, 3, ['G', 'G', 'G'])
 
 ```
+
+At 12, the base of `lowqual` is under the quality floor, so it counts toward `unfiltered_depth` only.
 
 Filter reads with `read_filter`, and count each template once with `without_overlaps()`:
 
@@ -70,6 +74,8 @@ Each entry also measures its base's distance from the read's 5′ end and to the
 
 ```
 
+The unpaired read has no template end, and the two mates of the pair mirror each other.
+
 ### Tapping Every Record
 
 `tap` receives every record, in input order, once the builder has moved past it, so a record can be changed, e.g. tagged, while it is piled up.
@@ -93,15 +99,27 @@ Pileups see each read as it was when the builder read it; changes made after tha
 ### Sweeping a Territory
 
 `columns` yields the pileup at every position of a span.
+Its views, such as `bases`, `qualities`, and the depths, are computed in Rust, so prefer them to looping over `pileups` in Python, which is where the time goes at depth.
 
 ```pycon
->>> with AlignmentFile("tests/data/reads.bam") as reads, StreamingPileupBuilder(reads) as builder:
-...     sum(pileup.unfiltered_depth for pileup in builder.columns("chr1", 0, 20))
-73
+>>> from collections import Counter
+>>>
+>>> with (
+...     AlignmentFile("tests/data/reads.bam") as reads,
+...     StreamingPileupBuilder(reads, min_base_quality=30) as builder,
+... ):
+...     counts = [(pileup.reference_pos, Counter(pileup.bases)) for pileup in builder.columns("chr1", 9, 13)]
+>>>
+>>> for pos, count in counts:
+...     print(pos, dict(count))
+9 {'A': 4}
+10 {'A': 2, 'T': 1, 'G': 1}
+11 {'C': 3, 'G': 1}
+12 {'G': 3}
 
 ```
 
-Each pileup is a snapshot that outlives the builder moving on, and its views, such as `bases`, `qualities`, and the depths, are worked out in Rust.
+Each pileup is a snapshot that outlives the builder moving on.
 
 ### Tabulating Alleles
 
@@ -122,14 +140,14 @@ Alleles are normalized VCF alleles at 1-based positions, so they match a VCF by 
 ...     bases = list(tabulate(reads, reference, territory, min_base_quality=30))
 >>>
 >>> for base in bases:
-...     print(base.pos, base.ref, base.depth, base.alts, base.alt_reads)
-10 A 4 () ()
-11 A 4 ('T', 'GG') (1, 1)
-12 C 4 () ()
+...     print(base.pos, base.ref, base.depth, base.alts, base.alt_reads, base.alt_fwd, base.alt_rev)
+10 A 4 () () () ()
+11 A 4 ('T', 'GG') (1, 1) (1, 0) (0, 1)
+12 C 4 () () () ()
 
 ```
 
-Each base also splits its reads by strand and counts no-calls apart from its depth.
+`alt_fwd` and `alt_rev` split each allele's reads by strand, and `no_calls` counts `N` bases apart from the depth.
 
 ### Reading a Table
 
