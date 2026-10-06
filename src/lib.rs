@@ -23,4 +23,4 @@ pub use error::{Error, Result};
 pub use overlap::{AgreementStrategy, DisagreementStrategy};
 pub use pileup::{EntryKind, MISSING_BASE_QUALITY, Pileup, PileupEntry, PileupTemplate};
 pub use source::{AlignmentRecord, RecordSource, Records};
-pub use template::{five_prime_distance, template_end_distance};
+pub use template::{five_prime_distance, is_fr_pair, template_end_distance};

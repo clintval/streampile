@@ -322,6 +322,34 @@ def test_a_templates_strand_and_distances_are_its_first_reads() -> None:
     assert template.template_end_distance == 4
 
 
+def test_a_read_is_of_an_fr_pair_when_its_forward_5_prime_end_is_at_or_before_its_reverse() -> None:
+    def mated(start1: int, flag1: int, start2: int, flag2: int) -> list[AlignedSegment]:
+        reads = [
+            record("t", start1, "10M", "A" * 10, flag=flag1),
+            record("t", start2, "10M", "C" * 10, flag=flag2),
+        ]
+        for read, mate in ((reads[0], reads[1]), (reads[1], reads[0])):
+            read.next_reference_id = 0
+            read.next_reference_start = mate.reference_start
+            read.set_tag("MC", "10M")  # pyright: ignore[reportUnknownMemberType]
+        return reads
+
+    tie = mated(109, 99, 100, 147)
+    pileup = Pileup.from_alignments(tie, "chr1", 109)
+    assert [(read.is_fr_pair, read.template_end_distance) for read in pileup.pileups] == [
+        (True, 0),
+        (True, 0),
+    ]
+    outward = mated(100, 83, 200, 163)
+    for pos in (105, 205):
+        (read,) = Pileup.from_alignments(outward, "chr1", pos).pileups
+        assert (read.is_fr_pair, read.template_end_distance) == (False, None)
+    tie[0].set_tag("MC", None)  # pyright: ignore[reportUnknownMemberType]
+    (read, _) = Pileup.from_alignments(tie, "chr1", 109).pileups
+    with pytest.raises(ValueError, match="no MC tag"):
+        _ = read.is_fr_pair
+
+
 def test_a_template_reads_its_strand_from_its_second_read_without_its_first() -> None:
     read = record("t", 10, "4M", "ACGT", flag=163)
     template = Pileup.from_alignments([read], "chr1", 12).templates()[0]

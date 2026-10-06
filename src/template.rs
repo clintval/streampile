@@ -7,6 +7,10 @@
 //! align to none in common, the reference between them is counted one base per position.
 //! Soft-clipped bases are template bases and hard-clipped bases, which the record no longer
 //! holds, are not. The template length (TLEN) is never read.
+//!
+//! A pair is FR as htsjdk 5.0.0's `SamPairUtil.getPairOrientation` classifies it
+//! (samtools/htsjdk#1771), which fgbio pins: the forward read's aligned 5′ position is at or
+//! before the reverse read's.
 
 use std::io;
 
@@ -73,17 +77,6 @@ impl Alignment {
         })
     }
 
-    /// The alignment a CIGAR string describes for a mate at a 0-based start, or `None` for one
-    /// that does not span a base or has an operator longer than BAM allows.
-    pub(crate) fn of_mate(start: i64, text: &[u8]) -> Option<Self> {
-        let ops = sam::record::Cigar::new(text)
-            .iter()
-            .map(|op| op.ok().filter(|op| op.len() <= LONGEST_OPERATOR))
-            .map(|op| op.map(|op| (op.kind(), op.len() as i64)))
-            .collect::<Option<Vec<_>>>()?;
-        Self::new(start, ops)
-    }
-
     /// The query offset at a 0-based reference position, and whether a base lies there.
     ///
     /// Inside a deletion or a skip it is the offset of the next base, with no base. Before the
@@ -144,6 +137,25 @@ impl Alignment {
     }
 }
 
+/// The operators of a CIGAR string, or `None` for none, for text that is not a CIGAR string, or
+/// for an operator longer than BAM allows.
+pub(crate) fn parse_cigar(text: &[u8]) -> Option<Vec<(Kind, i64)>> {
+    let ops = sam::record::Cigar::new(text)
+        .iter()
+        .map(|op| op.ok().filter(|op| op.len() <= LONGEST_OPERATOR))
+        .map(|op| op.map(|op| (op.kind(), op.len() as i64)))
+        .collect::<Option<Vec<_>>>()?;
+    (!ops.is_empty()).then_some(ops)
+}
+
+/// The number of reference positions CIGAR operators span.
+fn reference_span(ops: &[(Kind, i64)]) -> i64 {
+    ops.iter()
+        .filter(|(kind, _)| kind.consumes_reference())
+        .map(|(_, len)| len)
+        .sum()
+}
+
 /// The distance of a read's base, at a query offset, from the read's 5′ end, in bases as
 /// sequenced: the offset for a forward read and counted from the other end for a reverse one, so
 /// soft-clipped bases count and hard-clipped ones do not. It is `None` for an offset past the read.
@@ -165,30 +177,46 @@ pub(crate) fn from_five_prime(reverse: bool, length: usize, offset: usize) -> Op
     }
 }
 
-/// The number of the template's bases between a 0-based reference position of a record and the
-/// 5′ end of its mate in an FR pair: 0 at the mate's 5′ end.
+/// Whether a record is a read of an FR pair, as htsjdk 5.0.0's `SamPairUtil.getPairOrientation`
+/// classifies it (samtools/htsjdk#1771), which fgbio pins.
 ///
-/// It walks the record's CIGAR and the mate's, from its `MC` tag, so an indel counts by its
-/// length; soft-clipped bases count and hard-clipped bases do not, and the template length (TLEN)
-/// is never read. It is `None` for a fragment, a read whose mate is unmapped or on another contig,
-/// a pair that is not FR, and a position past the mate's 5′ end. The header resolves the record's
+/// A pair is FR when its reads are paired, mapped to one contig, and on opposite strands, and the
+/// forward read's 5′ position is at or before the reverse read's, so a pair whose 5′ ends coincide
+/// is FR. Positions are aligned, not unclipped: a reverse record's aligned end is compared with its
+/// mate's start, and a forward record's start with its mate's aligned end, from the `MC` tag and
+/// never from the template length (TLEN). An end is the start plus the reference span less one,
+/// so a read that spans no reference ends before it starts. The header resolves the record's
 /// contigs, which a BAM record holds as indices.
 ///
-/// A record of an FR pair with no `MC` tag, or one that is not a CIGAR string spanning at least
-/// one base, is an error naming the record.
-pub fn template_end_distance<R: Record + ?Sized>(
-    record: &R,
-    header: &sam::Header,
-    position: usize,
-) -> Result<Option<usize>> {
+/// A forward record of a pair otherwise FR with no `MC` tag, or one that is not a CIGAR string, is
+/// an error naming the record.
+pub fn is_fr_pair<R: Record + ?Sized>(record: &R, header: &sam::Header) -> Result<bool> {
+    Ok(pairing(record, header)?.is_some())
+}
+
+/// A read of an FR pair: its own CIGAR and 0-based start, its mate's 0-based start, and, for a
+/// forward read, its mate's CIGAR, read from `MC` to classify the pair.
+struct Pairing {
+    start: i64,
+    ops: Vec<(Kind, i64)>,
+    mate_start: i64,
+    mate_ops: Option<Vec<(Kind, i64)>>,
+}
+
+/// The pairing of a record of an FR pair, or `None` for any other record.
+fn pairing<R: Record + ?Sized>(record: &R, header: &sam::Header) -> Result<Option<Pairing>> {
     let flags = record.flags()?;
     let reverse = flags.is_reverse_complemented();
+    let (id, mate_id) = (
+        record.reference_sequence_id(header).transpose()?,
+        record.mate_reference_sequence_id(header).transpose()?,
+    );
     if !flags.is_segmented()
         || flags.is_unmapped()
         || flags.is_mate_unmapped()
         || reverse == flags.is_mate_reverse_complemented()
-        || record.reference_sequence_id(header).transpose()?
-            != record.mate_reference_sequence_id(header).transpose()?
+        || id.is_none()
+        || id != mate_id
     {
         return Ok(None);
     }
@@ -198,36 +226,99 @@ pub fn template_end_distance<R: Record + ?Sized>(
     ) else {
         return Ok(None);
     };
+    let (start, mate_start) = (
+        usize::from(start) as i64 - 1,
+        usize::from(mate_start) as i64 - 1,
+    );
     let ops = record
         .cigar()
         .iter()
         .map(|op| op.map(|op| (op.kind(), op.len() as i64)))
         .collect::<io::Result<Vec<_>>>()?;
-    let Some(read) = Alignment::new(usize::from(start) as i64 - 1, ops) else {
-        return Ok(None);
+    let (fr, mate_ops) = if reverse {
+        let end = start + reference_span(&ops) - 1;
+        (mate_start <= end, None)
+    } else {
+        let mate_ops = mate_cigar(record)?;
+        let mate_end = mate_start + reference_span(&mate_ops) - 1;
+        (start <= mate_end, Some(mate_ops))
     };
-    let name = || {
-        record
-            .name()
-            .map_or_else(|| "*".to_owned(), |name| name.to_str_lossy().into_owned())
-    };
+    Ok(fr.then_some(Pairing {
+        start,
+        ops,
+        mate_start,
+        mate_ops,
+    }))
+}
+
+/// The operators of a record's mate's CIGAR, from its `MC` tag.
+fn mate_cigar<R: Record + ?Sized>(record: &R) -> Result<Vec<(Kind, i64)>> {
     let Some(value) = record.data().get(&Tag::MATE_CIGAR).transpose()? else {
-        return Err(Error::MissingMateCigar { name: name() });
-    };
-    let mate_start = usize::from(mate_start) as i64 - 1;
-    let mate = match &value {
-        Value::String(text) => Alignment::of_mate(mate_start, text),
-        _ => None,
-    };
-    let Some(mate) = mate else {
-        return Err(Error::InvalidMateCigar {
-            name: name(),
-            value: match value {
-                Value::String(text) => text.to_str_lossy().into_owned(),
-                other => format!("{other:?}"),
-            },
+        return Err(Error::MissingMateCigar {
+            name: name_of(record),
         });
     };
+    match &value {
+        Value::String(text) => parse_cigar(text),
+        _ => None,
+    }
+    .ok_or_else(|| invalid_mate_cigar(record, value))
+}
+
+/// The error of a record whose `MC` tag holds a value that is not a usable CIGAR string.
+fn invalid_mate_cigar<R: Record + ?Sized>(record: &R, value: Value<'_>) -> Error {
+    Error::InvalidMateCigar {
+        name: name_of(record),
+        value: match value {
+            Value::String(text) => text.to_str_lossy().into_owned(),
+            other => format!("{other:?}"),
+        },
+    }
+}
+
+/// A record's name, `*` for a record with none.
+fn name_of<R: Record + ?Sized>(record: &R) -> String {
+    record
+        .name()
+        .map_or_else(|| "*".to_owned(), |name| name.to_str_lossy().into_owned())
+}
+
+/// The number of the template's bases between a 0-based reference position of a record and the
+/// 5′ end of its mate in an FR pair: 0 at the mate's 5′ end.
+///
+/// It walks the record's CIGAR and the mate's, from its `MC` tag, so an indel counts by its
+/// length; soft-clipped bases count and hard-clipped bases do not, and the template length (TLEN)
+/// is never read. It is `None` for any record [`is_fr_pair`] does not call a read of an FR pair,
+/// such as a fragment, a read whose mate is unmapped or on another contig, or a read of an
+/// outward-facing pair, and for a read of an FR pair only at a position past the mate's 5′ end.
+/// The header resolves the record's contigs, which a BAM record holds as indices.
+///
+/// A record of an FR pair with no `MC` tag, or one that is not a CIGAR string spanning at least
+/// one base, is an error naming the record.
+pub fn template_end_distance<R: Record + ?Sized>(
+    record: &R,
+    header: &sam::Header,
+    position: usize,
+) -> Result<Option<usize>> {
+    let Some(pairing) = pairing(record, header)? else {
+        return Ok(None);
+    };
+    let mate_ops = match pairing.mate_ops {
+        Some(ops) => ops,
+        None => mate_cigar(record)?,
+    };
+    let Some(mate) = Alignment::new(pairing.mate_start, mate_ops) else {
+        let value = record
+            .data()
+            .get(&Tag::MATE_CIGAR)
+            .transpose()?
+            .unwrap_or(Value::String(b"".as_bstr()));
+        return Err(invalid_mate_cigar(record, value));
+    };
+    let Some(read) = Alignment::new(pairing.start, pairing.ops) else {
+        return Ok(None);
+    };
+    let reverse = record.flags()?.is_reverse_complemented();
     Ok(usize::try_from(distance(&read, &mate, reverse, position as i64)).ok())
 }
 

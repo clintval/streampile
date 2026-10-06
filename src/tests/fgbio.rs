@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use super::{Read, bases, builder, name, names, read};
-use crate::template::Alignment;
+use crate::template::{Alignment, parse_cigar};
 use crate::{EntryKind, Error};
 
 const READ_LENGTH: usize = 50;
@@ -526,7 +526,7 @@ fn test_a_template_end_is_absent_for_a_read_past_its_mates_alignment() {
 
 #[test]
 fn test_a_mate_cigar_must_span_a_base_with_operators_bam_allows() {
-    let mate = |text: &str| Alignment::of_mate(0, text.as_bytes());
+    let mate = |text: &str| parse_cigar(text.as_bytes()).and_then(|ops| Alignment::new(0, ops));
     for valid in ["10M2I3D4N1=1X5S2H1P", "+3M", "268435455M268435455N"] {
         assert!(mate(valid).is_some(), "{valid}");
     }

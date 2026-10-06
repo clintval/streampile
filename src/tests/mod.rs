@@ -2,6 +2,7 @@ mod builder;
 mod fgbio;
 mod fixture;
 mod footprint;
+mod orientation;
 mod pileup;
 mod templates;
 mod testing;

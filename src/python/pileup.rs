@@ -20,8 +20,8 @@ use crate::pileup::{
     EntryKind, MISSING_BASE_QUALITY, NONE, TemplateName, name_hash, name_of, number_templates,
 };
 use crate::template::from_five_prime;
-use crate::template_end_distance;
 use crate::{DEFAULT_MIN_BASE_QUALITY, PileupEntry};
+use crate::{is_fr_pair, template_end_distance};
 
 const ABSENT: i64 = i64::MIN;
 
@@ -195,6 +195,10 @@ impl Held {
             template_end_distance(self.bam(), &noodles::sam::Header::default(), position)
                 .map_err(to_python)?;
         Ok(distance.map(|distance| distance as i64))
+    }
+
+    fn is_fr_pair(&self) -> PyResult<bool> {
+        is_fr_pair(self.bam(), &noodles::sam::Header::default()).map_err(to_python)
     }
 
     /// The reference position of the read's base at the query position, for an entry made by
@@ -520,10 +524,10 @@ impl PileupRead {
     /// It walks the read's CIGAR and the mate's, from its `MC` tag, so an indel counts by its
     /// length; soft-clipped bases count and hard-clipped bases, absent from the records, do not.
     /// Where the mate has no base, a position both reads align to carries the count, or else the
-    /// reference between them; the template length (TLEN) is never read. It is `None` for a
-    /// fragment, a read whose mate is unmapped or on another contig, a pair that is not FR, a
-    /// position past the mate's 5′ end, where a read runs through its mate, and an entry made by
-    /// hand that holds no base, whose position is unknown.
+    /// reference between them; the template length (TLEN) is never read. It is `None` for a read
+    /// that `is_fr_pair` does not call a read of an FR pair, for a read of an FR pair only at a
+    /// position past the mate's 5′ end, where a read runs through its mate, and for an entry made
+    /// by hand that holds no base, whose position is unknown.
     ///
     /// Raises:
     ///     ValueError: for a read of an FR pair with no `MC` tag, or one that is not a CIGAR
@@ -531,6 +535,21 @@ impl PileupRead {
     #[getter]
     fn template_end_distance(&self) -> PyResult<Option<i64>> {
         self.held.template_end_distance(self.position)
+    }
+
+    /// Whether the read is a read of an FR pair, as htsjdk 5.0.0's `getPairOrientation` says.
+    ///
+    /// A pair is FR when its reads are paired, mapped to one contig, and on opposite strands, and
+    /// the forward read's aligned 5′ position is at or before the reverse read's, so a pair whose
+    /// 5′ ends coincide is FR. A forward read takes its mate's aligned end from its `MC` tag and
+    /// never from the template length (TLEN).
+    ///
+    /// Raises:
+    ///     ValueError: for a forward read of a pair otherwise FR with no `MC` tag, or one that is
+    ///         not a CIGAR string.
+    #[getter]
+    fn is_fr_pair(&self) -> PyResult<bool> {
+        self.held.is_fr_pair()
     }
 
     #[pyo3(name = "_asdict")]
@@ -1136,7 +1155,8 @@ impl PileupTemplate {
     /// the second read of an FR pair.
     ///
     /// It is the first read's `template_end_distance`, and without the first read here the second
-    /// read's `five_prime_distance`.
+    /// read's `five_prime_distance` where that read `is_fr_pair`; it is `None` for any pair that is
+    /// not FR.
     ///
     /// Raises:
     ///     ValueError: for a read of an FR pair with no usable `MC` tag.
@@ -1144,7 +1164,8 @@ impl PileupTemplate {
     fn template_end_distance(&self) -> PyResult<Option<i64>> {
         match self.first_read() {
             Some(first) => first.template_end_distance(Some(self.position)),
-            None => Ok(self.reads[0].five_prime_distance()),
+            None if self.reads[0].is_fr_pair()? => Ok(self.reads[0].five_prime_distance()),
+            None => Ok(None),
         }
     }
 

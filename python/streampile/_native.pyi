@@ -120,6 +120,9 @@ class PileupRead:
     @property
     def template_end_distance(self) -> int | None:
         """The template's bases between the position and the 5′ end of the read's mate in an FR pair."""
+    @property
+    def is_fr_pair(self) -> bool:
+        """Whether the read is a read of an FR pair, as htsjdk 5.0.0's `getPairOrientation` says."""
     def _asdict(self) -> dict[str, Any]: ...
     def _replace(
         self,

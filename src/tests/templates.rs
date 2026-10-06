@@ -444,3 +444,32 @@ fn test_a_pileup_without_a_base_deletion_or_skip_has_no_templates() {
             .is_empty()
     );
 }
+
+#[test]
+fn test_a_template_of_a_pair_that_is_not_fr_has_no_template_end() {
+    let reads = [
+        read("t", 100, "10M", &"A".repeat(10))
+            .flag(83)
+            .mate("chr1", 200, 0)
+            .tag("MC:Z:10M"),
+        read("t", 200, "10M", &"C".repeat(10))
+            .flag(163)
+            .mate("chr1", 100, 0)
+            .tag("MC:Z:10M"),
+    ];
+    let mut builder = unfiltered(&reads);
+    for position in [105, 205] {
+        let pileup = builder.pileup("chr1", position).unwrap();
+        let templates = pileup.templates(
+            AgreementStrategy::default(),
+            DisagreementStrategy::default(),
+        );
+        let template = &templates[0];
+        assert!(!template.entries().next().unwrap().is_fr_pair().unwrap());
+        assert_eq!(
+            template.template_end_distance().unwrap(),
+            None,
+            "{position}"
+        );
+    }
+}
