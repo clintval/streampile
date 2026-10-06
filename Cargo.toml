@@ -8,7 +8,7 @@ license = "MIT"
 description = "Forward-only pileups streamed from coordinate-sorted BAM records"
 repository = "https://github.com/clintval/streampile"
 documentation = "https://docs.rs/streampile"
-readme = "README.md"
+readme = "README.crate.md"
 categories = ["science::bioinformatics"]
 keywords = ["bioinformatics", "pileup", "bam", "genomics", "sequencing"]
 include = [
@@ -16,7 +16,7 @@ include = [
     "/Cargo.lock",
     "/LICENSE",
     "/NOTICE",
-    "/README.md",
+    "/README.crate.md",
     "/examples/**/*.rs",
     "/src/**/*.rs",
     "/tests/data/reads.bam",

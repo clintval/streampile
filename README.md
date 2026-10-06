@@ -9,7 +9,10 @@
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://docs.astral.sh/uv/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://docs.astral.sh/ruff/)
 
-Forward-only pileups streamed from coordinate-sorted BAM and CRAM records, and a table of the alleles at every base.
+Forward-only pileups streamed from coordinate-sorted SAM, BAM, and CRAM records, and a table of the alleles at every base.
+
+[pysam](https://github.com/pysam-developers/pysam) reads the records, so streampile reads whatever pysam reads, and Rust piles them up and tabulates them.
+The Rust core is also the [`streampile`](https://crates.io/crates/streampile) crate, which reads BAM.
 
 ## Installation
 
@@ -17,24 +20,19 @@ Forward-only pileups streamed from coordinate-sorted BAM and CRAM records, and a
 pip install streampile
 ```
 
-The streaming pileup core is also a Rust crate, which the Python package will build on:
-
-```console
-cargo add streampile
-```
-
 ## Quickstart
 
 ### Building Pileups
 
 A `StreamingPileupBuilder` reads records once and piles them up at the 0-based positions you ask for, moving forward only.
+Give the `AlignmentFile` threads to decompress the BAM with, which pays at depth, as the [benchmarks](https://github.com/clintval/streampile/blob/main/benchmarks/README.md) show.
 
 ```pycon
 >>> from pysam import AlignmentFile
 >>> from streampile import StreamingPileupBuilder
 >>>
 >>> with (
-...     AlignmentFile("tests/data/reads.bam") as reads,
+...     AlignmentFile("tests/data/reads.bam", threads=4) as reads,
 ...     StreamingPileupBuilder(reads, min_base_quality=30) as builder,
 ... ):
 ...     first = builder.pileup("chr1", 10)
@@ -61,7 +59,35 @@ Filter reads with `read_filter`, and count each template once with `without_over
 
 ```
 
-Pass `tap=writer.write` to receive every record, in input order, once the builder has moved past it.
+Each entry also measures its base's distance from the read's 5′ end and to the template's other end, the 5′ end of its mate in an FR pair, which is found from the `MC` tag:
+
+```pycon
+>>> with AlignmentFile("tests/data/reads.bam") as reads, StreamingPileupBuilder(reads) as builder:
+...     pileup = builder.pileup("chr1", 45)
+>>>
+>>> [(entry.alignment.flag, entry.five_prime_distance, entry.template_end_distance) for entry in pileup.pileups]
+[(0, 5, None), (99, 5, 14), (147, 14, 5)]
+
+```
+
+### Tapping Every Record
+
+`tap` receives every record, in input order, once the builder has moved past it, so a record can be changed, e.g. tagged, while it is piled up.
+Each entry's `alignment` is the very record read, so pass `tap=writer.write` to write the changed records to an `AlignmentFile` opened with `template=reads`.
+
+```pycon
+>>> passed = []
+>>> with (
+...     AlignmentFile("tests/data/reads.bam", threads=4) as reads,
+...     StreamingPileupBuilder(reads, tap=passed.append) as builder,
+... ):
+...     for entry in builder.pileup("chr1", 10).pileups:
+...         entry.alignment.set_tag("XB", entry.base)
+>>>
+>>> len(passed), [(read.query_name, read.get_tag("XB")) for read in passed if read.has_tag("XB")]
+(13, [('plain', 'A'), ('snv', 'T'), ('mnv', 'G'), ('lowqual', 'A')])
+
+```
 
 ### Sweeping a Territory
 
@@ -73,6 +99,8 @@ Pass `tap=writer.write` to receive every record, in input order, once the builde
 73
 
 ```
+
+Each pileup is a snapshot that outlives the builder moving on, and its views, such as `bases`, `qualities`, and the depths, are worked out in Rust.
 
 ### Tabulating Alleles
 
@@ -144,6 +172,7 @@ chr1	23	C	4	0	3	2	1	CA	C	1	0	1
 chr1	24	A	4	0	3	2	1					
 ```
 
+`--threads` sets the threads decompressing the BAM and compressing a BGZF table.
 Write to a `.gz` path with `--index tbi` to compress and index the table, then read a region back:
 
 ```python
