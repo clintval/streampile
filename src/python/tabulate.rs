@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use noodles::bam;
 use noodles::sam::alignment::record::cigar::op::Kind;
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::PyValueError;
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -507,7 +507,7 @@ impl Options {
                 query_start -= 1;
             }
             let reference_bases = reference.get(py, ref_start, ref_end)?.to_vec();
-            let alternate = python_slice(&read.sequence, query_start, query_end).to_vec();
+            let alternate = slice(&read.sequence, query_start, query_end).to_vec();
             let opens_with_insertion = first.is_indel && first.ref_end == first.ref_start;
             let closes_with_deletion = last.is_indel && last.ref_end > last.ref_start;
             let judged_from = if opens_with_insertion {
@@ -520,19 +520,14 @@ impl Options {
             } else {
                 query_end
             };
-            let under_floor = || -> PyResult<bool> {
-                let Some(qualities) = qualities else {
-                    return Ok(false);
-                };
-                let judged = python_slice(qualities, judged_from, judged_to);
-                let lowest = judged
+            let under_floor = qualities.is_some_and(|qualities| {
+                slice(qualities, judged_from, judged_to)
                     .iter()
                     .min()
-                    .ok_or_else(|| PyValueError::new_err("min() iterable argument is empty"))?;
-                Ok(*lowest < self.min_base_quality)
-            };
+                    .is_some_and(|&lowest| lowest < self.min_base_quality)
+            });
             if (closes_with_deletion && !run.closed)
-                || under_floor()?
+                || under_floor
                 || alternate.contains(&b'N')
                 || !reference_bases.iter().copied().all(is_acgt)
             {
@@ -594,17 +589,14 @@ impl Options {
             let end = segment.query + segment.length;
             let at = |offset: i64| segment.reference + offset;
             let from = segment.query.clamp(0, read.sequence.len() as i64);
-            for (offset, &base) in python_slice(&read.sequence, segment.query, end)
-                .iter()
-                .enumerate()
-            {
+            for (offset, &base) in slice(&read.sequence, segment.query, end).iter().enumerate() {
                 if base == b'N' {
                     no_calls.push(at(from + offset as i64 - segment.query));
                 }
             }
             if low {
                 let from = segment.query.clamp(0, read.qualities.len() as i64);
-                for (offset, &quality) in python_slice(&read.qualities, segment.query, end)
+                for (offset, &quality) in slice(&read.qualities, segment.query, end)
                     .iter()
                     .enumerate()
                 {
@@ -624,13 +616,6 @@ impl Options {
     }
 }
 
-/// A Python slice of bytes from `start` to `end`, with negative bounds counted from the end.
-fn python_slice(bytes: &[u8], start: i64, end: i64) -> &[u8] {
-    let length = bytes.len() as i64;
-    let bound = |value: i64| if value < 0 { value + length } else { value };
-    slice(bytes, bound(start), bound(end))
-}
-
 /// Trims and left-aligns an allele as `bcftools norm` does, or returns `None` for an allele
 /// that changes nothing or would move past `floor`.
 fn normalize<T: Copy + Eq>(
@@ -643,13 +628,12 @@ fn normalize<T: Copy + Eq>(
     if reference == alternate {
         return Ok(None);
     }
-    loop {
-        let (Some(last), Some(other)) = (reference.last(), alternate.last()) else {
-            return Err(PyIndexError::new_err("string index out of range"));
-        };
-        if last != other {
-            break;
-        }
+    if reference.is_empty() || alternate.is_empty() {
+        return Err(PyValueError::new_err(
+            "An allele needs a reference and an alternate base.",
+        ));
+    }
+    while reference.last() == alternate.last() {
         reference.pop();
         alternate.pop();
         if reference.is_empty() || alternate.is_empty() {
@@ -658,6 +642,11 @@ fn normalize<T: Copy + Eq>(
             }
             pos -= 1;
             let base = bases(pos, pos + 1)?;
+            if base.is_empty() {
+                return Err(PyValueError::new_err(format!(
+                    "The reference has no base at position {pos}."
+                )));
+            }
             reference.splice(0..0, base.iter().copied());
             alternate.splice(0..0, base);
         }

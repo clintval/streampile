@@ -137,6 +137,13 @@ def test_normalize_returns_at_once_for_an_allele_that_changes_nothing() -> None:
     assert asked == []
 
 
+def test_normalize_refuses_an_allele_or_a_reference_without_bases() -> None:
+    with pytest.raises(ValueError, match="An allele needs a reference and an alternate base."):
+        normalize(5, "", "A", lambda start, end: CHR1[start:end])
+    with pytest.raises(ValueError, match="The reference has no base at position 1."):
+        normalize(2, "A", "AA", lambda _start, _end: "")
+
+
 def test_alleles_of_one_read(reference: FastaFile) -> None:
     tabulator = Tabulator(reference, min_base_quality=30)
     assert alleles_of(tabulator, 0, "20M", CHR1[0:20]) == []
