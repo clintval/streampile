@@ -512,18 +512,19 @@ impl PileupRead {
         self.held.five_prime_distance()
     }
 
-    /// The distance on the reference from the position to the template's other end, the 5′ end
-    /// of the mate of a read in an FR pair: 0 at the mate's 5′ end.
+    /// The distance on the reference from the position to the template's other end, the
+    /// unclipped 5′ end of the mate of a read in an FR pair: 0 at the mate's 5′ end.
     ///
-    /// For a reverse read, the mate's 5′ end is its alignment start. For a forward read, it is the
-    /// end of the mate's alignment, from its start and its `MC` tag; the template length (TLEN) is
-    /// never read. It is `None` for a fragment, a read whose mate is unmapped or on another
-    /// contig, a pair that is not FR, a position past the mate's 5′ end, where a read runs through
-    /// its mate, and an entry made by hand that holds no base, whose position is unknown.
+    /// The mate's 5′ end comes from its start and its `MC` tag, counting its soft and hard clips:
+    /// its start less the clips before it for a reverse read, and the end of its alignment plus
+    /// the clips after it for a forward read; the template length (TLEN) is never read. It is
+    /// `None` for a fragment, a read whose mate is unmapped or on another contig, a pair that is
+    /// not FR, a position past the mate's 5′ end, where a read runs through its mate, and an entry
+    /// made by hand that holds no base, whose position is unknown.
     ///
     /// Raises:
-    ///     ValueError: for a forward read of an FR pair with no `MC` tag, or one that is not a
-    ///         CIGAR string spanning at least one base.
+    ///     ValueError: for a read of an FR pair with no `MC` tag, or one that is not a CIGAR
+    ///         string spanning at least one base.
     #[getter]
     fn template_end_distance(&self) -> PyResult<Option<i64>> {
         self.held.template_end_distance(self.position)

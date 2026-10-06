@@ -4,6 +4,8 @@ use std::mem;
 
 use bstr::{BStr, ByteSlice};
 use noodles::bam;
+use noodles::sam::alignment::record::cigar::Op;
+use noodles::sam::alignment::record::cigar::op::Kind;
 use noodles::sam::{self, alignment::record::Cigar as _, alignment::record::Flags};
 
 use crate::auxiliary::{self, AuxValue};
@@ -728,11 +730,12 @@ pub(crate) enum MateCigar {
     Found(auxiliary::Field),
 }
 
-/// Where the 5′ end of the mate of a read in an FR pair is, for a read placed from `start` to
-/// `end` on the contig with index `reference_id`.
+/// Where the unclipped 5′ end of the mate of a read in an FR pair is, for a read placed from
+/// `start` to `end` on the contig with index `reference_id`.
 ///
-/// For a reverse read it is the mate's start. For a forward read it is the end of the mate's
-/// alignment, from its start and its `MC` tag alone, never from the template length (TLEN).
+/// For a reverse read it is the mate's start less the clips before it, and for a forward read the
+/// end of the mate's alignment plus the clips after it, both from the mate's start and its `MC`
+/// tag alone, never from the template length (TLEN).
 pub(crate) fn other_end(
     record: &bam::Record,
     reference_id: usize,
@@ -755,43 +758,71 @@ pub(crate) fn other_end(
         return Ok(OtherEnd::None);
     };
     let mate_start = usize::from(mate_start) as i64 - 1;
-    if reverse {
-        return Ok(if mate_start < end {
-            OtherEnd::At(mate_start)
-        } else {
-            OtherEnd::None
-        });
-    }
     let data = record.data().as_bytes();
     let mate_cigar = match mate_cigar {
         MateCigar::Found(field) => Some(field.value(data)?),
         MateCigar::Missing => None,
         MateCigar::Unsearched => auxiliary::find(data, *b"MC")?,
     };
-    Ok(match mate_cigar {
-        None => OtherEnd::MissingMateCigar,
-        Some(value) => match mate_span(value) {
-            None => OtherEnd::InvalidMateCigar,
-            Some(span) if start < mate_start + span => OtherEnd::At(mate_start + span - 1),
-            Some(_) => OtherEnd::None,
-        },
+    let Some(value) = mate_cigar else {
+        return Ok(OtherEnd::MissingMateCigar);
+    };
+    let Some(extent) = mate_extent(value) else {
+        return Ok(OtherEnd::InvalidMateCigar);
+    };
+    let five_prime = if reverse {
+        mate_start - extent.leading
+    } else {
+        mate_start + extent.span - 1 + extent.trailing
+    };
+    let reachable = if reverse {
+        five_prime < end
+    } else {
+        start <= five_prime
+    };
+    Ok(if reachable {
+        OtherEnd::At(five_prime)
+    } else {
+        OtherEnd::None
     })
 }
 
-/// The number of reference bases an `MC` value spans, or `None` for a value that is not a
-/// CIGAR string spanning at least one base with operators no longer than BAM allows.
-pub(crate) fn mate_span(value: AuxValue<'_>) -> Option<i64> {
+/// The extent of a mate's alignment from its `MC` value, in reference bases.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct MateExtent {
+    /// The soft- and hard-clipped bases before the alignment.
+    pub(crate) leading: i64,
+    /// The reference bases the alignment spans.
+    pub(crate) span: i64,
+    /// The soft- and hard-clipped bases after the alignment.
+    pub(crate) trailing: i64,
+}
+
+/// The extent of the alignment an `MC` value describes, or `None` for a value that is not a CIGAR
+/// string spanning at least one base with operators no longer than BAM allows.
+pub(crate) fn mate_extent(value: AuxValue<'_>) -> Option<MateExtent> {
     const LONGEST_OPERATOR: usize = (1 << 28) - 1;
     let AuxValue::String(text) = value else {
         return None;
     };
     let cigar = sam::record::Cigar::new(text);
-    if cigar
+    let ops = cigar
         .iter()
-        .any(|op| op.map_or(true, |op| op.len() > LONGEST_OPERATOR))
-    {
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .ok()?;
+    if ops.iter().any(|op| op.len() > LONGEST_OPERATOR) {
         return None;
     }
-    let span = cigar.alignment_span().ok()?;
-    i64::try_from(span).ok().filter(|&span| span > 0)
+    let span = i64::try_from(cigar.alignment_span().ok()?)
+        .ok()
+        .filter(|&span| span > 0)?;
+    let is_clip = |op: &&Op| matches!(op.kind(), Kind::SoftClip | Kind::HardClip);
+    let clipped = |ops: &mut dyn Iterator<Item = &Op>| -> i64 {
+        ops.take_while(is_clip).map(|op| op.len() as i64).sum()
+    };
+    Some(MateExtent {
+        leading: clipped(&mut ops.iter()),
+        span,
+        trailing: clipped(&mut ops.iter().rev()),
+    })
 }

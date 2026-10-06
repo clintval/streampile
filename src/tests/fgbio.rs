@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use super::{Read, bases, builder, name, names, read};
-use crate::builder::mate_span;
+use crate::builder::{MateExtent, mate_extent};
 use crate::{AuxValue, EntryKind, Error};
 
 const READ_LENGTH: usize = 50;
@@ -337,17 +337,13 @@ fn test_a_template_end_is_measured_from_the_mate_cigar_alone() {
                 match entry.template_end_distance() {
                     Ok(distance) => distances.push((entry.is_reverse(), distance)),
                     Err(Error::MissingMateCigar { name }) => {
-                        assert!(!has_mate_cigar && !entry.is_reverse() && name == "q");
+                        assert!(!has_mate_cigar && name == "q");
                     }
                     Err(error) => panic!("{error}"),
                 }
             }
         }
-        let expected = if has_mate_cigar {
-            &expected[..]
-        } else {
-            &expected[3..]
-        };
+        let expected = if has_mate_cigar { &expected[..] } else { &[] };
         assert_eq!(distances, expected, "{reads:?}");
     }
 }
@@ -382,10 +378,42 @@ fn test_a_template_end_from_an_invalid_mate_cigar_is_an_error_naming_the_read() 
 }
 
 #[test]
-fn test_the_span_of_a_mate_cigar() {
-    let span = |text: &str| mate_span(AuxValue::String(text.as_bytes()));
-    assert_eq!(span("10M2I3D4N1=1X5S2H1P"), Some(19));
-    assert_eq!(span("+3M"), Some(3));
+fn test_a_template_end_is_the_unclipped_five_prime_end_of_the_mate() {
+    let mut reads = pair("q", 100, 150, false, true);
+    reads[0].cigar = "2H3S47M".into();
+    reads[0].tags = vec!["MC:Z:4H40M6S".into()];
+    reads[1].cigar = "4H40M6S".into();
+    reads[1].bases = "C".repeat(46);
+    reads[1].quals = Some(vec![40; 46]);
+    reads[1].tags = vec!["MC:Z:2H3S47M".into()];
+    let mut builder = builder(&reads);
+    let forward = builder
+        .pileup("chr1", 120)
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .template_end_distance();
+    let reverse = builder
+        .pileup("chr1", 160)
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .template_end_distance();
+    assert_eq!((forward.unwrap(), reverse.unwrap()), (Some(75), Some(65)));
+}
+
+#[test]
+fn test_the_extent_of_a_mate_cigar() {
+    let extent = |text: &str| mate_extent(AuxValue::String(text.as_bytes()));
+    let measured = |leading, span, trailing| {
+        Some(MateExtent {
+            leading,
+            span,
+            trailing,
+        })
+    };
+    assert_eq!(extent("3H2S10M2I3D4N1=1X5S2H"), measured(5, 19, 7));
+    assert_eq!(extent("+3M"), measured(0, 3, 0));
     for invalid in [
         "",
         "M",
@@ -397,8 +425,8 @@ fn test_the_span_of_a_mate_cigar() {
         "9223372036854775807M9223372036854775807M",
         "268435456M",
     ] {
-        assert_eq!(span(invalid), None, "{invalid}");
+        assert_eq!(extent(invalid), None, "{invalid}");
     }
-    assert_eq!(span("268435455M268435455N"), Some(536_870_910));
-    assert_eq!(mate_span(AuxValue::Integer(10)), None);
+    assert_eq!(extent("268435455M268435455N"), measured(0, 536_870_910, 0));
+    assert_eq!(mate_extent(AuxValue::Integer(10)), None);
 }

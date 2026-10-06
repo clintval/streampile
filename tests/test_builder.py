@@ -736,14 +736,14 @@ def test_entries_measure_their_distances_to_both_fragment_ends() -> None:
     ]
 
 
-def test_a_forward_read_needs_its_mate_cigar_for_its_template_end() -> None:
+def test_a_read_needs_its_mate_cigar_for_its_template_end() -> None:
     reads = pair("q1", 100, 120)
     reads[0].template_length = 7
     pileup = StreamingPileupBuilder(reads).pileup("chr1", 130)
-    forward, reverse = pileup.pileups
-    assert (reverse.alignment.is_reverse, reverse.template_end_distance) == (True, 30)
-    with pytest.raises(ValueError, match="Read q1 has no MC tag to find its mate's 5' end with."):
-        _ = forward.template_end_distance
+    missing = "Read q1 has no MC tag to find its mate's 5' end with."
+    for entry in pileup.pileups:
+        with pytest.raises(ValueError, match=missing):
+            _ = entry.template_end_distance
     reads[0].set_tag("MC", "4Q")  # pyright: ignore[reportUnknownMemberType]
     forward = StreamingPileupBuilder(reads).pileup("chr1", 130).pileups[0]
     with pytest.raises(ValueError, match="Read q1 has an invalid MC tag: 4Q."):
@@ -752,7 +752,8 @@ def test_a_forward_read_needs_its_mate_cigar_for_its_template_end() -> None:
 
 def test_an_entry_made_by_hand_measures_its_distances_from_its_read() -> None:
     reads = pair("q1", 100, 150)
-    reads[0].set_tag("MC", f"{READ_LENGTH}M")  # pyright: ignore[reportUnknownMemberType]
+    for read in reads:
+        read.set_tag("MC", f"{READ_LENGTH}M")  # pyright: ignore[reportUnknownMemberType]
     entry = PileupRead(reads[0], 4, 4, BASE)
     assert (entry.five_prime_distance, entry.template_end_distance) == (4, 95)
     reverse = PileupRead(reads[1], 4, 4, BASE)
