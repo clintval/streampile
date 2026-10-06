@@ -60,7 +60,7 @@ Filter reads with `read_filter`, and count each template once with `without_over
 
 ```
 
-Each entry also measures its base's distance from the read's 5′ end and to the template's other end, the unclipped 5′ end of its mate in an FR pair, which is found from the `MC` tag:
+Each entry also counts the template's bases from its base to the read's 5′ end and to the template's other end, the 5′ end of its mate in an FR pair, whose CIGAR comes from the `MC` tag:
 
 ```pycon
 >>> with (

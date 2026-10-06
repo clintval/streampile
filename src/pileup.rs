@@ -6,7 +6,7 @@ use noodles::bam;
 use noodles::sam::alignment::record::Flags;
 
 use crate::auxiliary::{self, AuxElement, AuxValue, Field};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::footprint::Footprint;
 use crate::source::AlignmentRecord;
 
@@ -43,19 +43,6 @@ impl EntryKind {
     }
 }
 
-/// Where a record's template ends, the 5′ end of its mate, worked out when it is accepted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum OtherEnd {
-    /// The record has no mate's 5′ end to measure to.
-    None,
-    /// The 0-based reference position of the mate's 5′ end.
-    At(i64),
-    /// The record is the forward read of an FR pair with no `MC` tag.
-    MissingMateCigar,
-    /// The record is the forward read of an FR pair with an `MC` tag that is not usable.
-    InvalidMateCigar,
-}
-
 /// One record held by a builder, with what was worked out once when it was read.
 #[derive(Debug)]
 pub(crate) struct LiveRecord<R = bam::Record> {
@@ -65,7 +52,6 @@ pub(crate) struct LiveRecord<R = bam::Record> {
     pub end: i64,
     pub flags: Flags,
     pub footprint: Footprint,
-    pub other_end: OtherEnd,
     pub fields: Vec<Option<Field>>,
     pub name_hash: u64,
 }
@@ -79,7 +65,6 @@ impl<R: Default> Default for LiveRecord<R> {
             end: 0,
             flags: Flags::empty(),
             footprint: Footprint::default(),
-            other_end: OtherEnd::None,
             fields: Vec::new(),
             name_hash: 0,
         }
@@ -484,19 +469,20 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
         }
     }
 
-    /// The distance on the reference from this position to the template's other end, the
-    /// unclipped 5′ end of the mate of a read in an FR pair: 0 at the mate's 5′ end.
+    /// The number of the template's bases between this position and the template's other end,
+    /// the 5′ end of the mate of a read in an FR pair: 0 at the mate's 5′ end.
     ///
-    /// The mate's 5′ end comes from its start and its `MC` tag, counting its soft and hard clips:
-    /// its start less the clips before it for a reverse read, and the end of its alignment plus
-    /// the clips after it for a forward read; the template length (TLEN) is never read. It is
-    /// `None` for a fragment, a read whose mate is unmapped or on another contig, a pair that is
-    /// not FR, and a position past the mate's 5′ end, where a read runs through its mate.
+    /// It walks the read's CIGAR and the mate's, from its `MC` tag, so an indel counts by its
+    /// length; soft-clipped bases count and hard-clipped bases, absent from the records, do not.
+    /// Where the mate has no base, a position both reads align to carries the count, or else the
+    /// reference between them; the template length (TLEN) is never read. It is `None` for a
+    /// fragment, a read whose mate is unmapped or on another contig, a pair that is not FR, and a
+    /// position past the mate's 5′ end, where a read runs through its mate.
     ///
     /// A read of an FR pair with no `MC` tag, or one that is not a CIGAR string spanning at least
     /// one base, is an error naming the read.
     pub fn template_end_distance(&self) -> Result<Option<usize>> {
-        template_end_distance(self.record(), self.live.other_end, self.position)
+        crate::template::template_end_distance(self.record(), self.position)
     }
 
     /// The value of one of the record's auxiliary fields, borrowed from the record.
@@ -563,37 +549,4 @@ pub(crate) fn record_name(record: &bam::Record) -> String {
     record
         .name()
         .map_or_else(|| "*".to_owned(), |name| name.to_str_lossy().into_owned())
-}
-
-/// The distance on the reference from a position to the template's other end, given where it is.
-pub(crate) fn template_end_distance(
-    record: &bam::Record,
-    other_end: OtherEnd,
-    position: i64,
-) -> Result<Option<usize>> {
-    let other = match other_end {
-        OtherEnd::None => return Ok(None),
-        OtherEnd::At(other) => other,
-        OtherEnd::MissingMateCigar => {
-            return Err(Error::MissingMateCigar {
-                name: record_name(record),
-            });
-        }
-        OtherEnd::InvalidMateCigar => {
-            let value = auxiliary::find(record.data().as_bytes(), *b"MC")?;
-            return Err(Error::InvalidMateCigar {
-                name: record_name(record),
-                value: match value {
-                    Some(AuxValue::String(text)) => String::from_utf8_lossy(text).into_owned(),
-                    other => format!("{other:?}"),
-                },
-            });
-        }
-    };
-    let distance = if record.flags().is_reverse_complemented() {
-        position - other
-    } else {
-        other - position
-    };
-    Ok(usize::try_from(distance).ok())
 }

@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use super::{Read, bases, builder, name, names, read};
-use crate::builder::{MateExtent, mate_extent};
+use crate::template::Alignment;
 use crate::{AuxValue, EntryKind, Error};
 
 const READ_LENGTH: usize = 50;
@@ -377,51 +377,43 @@ fn test_a_template_end_from_an_invalid_mate_cigar_is_an_error_naming_the_read() 
     assert!(matches!(refused, Err(Error::InvalidMateCigar { .. })));
 }
 
-#[test]
-fn test_a_template_end_is_the_unclipped_five_prime_end_of_the_mate() {
-    let mut reads = pair("q", 100, 150, false, true);
-    reads[0].cigar = "2H3S47M".into();
-    reads[0].tags = vec!["MC:Z:4H40M6S".into()];
-    reads[1].cigar = "4H40M6S".into();
-    reads[1].bases = "C".repeat(46);
-    reads[1].quals = Some(vec![40; 46]);
-    reads[1].tags = vec!["MC:Z:2H3S47M".into()];
-    let mut builder = builder(&reads);
-    let forward = builder
-        .pileup("chr1", 120)
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .template_end_distance();
-    let reverse = builder
-        .pileup("chr1", 160)
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .template_end_distance();
-    assert_eq!((forward.unwrap(), reverse.unwrap()), (Some(75), Some(65)));
-}
-
-/// A pair at fgbio's 1-based starts 10 and 50, forward then reverse, with these CIGARs, reads of
-/// `length` bases, and each read's `MC` tag set to its mate's CIGAR.
-fn clipped_pair(cigar1: &str, cigar2: &str, length: usize) -> Vec<Read> {
-    let mut reads = pair("q", 9, 49, false, true);
-    for (read, (cigar, mate)) in reads.iter_mut().zip([(cigar1, cigar2), (cigar2, cigar1)]) {
-        read.cigar = cigar.into();
-        read.bases = "A".repeat(length);
-        read.quals = Some(vec![40; length]);
-        read.tags = vec![format!("MC:Z:{mate}")];
-    }
+/// A forward read and its reverse mate at 1-based starts, as fgbio's `SamBuilder.addPair` makes
+/// them, each with the other's CIGAR in its `MC` tag and as many bases as its CIGAR reads.
+fn mates(start1: usize, cigar1: &str, start2: usize, cigar2: &str) -> Vec<Read> {
+    let bases = |cigar: &str, base: &str| {
+        let length: usize = noodles::sam::record::Cigar::new(cigar.as_bytes())
+            .iter()
+            .map(Result::unwrap)
+            .filter(|op| op.kind().consumes_read())
+            .fold(0, |length, op| length + op.len());
+        base.repeat(length)
+    };
+    let forward = read("q", start1 - 1, cigar1, &bases(cigar1, "A"))
+        .flag(1 | 32 | 64)
+        .mate("chr1", start2 - 1, 0)
+        .tag(&format!("MC:Z:{cigar2}"));
+    let reverse = read("q", start2 - 1, cigar2, &bases(cigar2, "C"))
+        .flag(1 | 16 | 128)
+        .mate("chr1", start1 - 1, 0)
+        .tag(&format!("MC:Z:{cigar1}"));
+    let mut reads = vec![forward, reverse];
+    reads.sort_by_key(|read| read.start);
     reads
 }
 
-/// The template-end distances of the forward and the reverse read of a pair at 0-based position 50.
-fn template_ends_at_50(reads: &[Read]) -> Vec<(bool, Option<usize>)> {
+/// The template-end distance of the forward or the reverse read at each 0-based position.
+fn ends(reads: &[Read], reverse: bool, positions: &[usize]) -> Vec<Option<usize>> {
     let mut builder = builder(reads);
-    let pileup = builder.pileup("chr1", 50).unwrap();
-    pileup
+    positions
         .iter()
-        .map(|entry| (entry.is_reverse(), entry.template_end_distance().unwrap()))
+        .map(|&position| {
+            let pileup = builder.pileup("chr1", position).unwrap();
+            let entry = pileup
+                .iter()
+                .find(|entry| entry.is_reverse() == reverse)
+                .unwrap();
+            entry.template_end_distance().unwrap()
+        })
         .collect()
 }
 
@@ -445,66 +437,99 @@ fn test_a_template_end_without_a_mate_cigar_is_an_error_for_either_read() {
     }
 }
 
-/// fgbio's `SamRecordTest`: "SamRecord.mateUnclippedStart/End should return the mate's unclipped
-/// start/end". The forward read's mate ends at 1-based 94 and the reverse read's mate starts at
-/// 1-based 5, both counting clips.
+/// fgbio's `SamRecordTest` fixtures for the mate's unclipped start and end, counted in template
+/// bases: a mate's soft-clipped bases count and its hard-clipped bases, absent from it, do not.
 #[test]
-fn test_a_template_end_is_the_mates_unclipped_start_or_end() {
-    let reads = clipped_pair("5S45M10H", "10S40M5H", 50);
+fn test_a_template_end_counts_soft_clips_and_not_hard_clips() {
+    let reads = mates(10, "5S45M10H", 50, "10S40M5H");
+    assert_eq!(ends(&reads, false, &[50]), [Some(88 - 50)]);
+    assert_eq!(ends(&reads, true, &[50]), [Some(5 + 50 - 9)]);
+    let reads = mates(10, "10H5S45M1S10H", 50, "10H10S40M1S5H");
+    assert_eq!(ends(&reads, false, &[50]), [Some(88 + 1 - 50)]);
+    assert_eq!(ends(&reads, true, &[50]), [Some(5 + 50 - 9)]);
+}
+
+/// fgbio #1172: "clip back to the mate's soft-clipped end when neither read contains an indel".
+/// The forward read's last 40 bases and the reverse read's first 40 lie past the template's ends.
+#[test]
+fn test_a_template_end_without_indels_reaches_the_mates_soft_clipped_end() {
+    let reads = mates(100, "100M", 60, "90M10S");
     assert_eq!(
-        template_ends_at_50(&reads),
-        [(false, Some(93 - 50)), (true, Some(50 - 4))]
+        ends(&reads, false, &[157, 158, 159]),
+        [Some(1), Some(0), None]
+    );
+    assert_eq!(ends(&reads, true, &[98, 99]), [None, Some(0)]);
+}
+
+/// fgbio #1172: "clip using query distances when a deletion falls at the mate's un-soft-clipped
+/// end". Past the last shared position, 222, the forward read has a base, a deleted position, and
+/// three bases, and the mate two bases, so the first of the three is the template's last base.
+#[test]
+fn test_a_template_end_counts_bases_past_a_deletion_at_the_mates_soft_clipped_end() {
+    let reads = mates(101, "2S124M1D3M", 100, "3S124M2S");
+    assert_eq!(
+        ends(&reads, false, &[223, 224, 225, 226]),
+        [Some(1), Some(1), Some(0), None]
+    );
+    assert_eq!(ends(&reads, true, &[99, 100]), [Some(1), Some(2)]);
+}
+
+/// fgbio #1172: "clip the mate even when the record's deletion falls at the mate's un-soft-clipped
+/// end". The reverse read's first two aligned bases lie before the forward read's 5′ end.
+#[test]
+fn test_a_template_end_is_found_for_both_reads_when_a_deletion_meets_the_mates_end() {
+    let reads = mates(101, "2S124M1D3M", 97, "115M14S");
+    assert_eq!(
+        ends(&reads, false, &[223, 225, 226]),
+        [Some(1), Some(0), None]
+    );
+    assert_eq!(
+        ends(&reads, true, &[96, 97, 98, 99]),
+        [None, None, Some(0), Some(1)]
     );
 }
 
-/// fgbio's `SamRecordTest`: "SamRecord.mateUnSoftClippedStart/End should return the mate's
-/// un-soft-clipped start/end", with hard clips counted too: the forward read's mate ends at 1-based
-/// 95, past its soft-clipped end of 90, and the reverse read's mate starts at 1-based -5, before
-/// the contig.
+/// fgbio #1172: "clip using query distances when the record contains an insertion before the
+/// mate's end". The 10 inserted bases bring the template's end 10 reference positions closer.
 #[test]
-fn test_a_template_end_counts_hard_clips_and_may_lie_before_the_contig() {
-    let reads = clipped_pair("10H5S45M1S10H", "10H10S40M1S5H", 51);
+fn test_a_template_end_counts_inserted_bases() {
+    let reads = mates(100, "70M10I23M47S", 100, "50S70M30S");
     assert_eq!(
-        template_ends_at_50(&reads),
-        [(false, Some(94 - 50)), (true, Some(50 + 6))]
+        ends(&reads, false, &[168, 169, 188, 189]),
+        [Some(30), Some(19), Some(0), None]
     );
 }
 
-/// fgbio's `AlignmentTest`: "Cigar.clippedBases should return 0 if not bases are clipped" and
-/// "should return 50 bases for cigar", as the clips before and after a mate's alignment.
+/// fgbio #1172: "clip the read-through of a pair whose alignments share no reference position".
+/// Moving the mate one base right lengthens the template by one, whether or not the reads share a
+/// reference position.
 #[test]
-fn test_the_clips_of_a_mate_cigar_add_up_as_fgbio_counts_them() {
-    let clips = |text: &str| {
-        let extent = mate_extent(AuxValue::String(text.as_bytes())).unwrap();
-        extent.leading + extent.trailing
-    };
-    assert_eq!(clips("100M"), 0);
-    for cigar in [
-        "100M50S",
-        "50S100M",
-        "25S100M25S",
-        "50H100M",
-        "100M50H",
-        "25S25H100M",
-        "100M25S25H",
-        "10H15S100M15S10H",
-    ] {
-        assert_eq!(clips(cigar), 50, "{cigar}");
+fn test_a_template_end_is_continuous_as_the_reads_stop_sharing_a_position() {
+    let reads = mates(1000, "20M80S", 1019, "80S20M");
+    assert_eq!(ends(&reads, false, &[1018]), [Some(19)]);
+    assert_eq!(ends(&reads, true, &[1018]), [Some(19)]);
+    let reads = mates(1000, "20M80S", 1020, "80S20M");
+    assert_eq!(ends(&reads, false, &[1018]), [Some(20)]);
+    assert_eq!(ends(&reads, true, &[1019]), [Some(20)]);
+}
+
+/// fgbio #1172: "not clip a record lying entirely past the mate alignment it is given". A forward
+/// read whose mate lies wholly before it has no template end at any of its positions.
+#[test]
+fn test_a_template_end_is_absent_for_a_read_past_its_mates_alignment() {
+    let lone = read("q", 300, "15M", &"A".repeat(15))
+        .flag(1 | 32 | 64)
+        .mate("chr1", 100, 0)
+        .tag("MC:Z:10M5S");
+    assert_eq!(ends(&[lone], false, &[300, 307, 314]), [None, None, None]);
+}
+
+#[test]
+fn test_a_mate_cigar_must_span_a_base_with_operators_bam_allows() {
+    let mate = |text: &str| Alignment::of_mate(0, AuxValue::String(text.as_bytes()));
+    for valid in ["10M2I3D4N1=1X5S2H1P", "+3M", "268435455M268435455N"] {
+        assert!(mate(valid).is_some(), "{valid}");
     }
-}
-
-#[test]
-fn test_the_extent_of_a_mate_cigar() {
-    let extent = |text: &str| mate_extent(AuxValue::String(text.as_bytes()));
-    let measured = |leading, span, trailing| {
-        Some(MateExtent {
-            leading,
-            span,
-            trailing,
-        })
-    };
-    assert_eq!(extent("3H2S10M2I3D4N1=1X5S2H"), measured(5, 19, 7));
-    assert_eq!(extent("+3M"), measured(0, 3, 0));
     for invalid in [
         "",
         "M",
@@ -516,8 +541,7 @@ fn test_the_extent_of_a_mate_cigar() {
         "9223372036854775807M9223372036854775807M",
         "268435456M",
     ] {
-        assert_eq!(extent(invalid), None, "{invalid}");
+        assert_eq!(mate(invalid), None, "{invalid}");
     }
-    assert_eq!(extent("268435455M268435455N"), measured(0, 536_870_910, 0));
-    assert_eq!(mate_extent(AuxValue::Integer(10)), None);
+    assert_eq!(Alignment::of_mate(0, AuxValue::Integer(10)), None);
 }

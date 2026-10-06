@@ -8,6 +8,7 @@ mod pileup;
 #[cfg(feature = "python")]
 mod python;
 mod source;
+mod template;
 #[cfg(test)]
 mod tests;
 

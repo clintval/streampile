@@ -13,12 +13,11 @@ use pyo3::types::{PyDict, PyList, PyString, PyTuple, PyType};
 
 use super::builder::Bridged;
 use super::{bridge, to_python};
-use crate::builder::{MateCigar, other_end};
 use crate::footprint::{Footprint, Located};
 use crate::pileup::{
-    EntryKind, MISSING_BASE_QUALITY, NONE, OtherEnd, Template, name_hash, name_of,
-    template_end_distance, templates_kept,
+    EntryKind, MISSING_BASE_QUALITY, NONE, Template, name_hash, name_of, templates_kept,
 };
+use crate::template::template_end_distance;
 use crate::{DEFAULT_MIN_BASE_QUALITY, PileupEntry};
 
 const ABSENT: i64 = i64::MIN;
@@ -44,7 +43,6 @@ pub(crate) struct Held {
     query_position_or_next: i64,
     insertion_offset: i64,
     insertion_length: i64,
-    other_end: Option<OtherEnd>,
     query_length: Option<u32>,
     name_hash: u64,
 }
@@ -61,7 +59,6 @@ impl Held {
             query_position_or_next: present(entry.query_position_or_next()),
             insertion_offset: present(entry.insertion_offset()),
             insertion_length: entry.insertion_length() as i64,
-            other_end: Some(live.other_end),
             query_length: Some(live.footprint.query_length),
             name_hash: live.name_hash,
         }
@@ -97,7 +94,6 @@ impl Held {
             } else {
                 0
             },
-            other_end: None,
             query_length: None,
             name_hash: name_hash(&record.record),
         }
@@ -191,15 +187,10 @@ impl Held {
     }
 
     fn template_end_distance(&self, position: Option<i64>) -> PyResult<Option<i64>> {
-        let record = self.bam();
         let Some(position) = position.or_else(|| self.position_of_base()) else {
             return Ok(None);
         };
-        let other_end = match self.other_end {
-            Some(other_end) => other_end,
-            None => other_end_of(record).map_err(to_python)?,
-        };
-        let distance = template_end_distance(record, other_end, position).map_err(to_python)?;
+        let distance = template_end_distance(self.bam(), position).map_err(to_python)?;
         Ok(distance.map(|distance| distance as i64))
     }
 
@@ -250,19 +241,6 @@ impl Held {
         )
             .into_pyobject(py)
     }
-}
-
-/// Where the template of a read made by hand ends, worked out from the read alone.
-fn other_end_of(record: &bam::Record) -> crate::Result<OtherEnd> {
-    let (Some(reference_id), Some(start)) = (
-        record.reference_sequence_id().transpose()?,
-        record.alignment_start().transpose()?,
-    ) else {
-        return Ok(OtherEnd::None);
-    };
-    let start = usize::from(start) as i64 - 1;
-    let end = start + record.cigar().alignment_span()? as i64;
-    other_end(record, reference_id, start, end, MateCigar::Unsearched)
 }
 
 /// The index a Python index of a sequence of this length refers to, if any.
@@ -395,7 +373,6 @@ impl PileupRead {
                 query_position_or_next: optional(query_position_or_next),
                 insertion_offset: optional(insertion_offset),
                 insertion_length,
-                other_end: None,
                 query_length: None,
                 name_hash,
             },
@@ -512,15 +489,16 @@ impl PileupRead {
         self.held.five_prime_distance()
     }
 
-    /// The distance on the reference from the position to the template's other end, the
-    /// unclipped 5′ end of the mate of a read in an FR pair: 0 at the mate's 5′ end.
+    /// The number of the template's bases between the position and the template's other end, the
+    /// 5′ end of the mate of a read in an FR pair: 0 at the mate's 5′ end.
     ///
-    /// The mate's 5′ end comes from its start and its `MC` tag, counting its soft and hard clips:
-    /// its start less the clips before it for a reverse read, and the end of its alignment plus
-    /// the clips after it for a forward read; the template length (TLEN) is never read. It is
-    /// `None` for a fragment, a read whose mate is unmapped or on another contig, a pair that is
-    /// not FR, a position past the mate's 5′ end, where a read runs through its mate, and an entry
-    /// made by hand that holds no base, whose position is unknown.
+    /// It walks the read's CIGAR and the mate's, from its `MC` tag, so an indel counts by its
+    /// length; soft-clipped bases count and hard-clipped bases, absent from the records, do not.
+    /// Where the mate has no base, a position both reads align to carries the count, or else the
+    /// reference between them; the template length (TLEN) is never read. It is `None` for a
+    /// fragment, a read whose mate is unmapped or on another contig, a pair that is not FR, a
+    /// position past the mate's 5′ end, where a read runs through its mate, and an entry made by
+    /// hand that holds no base, whose position is unknown.
     ///
     /// Raises:
     ///     ValueError: for a read of an FR pair with no `MC` tag, or one that is not a CIGAR
@@ -572,7 +550,6 @@ impl PileupRead {
             Self {
                 held: Held {
                     record: Arc::clone(&self.held.record),
-                    other_end: self.held.other_end,
                     query_length: self.held.query_length,
                     ..read.held
                 },
@@ -782,7 +759,7 @@ impl Pileup {
             let mut record = bam::Record::default();
             bridge::read(&alignment, &mut record)?;
             let flags = record.flags();
-            let (Some(Ok(reference_id)), Some(Ok(start))) =
+            let (Some(Ok(_)), Some(Ok(start))) =
                 (record.reference_sequence_id(), record.alignment_start())
             else {
                 continue;
@@ -802,14 +779,6 @@ impl Pileup {
             if !placed || !alignment.getattr("reference_name")?.eq(&contig)? {
                 continue;
             }
-            let other_end = other_end(
-                &record,
-                reference_id,
-                start,
-                footprint.end,
-                MateCigar::Unsearched,
-            )
-            .ok();
             let query_length = footprint.query_length;
             let record = Arc::new(Bridged {
                 object: alignment.unbind(),
@@ -817,7 +786,6 @@ impl Pileup {
             });
             let mut push = |kind, offset, length| {
                 let mut held = Held::located(&record, kind, offset, length);
-                held.other_end = other_end;
                 held.query_length = Some(query_length);
                 entries.push(held);
             };

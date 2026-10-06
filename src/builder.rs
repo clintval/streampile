@@ -3,16 +3,13 @@ use std::io;
 use std::mem;
 
 use bstr::{BStr, ByteSlice};
-use noodles::bam;
-use noodles::sam::alignment::record::cigar::Op;
-use noodles::sam::alignment::record::cigar::op::Kind;
 use noodles::sam::{self, alignment::record::Cigar as _, alignment::record::Flags};
 
-use crate::auxiliary::{self, AuxValue};
+use crate::auxiliary;
 use crate::error::{Error, Result};
 use crate::footprint::{Footprint, Located};
 use crate::pileup::{
-    EntryKind, LiveRecord, NONE, OtherEnd, Pileup, RawEntry, name_hash, quality_of, record_name,
+    EntryKind, LiveRecord, NONE, Pileup, RawEntry, name_hash, quality_of, record_name,
     templates_kept,
 };
 use crate::source::{AlignmentRecord, RecordSource};
@@ -678,7 +675,6 @@ fn describe<R: AlignmentRecord>(live: &mut LiveRecord<R>, tapped: bool) -> io::R
         .transpose()?
         .map_or(-1, |start| usize::from(start) as i64 - 1);
     live.flags = record.flags();
-    live.other_end = OtherEnd::None;
     if tapped {
         let cigar = record.cigar();
         let length = if live.flags.is_unmapped() || cigar.is_empty() {
@@ -691,138 +687,20 @@ fn describe<R: AlignmentRecord>(live: &mut LiveRecord<R>, tapped: bool) -> io::R
     Ok(())
 }
 
-/// Finds the indexed auxiliary fields of an accepted record, and the 5′ end of its mate.
+/// Finds the indexed auxiliary fields of an accepted record.
 fn index_fields<R: AlignmentRecord>(live: &mut LiveRecord<R>, tags: &[[u8; 2]]) -> Result<()> {
     live.fields.clear();
     live.fields.resize(tags.len(), None);
-    let record = live.record.bam();
-    let mut mate_cigar = MateCigar::Unsearched;
-    if !tags.is_empty() {
-        let fields = &mut live.fields;
-        let mut found = None;
-        auxiliary::walk(record.data().as_bytes(), |tag, field| {
-            if tag == *b"MC" {
-                found.get_or_insert(field);
-            }
-            if let Some(index) = tags.iter().position(|wanted| *wanted == tag)
-                && fields[index].is_none()
-            {
-                fields[index] = Some(field);
-            }
-        })?;
-        mate_cigar = found.map_or(MateCigar::Missing, MateCigar::Found);
+    if tags.is_empty() {
+        return Ok(());
     }
-    live.other_end = other_end(
-        record,
-        live.reference_id,
-        live.start,
-        live.footprint.end,
-        mate_cigar,
-    )?;
+    let fields = &mut live.fields;
+    auxiliary::walk(live.record.bam().data().as_bytes(), |tag, field| {
+        if let Some(index) = tags.iter().position(|wanted| *wanted == tag)
+            && fields[index].is_none()
+        {
+            fields[index] = Some(field);
+        }
+    })?;
     Ok(())
-}
-
-/// Where a record's `MC` field is, if it has been looked for.
-#[derive(Clone, Copy)]
-pub(crate) enum MateCigar {
-    Unsearched,
-    Missing,
-    Found(auxiliary::Field),
-}
-
-/// Where the unclipped 5′ end of the mate of a read in an FR pair is, for a read placed from
-/// `start` to `end` on the contig with index `reference_id`.
-///
-/// For a reverse read it is the mate's start less the clips before it, and for a forward read the
-/// end of the mate's alignment plus the clips after it, both from the mate's start and its `MC`
-/// tag alone, never from the template length (TLEN).
-pub(crate) fn other_end(
-    record: &bam::Record,
-    reference_id: usize,
-    start: i64,
-    end: i64,
-    mate_cigar: MateCigar,
-) -> Result<OtherEnd> {
-    let flags = record.flags();
-    let reverse = flags.is_reverse_complemented();
-    if !flags.is_segmented()
-        || flags.is_mate_unmapped()
-        || reverse == flags.is_mate_reverse_complemented()
-    {
-        return Ok(OtherEnd::None);
-    }
-    if record.mate_reference_sequence_id().transpose()? != Some(reference_id) {
-        return Ok(OtherEnd::None);
-    }
-    let Some(mate_start) = record.mate_alignment_start().transpose()? else {
-        return Ok(OtherEnd::None);
-    };
-    let mate_start = usize::from(mate_start) as i64 - 1;
-    let data = record.data().as_bytes();
-    let mate_cigar = match mate_cigar {
-        MateCigar::Found(field) => Some(field.value(data)?),
-        MateCigar::Missing => None,
-        MateCigar::Unsearched => auxiliary::find(data, *b"MC")?,
-    };
-    let Some(value) = mate_cigar else {
-        return Ok(OtherEnd::MissingMateCigar);
-    };
-    let Some(extent) = mate_extent(value) else {
-        return Ok(OtherEnd::InvalidMateCigar);
-    };
-    let five_prime = if reverse {
-        mate_start - extent.leading
-    } else {
-        mate_start + extent.span - 1 + extent.trailing
-    };
-    let reachable = if reverse {
-        five_prime < end
-    } else {
-        start <= five_prime
-    };
-    Ok(if reachable {
-        OtherEnd::At(five_prime)
-    } else {
-        OtherEnd::None
-    })
-}
-
-/// The extent of a mate's alignment from its `MC` value, in reference bases.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct MateExtent {
-    /// The soft- and hard-clipped bases before the alignment.
-    pub(crate) leading: i64,
-    /// The reference bases the alignment spans.
-    pub(crate) span: i64,
-    /// The soft- and hard-clipped bases after the alignment.
-    pub(crate) trailing: i64,
-}
-
-/// The extent of the alignment an `MC` value describes, or `None` for a value that is not a CIGAR
-/// string spanning at least one base with operators no longer than BAM allows.
-pub(crate) fn mate_extent(value: AuxValue<'_>) -> Option<MateExtent> {
-    const LONGEST_OPERATOR: usize = (1 << 28) - 1;
-    let AuxValue::String(text) = value else {
-        return None;
-    };
-    let cigar = sam::record::Cigar::new(text);
-    let ops = cigar
-        .iter()
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .ok()?;
-    if ops.iter().any(|op| op.len() > LONGEST_OPERATOR) {
-        return None;
-    }
-    let span = i64::try_from(cigar.alignment_span().ok()?)
-        .ok()
-        .filter(|&span| span > 0)?;
-    let is_clip = |op: &&Op| matches!(op.kind(), Kind::SoftClip | Kind::HardClip);
-    let clipped = |ops: &mut dyn Iterator<Item = &Op>| -> i64 {
-        ops.take_while(is_clip).map(|op| op.len() as i64).sum()
-    };
-    Some(MateExtent {
-        leading: clipped(&mut ops.iter()),
-        span,
-        trailing: clipped(&mut ops.iter().rev()),
-    })
 }

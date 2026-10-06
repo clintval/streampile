@@ -117,7 +117,7 @@ class PileupRead:
         """The distance of the read's base from its 5′ end, in bases as sequenced."""
     @property
     def template_end_distance(self) -> int | None:
-        """The distance on the reference from the position to the template's other end."""
+        """The template's bases between the position and the 5′ end of the read's mate in an FR pair."""
     def _asdict(self) -> dict[str, Any]: ...
     def _replace(
         self,
