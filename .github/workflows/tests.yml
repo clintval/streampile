@@ -53,7 +53,7 @@ jobs:
       - name: Build the Rust docs
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --locked --no-deps
+        run: cargo doc --locked --no-deps --all-features
 
       - name: Package the crate as crates.io would publish it
         run: cargo publish --dry-run --locked

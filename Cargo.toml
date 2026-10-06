@@ -25,6 +25,9 @@ include = [
 [lib]
 name = "streampile"
 
+[package.metadata.docs.rs]
+features = ["testing"]
+
 [features]
 default = ["libdeflate"]
 libdeflate = ["noodles-bgzf/libdeflate"]
