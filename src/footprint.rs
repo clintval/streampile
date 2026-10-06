@@ -1,4 +1,8 @@
-use crate::error::{Result, invalid_data};
+use std::io;
+
+fn invalid_data(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message.into())
+}
 
 const MATCH: u32 = 0;
 const INSERTION: u32 = 1;
@@ -67,10 +71,9 @@ impl Footprint {
     /// Walks a raw BAM CIGAR from a 0-based start, and returns whether it has a
     /// reference-consuming operator: M, D, N, =, or X.
     ///
-    /// The query length is the number of stored bases, or with none stored, the number of bases
-    /// the CIGAR implies, so a deletion is followed by a base exactly when its offset is within
-    /// it, as htslib reports.
-    pub fn fill(&mut self, start: i64, cigar: &[u8], stored_bases: usize) -> Result<bool> {
+    /// A CIGAR whose query length differs from the number of stored bases is refused, as htslib
+    /// refuses it, so a deletion is followed by a base exactly when its offset is within the read.
+    pub fn fill(&mut self, start: i64, cigar: &[u8], stored_bases: usize) -> io::Result<bool> {
         self.blocks.clear();
         self.insertions.clear();
         self.block = 0;
@@ -114,11 +117,10 @@ impl Footprint {
             }
         }
         self.end = position;
-        self.query_length = if stored_bases > 0 {
-            to_offset(stored_bases as u64)?
-        } else {
-            to_offset(query)?
-        };
+        if stored_bases > 0 && stored_bases as u64 != query {
+            return Err(invalid_data("CIGAR and query sequence lengths differ"));
+        }
+        self.query_length = to_offset(query)?;
         Ok(placed)
     }
 
@@ -194,7 +196,7 @@ impl Footprint {
     }
 }
 
-fn to_offset(query: u64) -> Result<u32> {
+fn to_offset(query: u64) -> io::Result<u32> {
     u32::try_from(query).map_err(|_| invalid_data("a read is longer than 4,294,967,295 bases"))
 }
 
@@ -214,7 +216,7 @@ pub(crate) fn reference_length(cigar: &[u8]) -> i64 {
 }
 
 /// The number of reference bases a SAM CIGAR string spans, such as the value of an `MC` tag.
-pub(crate) fn reference_length_of_text(cigar: &[u8]) -> Result<i64> {
+pub(crate) fn reference_length_of_text(cigar: &[u8]) -> io::Result<i64> {
     let invalid = || invalid_data(format!("invalid CIGAR {}", String::from_utf8_lossy(cigar)));
     let mut length: i64 = 0;
     let mut count: i64 = 0;

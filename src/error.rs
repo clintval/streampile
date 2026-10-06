@@ -15,6 +15,15 @@ pub enum Error {
         found: Option<String>,
     },
 
+    /// A record is malformed, such as one whose CIGAR and sequence differ in length.
+    #[error("read {name} is invalid: {source}")]
+    InvalidRecord {
+        /// The name of the record.
+        name: String,
+        /// What is wrong with it.
+        source: io::Error,
+    },
+
     /// A record starts before the record read just before it.
     #[error("records are out of coordinate order at {name}")]
     OutOfOrder {

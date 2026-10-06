@@ -207,3 +207,19 @@ fn test_the_reference_length_of_a_cigar_string() {
         assert!(reference_length_of_text(invalid).is_err());
     }
 }
+
+#[test]
+fn test_footprint_refuses_a_cigar_whose_query_length_differs_from_the_sequence() {
+    let four_matches = (4_u32 << 4).to_le_bytes();
+    let mut footprint = Footprint::default();
+    for stored in [3, 5] {
+        let refused = footprint.fill(10, &four_matches, stored).unwrap_err();
+        assert_eq!(
+            refused.to_string(),
+            "CIGAR and query sequence lengths differ"
+        );
+    }
+    assert!(footprint.fill(10, &four_matches, 4).unwrap());
+    assert!(footprint.fill(10, &four_matches, 0).unwrap());
+    assert_eq!(footprint.query_length, 4);
+}

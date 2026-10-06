@@ -93,6 +93,14 @@ impl Default for Options {
     }
 }
 
+/// Whether a builder takes pileups, is handing the rest of its records to the tap, or is done.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stage {
+    Open,
+    Closing,
+    Closed,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 struct TemplateMark {
     stamp: u32,
@@ -141,7 +149,7 @@ pub struct StreamingPileupBuilder<'f, S: RecordSource> {
     read_filter: Option<ReadFilter<'f>>,
     tap: Option<Tap<'f>>,
     pub(crate) slots: Vec<LiveRecord>,
-    free: Vec<u32>,
+    pub(crate) free: Vec<u32>,
     pub(crate) active: Vec<u32>,
     pub(crate) waiting: VecDeque<u32>,
     pub(crate) next: Option<u32>,
@@ -150,12 +158,13 @@ pub struct StreamingPileupBuilder<'f, S: RecordSource> {
     min_active_end: i64,
     last_key: (usize, i64),
     at: Option<(usize, usize)>,
+    built: bool,
     entries: Vec<RawEntry>,
     templates: HashMap<Vec<u8>, (u32, u32)>,
     free_templates: Vec<u32>,
     template_marks: Vec<TemplateMark>,
     stamp: u32,
-    closed: bool,
+    stage: Stage,
 }
 
 impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
@@ -188,12 +197,13 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
             min_active_end: i64::MAX,
             last_key: (0, i64::MIN),
             at: None,
+            built: false,
             entries: Vec::new(),
             templates: HashMap::new(),
             free_templates: Vec::new(),
             template_marks: Vec::new(),
             stamp: 0,
-            closed: false,
+            stage: Stage::Open,
         })
     }
 
@@ -279,7 +289,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     /// Advances to a position on a contig, at or after the last one, and piles up the records
     /// there.
     pub fn pileup(&mut self, contig: &str, position: usize) -> Result<Pileup<'_>> {
-        if self.closed {
+        if self.stage != Stage::Open {
             return Err(Error::Closed);
         }
         let reference_sequence_id = self.reference_sequence_id(contig)?;
@@ -293,10 +303,10 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         reference_sequence_id: usize,
         position: usize,
     ) -> Result<Pileup<'_>> {
-        if self.closed {
+        if self.stage != Stage::Open {
             return Err(Error::Closed);
         }
-        if self.at == Some((reference_sequence_id, position)) {
+        if self.built && self.at == Some((reference_sequence_id, position)) {
             return Ok(self.view(reference_sequence_id, position));
         }
         if reference_sequence_id >= self.header.reference_sequences().len() {
@@ -313,8 +323,10 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
             });
         }
         self.at = Some((reference_sequence_id, position));
+        self.built = false;
         self.advance(reference_sequence_id, position as i64)?;
         self.collect(position as i64);
+        self.built = true;
         Ok(self.view(reference_sequence_id, position))
     }
 
@@ -351,13 +363,15 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     /// Stops, first handing every record not yet handed to the tap to it, in input order.
     ///
     /// With a tap, the rest of the input is read to the end, so an output written by the tap is
-    /// complete. Without one, no more of the input is read. Dropping a builder closes it too, but
-    /// ignores any error, so close it to see one.
+    /// complete. Without one, no more of the input is read. A record goes to the tap once even
+    /// when the tap fails, and closing again after an error hands over the records after it.
+    /// Dropping a builder closes it too, but ignores any error, so close it to see one.
     pub fn close(&mut self) -> Result<()> {
-        if self.closed {
+        if self.stage == Stage::Closed {
             return Ok(());
         }
-        self.closed = true;
+        self.stage = Stage::Closing;
+        self.built = false;
         self.active.clear();
         self.entries.clear();
         if let Some(tap) = self.tap.as_mut() {
@@ -379,6 +393,7 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         self.free.clear();
         self.waiting.clear();
         self.next = None;
+        self.stage = Stage::Closed;
         Ok(())
     }
 
@@ -423,25 +438,26 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
                 break;
             }
             if key < self.last_key {
-                let name = live
-                    .record
-                    .name()
-                    .map_or("*".into(), |name| name.to_str_lossy());
                 return Err(Error::OutOfOrder {
-                    name: name.into_owned(),
+                    name: record_name(&live.record),
                 });
             }
             self.last_key = key;
             self.next = None;
-            let active = key.0 == reference_sequence_id && self.accept(index, pos)?;
+            let accepted = if key.0 == reference_sequence_id {
+                self.accept(index, pos)
+            } else {
+                Ok(false)
+            };
             if self.tap.is_some() {
                 self.waiting.push_back(index);
             }
-            if active {
+            if let Ok(true) = accepted {
                 self.activate(index);
             } else if self.tap.is_none() {
                 self.free.push(index);
             }
+            accepted?;
         }
         self.release(reference_sequence_id, pos)
     }
@@ -459,18 +475,24 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         };
         let tapped = self.tap.is_some();
         let live = &mut self.slots[index as usize];
-        let read = self.source.read_record(&mut live.record).and_then(|read| {
-            if read {
-                describe(live, tapped)?;
+        match self.source.read_record(&mut live.record) {
+            Ok(true) => {
+                if let Err(error) = describe(live, tapped) {
+                    live.reference_id = UNPLACED;
+                    if tapped {
+                        self.waiting.push_back(index);
+                    } else {
+                        self.free.push(index);
+                    }
+                    return Err(error.into());
+                }
+                self.next = Some(index);
             }
-            Ok(read)
-        });
-        if let Ok(true) = read {
-            self.next = Some(index);
-        } else {
-            self.free.push(index);
-            read?;
-            self.exhausted = true;
+            read => {
+                self.free.push(index);
+                read?;
+                self.exhausted = true;
+            }
         }
         Ok(self.next)
     }
@@ -488,10 +510,14 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
             return Ok(false);
         }
         let stored_bases = live.record.sequence().len();
-        if !live
+        let placed = live
             .footprint
-            .fill(live.start, live.record.cigar().as_bytes(), stored_bases)?
-        {
+            .fill(live.start, live.record.cigar().as_bytes(), stored_bases)
+            .map_err(|source| Error::InvalidRecord {
+                name: record_name(&live.record),
+                source,
+            })?;
+        if !placed {
             return Ok(false);
         }
         if let Some(read_filter) = self.read_filter.as_mut()
@@ -693,6 +719,13 @@ impl<S: RecordSource> Columns<'_, '_, S> {
         self.next += 1;
         Some(self.builder.pileup_at(self.reference_sequence_id, position))
     }
+}
+
+/// The name of a record, or `*` for a record with none.
+fn record_name(record: &bam::Record) -> String {
+    record
+        .name()
+        .map_or_else(|| "*".to_owned(), |name| name.to_str_lossy().into_owned())
 }
 
 /// Reads a record's contig, start, and flags, and with a tap, where the builder is past it.

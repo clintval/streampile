@@ -165,6 +165,35 @@ pub(crate) fn records(header: &str, reads: &[Read]) -> (sam::Header, Vec<bam::Re
     (header, records)
 }
 
+/// A record on chr1 built from raw BAM fields, which may disagree in ways a BAM writer refuses.
+pub(crate) fn raw_record(name: &str, start: i32, cigar: &[u32], bases: usize) -> bam::Record {
+    let mut block = Vec::new();
+    block.extend_from_slice(&0_i32.to_le_bytes());
+    block.extend_from_slice(&start.to_le_bytes());
+    block.extend_from_slice(&[(name.len() + 1) as u8, 60]);
+    block.extend_from_slice(&0_u16.to_le_bytes());
+    block.extend_from_slice(&(cigar.len() as u16).to_le_bytes());
+    block.extend_from_slice(&0_u16.to_le_bytes());
+    block.extend_from_slice(&(bases as u32).to_le_bytes());
+    block.extend_from_slice(&(-1_i32).to_le_bytes());
+    block.extend_from_slice(&(-1_i32).to_le_bytes());
+    block.extend_from_slice(&0_i32.to_le_bytes());
+    block.extend_from_slice(name.as_bytes());
+    block.push(0);
+    for op in cigar {
+        block.extend_from_slice(&op.to_le_bytes());
+    }
+    block.extend(std::iter::repeat_n(0x12, bases.div_ceil(2)));
+    block.extend(std::iter::repeat_n(30, bases));
+    let mut bytes = (block.len() as u32).to_le_bytes().to_vec();
+    bytes.extend_from_slice(&block);
+    let mut record = bam::Record::default();
+    bam::io::Reader::from(&bytes[..])
+        .read_record(&mut record)
+        .expect("a record-like block");
+    record
+}
+
 pub(crate) type Source = Records<
     std::iter::Map<std::vec::IntoIter<bam::Record>, fn(bam::Record) -> io::Result<bam::Record>>,
 >;

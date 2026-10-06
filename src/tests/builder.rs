@@ -6,8 +6,8 @@ use noodles::bam;
 use noodles::sam::alignment::record::Flags;
 
 use super::{
-    Entry, HEADER, Read, bam_bytes, bases, builder, entries, entry, name, names, read, records,
-    source, unmapped,
+    Entry, HEADER, Read, bam_bytes, bases, builder, entries, entry, name, names, raw_record, read,
+    records, source, unmapped,
 };
 use crate::{EntryKind, Error, PileupEntry, RecordSource, StreamingPileupBuilder};
 
@@ -966,4 +966,120 @@ fn test_the_kind_of_each_entry_is_named_as_in_python() {
     .map(EntryKind::as_str)
     .into();
     assert_eq!(names, ["base", "deletion", "insertion", "skip"]);
+}
+
+#[test]
+fn test_a_pileup_is_built_again_after_a_failed_advance() {
+    let reads = [
+        read("one", 10, "4M", "ACGT"),
+        read("two", 20, "4M", "GGGG"),
+        read("three", 5, "4M", "TTTT"),
+    ];
+    let mut builder = builder(&reads);
+    assert_eq!(names(&builder.pileup("chr1", 10).unwrap()), ["one"]);
+    for _ in 0..2 {
+        assert!(matches!(
+            builder.pileup("chr1", 21),
+            Err(Error::OutOfOrder { name }) if name == "three"
+        ));
+    }
+
+    let reads = [read("one", 10, "4M", "ACGT"), read("two", 20, "4M", "GGGG")];
+    let tapped = log();
+    let sink = Arc::clone(&tapped);
+    let mut failed = false;
+    let mut builder = super::builder(&reads).tap(move |record| {
+        sink.lock().unwrap().push(name(&record));
+        if failed {
+            Ok(())
+        } else {
+            failed = true;
+            Err(io::Error::other("disk full"))
+        }
+    });
+    assert_eq!(names(&builder.pileup("chr1", 10).unwrap()), ["one"]);
+    assert!(matches!(builder.pileup("chr1", 20), Err(Error::Io(_))));
+    let retried = builder.pileup("chr1", 20).unwrap();
+    assert_eq!(
+        (names(&retried), bases(&retried)),
+        (vec!["two".into()], "G".into())
+    );
+    builder.close().unwrap();
+    assert_eq!(logged(&tapped), ["one", "two"]);
+}
+
+#[test]
+fn test_a_read_that_fails_to_be_accepted_still_reaches_the_tap() {
+    let (header, mut records) = records(
+        HEADER,
+        &[
+            read("before", 10, "4M", "ACGT"),
+            read("after", 30, "4M", "ACGT"),
+        ],
+    );
+    records.insert(1, raw_record("bad", 11, &[4 << 4], 5));
+    let evicted = log();
+    let mut builder = StreamingPileupBuilder::new(source(records.clone()), &header)
+        .unwrap()
+        .tap(tap_into(&evicted));
+    assert!(matches!(
+        builder.pileup("chr1", 12),
+        Err(Error::InvalidRecord { name, .. }) if name == "bad"
+    ));
+    assert_eq!(names(&builder.pileup("chr1", 31).unwrap()), ["after"]);
+    builder.close().unwrap();
+    assert_eq!(logged(&evicted), ["before", "bad", "after"]);
+
+    let mut builder = StreamingPileupBuilder::new(source(records), &header).unwrap();
+    assert!(builder.pileup("chr1", 12).is_err());
+    let held: Vec<String> = builder
+        .active
+        .iter()
+        .chain(builder.next.iter())
+        .map(|&index| name(&builder.slots[index as usize].record))
+        .collect();
+    assert_eq!(held, ["before"]);
+    assert_eq!(builder.free.len(), builder.slots.len() - 1);
+}
+
+#[test]
+fn test_closing_again_after_a_tap_error_hands_over_the_rest() {
+    let reads = [
+        read("one", 10, "4M", "ACGT"),
+        read("two", 20, "4M", "ACGT"),
+        read("three", 30, "4M", "ACGT"),
+    ];
+    let tapped = log();
+    let sink = Arc::clone(&tapped);
+    let mut failed = false;
+    let mut builder = builder(&reads).tap(move |record| {
+        let record_name = name(&record);
+        if record_name == "one" && !failed {
+            failed = true;
+            return Err(io::Error::other("disk full"));
+        }
+        sink.lock().unwrap().push(record_name);
+        Ok(())
+    });
+    builder.pileup("chr1", 10).unwrap();
+    assert!(matches!(builder.close(), Err(Error::Io(_))));
+    assert!(matches!(builder.pileup("chr1", 40), Err(Error::Closed)));
+    builder.close().unwrap();
+    builder.close().unwrap();
+    assert_eq!(logged(&tapped), ["two", "three"]);
+}
+
+#[test]
+fn test_a_cigar_whose_query_offsets_would_overflow_is_refused() {
+    let longest = 0x0FFF_FFFF_u32;
+    let mut cigar = vec![(longest << 4) | 4; 15];
+    cigar.extend([(longest << 4) | 1, longest << 4]);
+    let (header, _) = records(HEADER, &[]);
+    let source = source(vec![raw_record("r", 10, &cigar, 4)]);
+    let mut builder = StreamingPileupBuilder::new(source, &header).unwrap();
+    assert!(matches!(
+        builder.pileup("chr1", 24),
+        Err(Error::InvalidRecord { ref name, ref source })
+            if name == "r" && source.to_string() == "CIGAR and query sequence lengths differ"
+    ));
 }
