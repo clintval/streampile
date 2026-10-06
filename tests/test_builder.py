@@ -942,3 +942,20 @@ def test_a_builder_is_used_and_dropped_on_other_threads() -> None:
         del columns
         pool.submit(builders.clear).result()
     assert alive() is None
+
+
+@pytest.mark.parametrize("asked", ["pileup", "columns"])
+def test_a_tap_asking_its_builder_for_a_pileup_raises_a_runtime_error(asked: str) -> None:
+    reads = [record(f"r{start}", start, "5M", "ACGTA") for start in range(10)]
+    builders: list[StreamingPileupBuilder] = []
+
+    def tap(_read: AlignedSegment) -> None:
+        if asked == "pileup":
+            builders[0].pileup("chr1", 15)
+        else:
+            next(builders[0].columns("chr1", 15, 20))
+
+    builders.append(StreamingPileupBuilder(reads, tap=tap))
+    with pytest.raises(RuntimeError, match="Already borrowed"):
+        for _ in builders[0].columns("chr1", 0, 20):
+            pass

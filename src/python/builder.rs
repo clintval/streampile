@@ -105,6 +105,9 @@ type Builder = crate::StreamingPileupBuilder<'static, PySource>;
 /// with a `tap`, buffering behind the longest active read is inherent. Without a `tap`, a read
 /// is dropped as soon as the builder has moved past it.
 ///
+/// A builder can be used from any thread, one call at a time: a call made while another runs,
+/// such as from `read_filter` or `tap`, raises a `RuntimeError`.
+///
 /// ```python
 /// with (
 ///     AlignmentFile("in.bam", threads=4) as source,
@@ -477,7 +480,7 @@ impl Columns {
         self.next += 1;
         self.builder
             .bind(py)
-            .borrow_mut()
+            .try_borrow_mut()?
             .pileup(py, &self.contig, position)
             .map(Some)
     }
