@@ -82,6 +82,15 @@ pub enum Error {
     #[error("the builder is closed")]
     Closed,
 
+    /// A name is not the name of any strategy of a kind.
+    #[error("'{name}' is not a valid {kind}")]
+    UnknownStrategy {
+        /// The kind of strategy, such as `AgreementStrategy`.
+        kind: &'static str,
+        /// The name.
+        name: String,
+    },
+
     /// The builder was asked for a pileup after an error stopped it while advancing.
     #[error("the builder stopped at an earlier error")]
     Stopped,

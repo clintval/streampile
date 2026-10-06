@@ -2,7 +2,9 @@
 //! `CallOverlappingConsensusBases` as fgumi implements them.
 
 use std::cmp::Ordering;
+use std::str::FromStr;
 
+use crate::error::{Error, Result};
 use crate::pileup::EntryKind;
 
 /// The highest quality the sum of two agreeing bases gets, as in fgumi.
@@ -37,6 +39,20 @@ impl AgreementStrategy {
     }
 }
 
+impl FromStr for AgreementStrategy {
+    type Err = Error;
+
+    /// The strategy of a name that [`as_str`](AgreementStrategy::as_str) gives.
+    fn from_str(name: &str) -> Result<Self> {
+        named(
+            [Self::Consensus, Self::MaxQual, Self::PassThrough],
+            Self::as_str,
+            "AgreementStrategy",
+            name,
+        )
+    }
+}
+
 /// How a template's base and quality are made from two of its reads holding different bases.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum DisagreementStrategy {
@@ -60,6 +76,36 @@ impl DisagreementStrategy {
             DisagreementStrategy::MaskLowerQual => "mask_lower_qual",
         }
     }
+}
+
+impl FromStr for DisagreementStrategy {
+    type Err = Error;
+
+    /// The strategy of a name that [`as_str`](DisagreementStrategy::as_str) gives.
+    fn from_str(name: &str) -> Result<Self> {
+        named(
+            [Self::Consensus, Self::MaskBoth, Self::MaskLowerQual],
+            Self::as_str,
+            "DisagreementStrategy",
+            name,
+        )
+    }
+}
+
+/// The one of some strategies of a kind whose name is `name`.
+fn named<S: Copy>(
+    strategies: [S; 3],
+    as_str: fn(S) -> &'static str,
+    kind: &'static str,
+    name: &str,
+) -> Result<S> {
+    strategies
+        .into_iter()
+        .find(|&strategy| as_str(strategy) == name)
+        .ok_or_else(|| Error::UnknownStrategy {
+            kind,
+            name: name.to_owned(),
+        })
 }
 
 /// What one read holds at a position, or what a template's reads make of it.

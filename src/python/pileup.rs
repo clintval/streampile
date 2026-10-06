@@ -392,28 +392,6 @@ fn optional(value: Option<i64>) -> i64 {
     value.unwrap_or(ABSENT)
 }
 
-fn agreement_of(name: &str) -> PyResult<AgreementStrategy> {
-    [
-        AgreementStrategy::Consensus,
-        AgreementStrategy::MaxQual,
-        AgreementStrategy::PassThrough,
-    ]
-    .into_iter()
-    .find(|strategy| strategy.as_str() == name)
-    .ok_or_else(|| PyValueError::new_err(format!("'{name}' is not a valid AgreementStrategy")))
-}
-
-fn disagreement_of(name: &str) -> PyResult<DisagreementStrategy> {
-    [
-        DisagreementStrategy::Consensus,
-        DisagreementStrategy::MaskBoth,
-        DisagreementStrategy::MaskLowerQual,
-    ]
-    .into_iter()
-    .find(|strategy| strategy.as_str() == name)
-    .ok_or_else(|| PyValueError::new_err(format!("'{name}' is not a valid DisagreementStrategy")))
-}
-
 /// One read at one pileup position.
 ///
 /// A read holding a base, a deletion, or a reference skip (the CIGAR `N` operator) at a position
@@ -1018,8 +996,8 @@ impl Pileup {
     ///     disagreement: how the base and quality of two reads holding different bases are made.
     #[pyo3(signature = (*, agreement = "consensus", disagreement = "consensus"))]
     fn templates(&self, agreement: &str, disagreement: &str) -> PyResult<Vec<PileupTemplate>> {
-        let agreement = agreement_of(agreement)?;
-        let disagreement = disagreement_of(disagreement)?;
+        let agreement: AgreementStrategy = agreement.parse().map_err(to_python)?;
+        let disagreement: DisagreementStrategy = disagreement.parse().map_err(to_python)?;
         let numbers = number_templates(&self.entries, |held| {
             (held.kind != EntryKind::Insertion).then(|| held.template())
         });

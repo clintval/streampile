@@ -563,3 +563,23 @@ fn test_a_template_of_a_pair_that_is_not_fr_has_no_template_end() {
         [(Some(4), None), (None, None)]
     );
 }
+
+#[test]
+fn test_strategies_are_parsed_from_their_names() {
+    for agreement in AGREEMENTS {
+        assert_eq!(agreement.as_str().parse().ok(), Some(agreement));
+    }
+    for disagreement in DISAGREEMENTS {
+        assert_eq!(disagreement.as_str().parse().ok(), Some(disagreement));
+    }
+    let refused = "bogus".parse::<AgreementStrategy>().unwrap_err();
+    assert_eq!(
+        refused.to_string(),
+        "'bogus' is not a valid AgreementStrategy"
+    );
+    let refused = "consensus ".parse::<DisagreementStrategy>().unwrap_err();
+    assert_eq!(
+        refused.to_string(),
+        "'consensus ' is not a valid DisagreementStrategy"
+    );
+}
