@@ -12,7 +12,7 @@ use noodles::sam::alignment::RecordBuf;
 use crate::testing::{Frag, Pair, SamBuilder, Strand};
 use crate::{Error, is_fr_pair, template_end_distance};
 
-/// A pair of reads of all `A`s with these CIGARs at these 1-based starts and strands, as fgbio's
+/// A pair of reads with these CIGARs at these 1-based starts and strands, as fgbio's
 /// `SamBuilder.addPair` and htsjdk's `SamPairUtil.setMateInfo` make them.
 fn pair(
     start1: usize,
@@ -22,20 +22,10 @@ fn pair(
     cigar2: &str,
     reverse2: bool,
 ) -> (sam::Header, Vec<RecordBuf>) {
-    let length = |cigar: &str| {
-        noodles::sam::record::Cigar::new(cigar.as_bytes())
-            .iter()
-            .map(Result::unwrap)
-            .filter(|op| op.kind().consumes_read())
-            .map(noodles::sam::alignment::record::cigar::Op::len)
-            .sum::<usize>()
-    };
     let strand = |reverse: bool| if reverse { Strand::Minus } else { Strand::Plus };
     let mut builder = SamBuilder::new();
     let records = builder.add_pair(Pair {
         name: Some("q".into()),
-        bases1: Some("A".repeat(length(cigar1))),
-        bases2: Some("A".repeat(length(cigar2))),
         cigar1: Some(cigar1.into()),
         cigar2: Some(cigar2.into()),
         strand1: strand(reverse1),

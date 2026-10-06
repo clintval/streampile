@@ -1,11 +1,17 @@
 //! Tests that carry over the intent of fgbio's pileup tests, with fgbio's 1-based positions
-//! moved to 0-based ones.
+//! moved to 0-based ones. Pairs are built at fgbio's 1-based starts by the shared `SamBuilder`,
+//! as fgbio builds them, and other reads at 0-based starts.
 
 use std::collections::BTreeMap;
 
+use noodles::sam::alignment::RecordBuf;
+use noodles::sam::alignment::record::data::field::Tag;
+use noodles::sam::alignment::record_buf::data::field::Value;
+
 use super::{Read, bases, builder, name, names, read};
 use crate::template::{Alignment, parse_cigar};
-use crate::{EntryKind, Error};
+use crate::testing::{BuiltRecords, Frag, Pair, SamBuilder, Strand};
+use crate::{EntryKind, Error, StreamingPileupBuilder};
 
 const READ_LENGTH: usize = 50;
 
@@ -13,28 +19,36 @@ fn repeat(base: char) -> String {
     base.to_string().repeat(READ_LENGTH)
 }
 
-/// A pair of 50-base reads at 0-based starts with mate fields as htsjdk sets them, sorted.
-fn pair(name: &str, start1: usize, start2: usize, reverse1: bool, reverse2: bool) -> Vec<Read> {
-    let end = |start: usize| start + READ_LENGTH - 1;
-    let five_prime = |start: usize, reverse: bool| if reverse { end(start) } else { start } as i64;
-    let (first, second) = (five_prime(start1, reverse1), five_prime(start2, reverse2));
-    let insert = (second - first + if second >= first { 1 } else { -1 }) as i32;
-    let strand =
-        |reverse: bool, mate_reverse: bool| u16::from(reverse) * 16 + u16::from(mate_reverse) * 32;
-    let cigar = format!("{READ_LENGTH}M");
-    let r1 = read(name, start1, &cigar, &repeat('A'))
-        .flag(1 | 64 | strand(reverse1, reverse2))
-        .mate("chr1", start2, insert)
-        .tag(&format!("MC:Z:{cigar}"));
-    let r2 = read(name, start2, &cigar, &repeat('C'))
-        .flag(1 | 128 | strand(reverse2, reverse1))
-        .mate("chr1", start1, -insert)
-        .tag(&format!("MC:Z:{cigar}"));
-    if start2 < start1 {
-        vec![r2, r1]
-    } else {
-        vec![r1, r2]
-    }
+/// A builder of fgbio's 50-base reads.
+fn reads() -> SamBuilder {
+    SamBuilder::new().read_length(READ_LENGTH)
+}
+
+/// A pair of 50-base reads of `A`s and `C`s at 1-based starts on these strands.
+fn pair(
+    name: &str,
+    start1: usize,
+    start2: usize,
+    strand1: Strand,
+    strand2: Strand,
+) -> Vec<RecordBuf> {
+    reads().add_pair(Pair {
+        name: Some(name.into()),
+        bases1: Some(repeat('A')),
+        bases2: Some(repeat('C')),
+        strand1,
+        strand2,
+        ..Pair::at(start1, start2)
+    })
+}
+
+/// A pileup builder over built records, changed or not, in coordinate order.
+fn piled(
+    records: impl IntoIterator<Item = RecordBuf>,
+) -> StreamingPileupBuilder<'static, BuiltRecords> {
+    let mut builder = reads();
+    builder.extend(records);
+    builder.to_pileup_builder()
 }
 
 fn counts(bases: &str) -> BTreeMap<char, usize> {
@@ -128,17 +142,25 @@ fn test_builder_piles_up_every_edge_case_of_indels() {
 
 #[test]
 fn test_builder_piles_up_only_reads_of_mapped_pairs_with_a_read_filter() {
-    let mut half_mapped = pair("q2", 100, 100, false, false);
-    half_mapped[1] = half_mapped[1].clone().flag(1 | 4 | 128);
-    half_mapped[0] = half_mapped[0].clone().flag(1 | 8 | 64);
-    let mut reads = vec![read("q1", 100, "50M", &repeat('A'))];
-    reads.extend(half_mapped);
-    reads.extend(pair("q3", 100, 299, false, true));
+    let mut builder = reads();
+    builder.add_frag(Frag {
+        name: Some("q1".into()),
+        ..Frag::at(101)
+    });
+    builder.add_pair(Pair {
+        name: Some("q2".into()),
+        unmapped2: true,
+        ..Pair::at(101, 101)
+    });
+    builder.add_pair(Pair {
+        name: Some("q3".into()),
+        ..Pair::at(101, 300)
+    });
     let mapped_pair = |record: &noodles::bam::Record| {
         let flags = record.flags();
         flags.is_segmented() && !flags.is_unmapped() && !flags.is_mate_unmapped()
     };
-    let mut builder = builder(&reads).read_filter(mapped_pair);
+    let mut builder = builder.to_pileup_builder().read_filter(mapped_pair);
     let pileup = builder.pileup("chr1", 104).unwrap();
     assert_eq!(pileup.unfiltered_depth(), 1);
     let kept = pileup.get(0).unwrap();
@@ -150,7 +172,9 @@ fn test_builder_piles_up_only_reads_of_mapped_pairs_with_a_read_filter() {
 
 #[test]
 fn test_builder_keeps_a_fragment_and_positions_outside_the_insert_of_an_fr_pair() {
-    let mut fragment = builder(&[read("q1", 99, "50M", &repeat('A'))]);
+    let mut fragment = reads();
+    fragment.add_frag(Frag::at(100));
+    let mut fragment = fragment.to_pileup_builder();
     assert_eq!(fragment.pileup("chr1", 99).unwrap().unfiltered_depth(), 1);
     assert_eq!(fragment.pileup("chr1", 148).unwrap().unfiltered_depth(), 1);
     let pileup = fragment.pileup("chr1", 148).unwrap();
@@ -159,7 +183,7 @@ fn test_builder_keeps_a_fragment_and_positions_outside_the_insert_of_an_fr_pair(
         None
     );
 
-    let mut builder = builder(&pair("q2", 100, 99, false, true));
+    let mut builder = piled(pair("q2", 101, 100, Strand::Plus, Strand::Minus));
     let mut depths = Vec::new();
     let mut outside = Vec::new();
     for position in [99, 100, 148, 149] {
@@ -178,7 +202,7 @@ fn test_builder_keeps_a_fragment_and_positions_outside_the_insert_of_an_fr_pair(
 
 #[test]
 fn test_builder_keeps_every_position_of_a_pair_with_the_reverse_read_starting_later() {
-    let mut builder = builder(&pair("q2", 100, 99, true, false));
+    let mut builder = piled(pair("q2", 101, 100, Strand::Minus, Strand::Plus));
     let mut depths = Vec::new();
     let mut distances = Vec::new();
     for position in [99, 100, 148, 149] {
@@ -212,10 +236,14 @@ fn test_builder_composes_a_read_filter_with_an_entry_filter() {
 
 #[test]
 fn test_entries_report_offsets_and_positions_in_read_order() {
-    let mut reads = pair("q1", 100, 200, false, true);
-    reads[0] = reads[0].clone().quals(&[35; READ_LENGTH]);
-    reads[1] = reads[1].clone().quals(&[35; READ_LENGTH]);
-    let mut builder = builder(&reads);
+    let mut builder = reads().base_quality(35);
+    builder.add_pair(Pair {
+        name: Some("q1".into()),
+        bases1: Some(repeat('A')),
+        bases2: Some(repeat('C')),
+        ..Pair::at(101, 201)
+    });
+    let mut builder = builder.to_pileup_builder();
     let mut seen = Vec::new();
     for position in [104, 204] {
         let pileup = builder.pileup("chr1", position).unwrap();
@@ -240,30 +268,32 @@ fn test_entries_report_offsets_and_positions_in_read_order() {
 
 #[test]
 fn test_a_template_end_needs_a_mapped_fr_mate_on_the_same_contig() {
-    let mut unmapped_mate = pair("q2", 100, 100, false, false);
-    unmapped_mate[0] = unmapped_mate[0].clone().flag(1 | 8 | 64);
-    unmapped_mate[1] = unmapped_mate[1].clone().flag(1 | 4 | 128);
-    let other_contig = read("q3", 100, "50M", &repeat('A'))
-        .flag(1 | 32 | 64)
-        .mate("chr2", 200, 0)
-        .tag("MC:Z:50M");
+    let fragment = reads().add_frag(Frag::at(101));
+    let unmapped_mate = reads().add_pair(Pair {
+        unmapped2: true,
+        ..Pair::at(101, 101)
+    });
+    let other_contig = reads().add_pair(Pair {
+        contig2: Some(1),
+        ..Pair::at(101, 201)
+    });
     let cases = [
-        vec![read("q1", 100, "50M", &repeat('A'))],
+        fragment,
         unmapped_mate,
-        vec![other_contig],
-        pair("pp", 100, 200, false, false),
-        pair("mm", 100, 200, true, true),
-        pair("rf", 100, 200, true, false),
+        other_contig,
+        pair("pp", 101, 201, Strand::Plus, Strand::Plus),
+        pair("mm", 101, 201, Strand::Minus, Strand::Minus),
+        pair("rf", 101, 201, Strand::Minus, Strand::Plus),
     ];
-    for reads in cases {
-        let mut builder = builder(&reads);
+    for records in cases {
+        let mut builder = piled(records.clone());
         for position in [100, 149, 200, 249] {
             let pileup = builder.pileup("chr1", position).unwrap();
             assert!(
                 pileup
                     .iter()
                     .all(|entry| entry.template_end_distance().unwrap().is_none()),
-                "{reads:?}"
+                "{records:?}"
             );
         }
     }
@@ -271,22 +301,11 @@ fn test_a_template_end_needs_a_mapped_fr_mate_on_the_same_contig() {
 
 #[test]
 fn test_a_template_end_spans_the_insert_of_an_fr_pair() {
-    let short = |reads: Vec<Read>| -> Vec<Read> {
-        reads
-            .into_iter()
-            .map(|read| Read {
-                cigar: "10M".into(),
-                bases: "A".repeat(10),
-                quals: Some(vec![40; 10]),
-                tags: vec!["MC:Z:10M".into()],
-                ..read
-            })
-            .collect()
-    };
-    let mut reads = short(pair("q", 99, 190, false, true));
-    reads[0].tlen = 101;
-    reads[1].tlen = -101;
-    let mut builder = builder(&reads);
+    let records = SamBuilder::new()
+        .read_length(10)
+        .add_pair(Pair::at(100, 191));
+    assert_eq!(records[0].template_length(), 101);
+    let mut builder = piled(records);
     let first = builder
         .pileup("chr1", 99)
         .unwrap()
@@ -314,22 +333,22 @@ fn test_a_template_end_is_measured_from_the_mate_cigar_alone() {
         (true, Some(89)),
         (true, Some(99)),
     ];
-    let with_mate_cigar = pair("q", 100, 150, false, true);
+    let with_mate_cigar = reads().add_pair(Pair {
+        name: Some("q".into()),
+        ..Pair::at(101, 151)
+    });
     let mut any_template_length = with_mate_cigar.clone();
-    for (read, tlen) in any_template_length.iter_mut().zip([7, 0]) {
-        read.tlen = tlen;
+    for (record, tlen) in any_template_length.iter_mut().zip([7, 0]) {
+        *record.template_length_mut() = tlen;
     }
-    let without: Vec<Read> = with_mate_cigar
+    let without: Vec<RecordBuf> = with_mate_cigar
         .iter()
         .cloned()
-        .map(|read| Read {
-            tags: vec![],
-            ..read
-        })
+        .map(SamBuilder::without_mate_cigar)
         .collect();
-    for reads in [with_mate_cigar, any_template_length, without] {
-        let has_mate_cigar = !reads[0].tags.is_empty();
-        let mut builder = builder(&reads);
+    for records in [with_mate_cigar, any_template_length, without] {
+        let has_mate_cigar = records[0].data().get(&Tag::MATE_CIGAR).is_some();
+        let mut builder = piled(records.clone());
         let mut distances = Vec::new();
         for position in [100, 110, 149, 150, 189, 199] {
             let pileup = builder.pileup("chr1", position).unwrap();
@@ -344,19 +363,22 @@ fn test_a_template_end_is_measured_from_the_mate_cigar_alone() {
             }
         }
         let expected = if has_mate_cigar { &expected[..] } else { &[] };
-        assert_eq!(distances, expected, "{reads:?}");
+        assert_eq!(distances, expected, "{records:?}");
     }
 }
 
 #[test]
 fn test_a_template_end_from_an_invalid_mate_cigar_is_an_error_naming_the_read() {
-    for value in ["10M5", "4Q", "M", "0M", "2S", "*", "4294967295M1M"] {
-        let mut reads = pair("q", 100, 150, false, true);
-        reads[0].tags = vec![format!("MC:Z:{value}")];
-        let mut builder = builder(&reads);
+    let with_mate_cigar = |value: Value| {
+        let mut records = pair("q", 101, 151, Strand::Plus, Strand::Minus);
+        records[0].data_mut().insert(Tag::MATE_CIGAR, value);
+        let mut builder = piled(records);
         let pileup = builder.pileup("chr1", 120).unwrap();
         assert_eq!(pileup.len(), 1);
-        let refused = pileup.get(0).unwrap().template_end_distance();
+        pileup.get(0).unwrap().template_end_distance()
+    };
+    for value in ["10M5", "4Q", "M", "0M", "2S", "*", "4294967295M1M"] {
+        let refused = with_mate_cigar(Value::from(value));
         assert!(
             matches!(
                 &refused,
@@ -365,45 +387,24 @@ fn test_a_template_end_from_an_invalid_mate_cigar_is_an_error_naming_the_read() 
             "{value}: {refused:?}"
         );
     }
-    let mut reads = pair("q", 100, 150, false, true);
-    reads[0].tags = vec!["MC:i:50".into()];
-    let mut builder = builder(&reads);
-    let refused = builder
-        .pileup("chr1", 120)
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .template_end_distance();
+    let refused = with_mate_cigar(Value::from(50_i32));
     assert!(matches!(refused, Err(Error::InvalidMateCigar { .. })));
 }
 
-/// A forward read and its reverse mate at 1-based starts, as fgbio's `SamBuilder.addPair` makes
-/// them, each with the other's CIGAR in its `MC` tag and as many bases as its CIGAR reads.
-fn mates(start1: usize, cigar1: &str, start2: usize, cigar2: &str) -> Vec<Read> {
-    let bases = |cigar: &str, base: &str| {
-        let length: usize = noodles::sam::record::Cigar::new(cigar.as_bytes())
-            .iter()
-            .map(Result::unwrap)
-            .filter(|op| op.kind().consumes_read())
-            .fold(0, |length, op| length + op.len());
-        base.repeat(length)
-    };
-    let forward = read("q", start1 - 1, cigar1, &bases(cigar1, "A"))
-        .flag(1 | 32 | 64)
-        .mate("chr1", start2 - 1, 0)
-        .tag(&format!("MC:Z:{cigar2}"));
-    let reverse = read("q", start2 - 1, cigar2, &bases(cigar2, "C"))
-        .flag(1 | 16 | 128)
-        .mate("chr1", start1 - 1, 0)
-        .tag(&format!("MC:Z:{cigar1}"));
-    let mut reads = vec![forward, reverse];
-    reads.sort_by_key(|read| read.start);
-    reads
+/// A forward read and its reverse mate at fgbio's 1-based starts, as fgbio's `SamBuilder.addPair`
+/// makes them, each with the other's CIGAR in its `MC` tag.
+fn mates(start1: usize, cigar1: &str, start2: usize, cigar2: &str) -> Vec<RecordBuf> {
+    SamBuilder::new().add_pair(Pair {
+        name: Some("q".into()),
+        cigar1: Some(cigar1.into()),
+        cigar2: Some(cigar2.into()),
+        ..Pair::at(start1, start2)
+    })
 }
 
 /// The template-end distance of the forward or the reverse read at each 0-based position.
-fn ends(reads: &[Read], reverse: bool, positions: &[usize]) -> Vec<Option<usize>> {
-    let mut builder = builder(reads);
+fn ends(records: &[RecordBuf], reverse: bool, positions: &[usize]) -> Vec<Option<usize>> {
+    let mut builder = piled(records.to_vec());
     positions
         .iter()
         .map(|&position| {
@@ -421,11 +422,10 @@ fn ends(reads: &[Read], reverse: bool, positions: &[usize]) -> Vec<Option<usize>
 /// set". A missing `MC` tag is an error naming the read here, for either read of the pair.
 #[test]
 fn test_a_template_end_without_a_mate_cigar_is_an_error_for_either_read() {
-    let mut reads = pair("q", 9, 49, false, true);
-    for read in &mut reads {
-        read.tags.clear();
-    }
-    let mut builder = builder(&reads);
+    let records = pair("q", 10, 50, Strand::Plus, Strand::Minus)
+        .into_iter()
+        .map(SamBuilder::without_mate_cigar);
+    let mut builder = piled(records);
     let pileup = builder.pileup("chr1", 50).unwrap();
     assert_eq!(pileup.len(), 2);
     for entry in pileup.iter() {
@@ -517,11 +517,8 @@ fn test_a_template_end_is_continuous_as_the_reads_stop_sharing_a_position() {
 /// read whose mate lies wholly before it has no template end at any of its positions.
 #[test]
 fn test_a_template_end_is_absent_for_a_read_past_its_mates_alignment() {
-    let lone = read("q", 300, "15M", &"A".repeat(15))
-        .flag(1 | 32 | 64)
-        .mate("chr1", 100, 0)
-        .tag("MC:Z:10M5S");
-    assert_eq!(ends(&[lone], false, &[300, 307, 314]), [None, None, None]);
+    let records = mates(301, "15M", 101, "10M5S");
+    assert_eq!(ends(&records, false, &[300, 307, 314]), [None, None, None]);
 }
 
 #[test]
@@ -549,37 +546,17 @@ fn test_a_mate_cigar_must_span_a_base_with_operators_bam_allows() {
 /// case, as the public functions give them.
 #[test]
 fn test_the_template_ends_of_a_record_buf() {
-    use noodles::core::Position;
-    use noodles::sam::alignment::RecordBuf;
-    use noodles::sam::alignment::record::Flags;
-    use noodles::sam::alignment::record::data::field::Tag;
-    use noodles::sam::alignment::record_buf::Cigar;
-    use noodles::sam::alignment::record_buf::data::field::Value;
-
-    let cigar = |text: &str| -> Cigar {
-        noodles::sam::record::Cigar::new(text.as_bytes())
-            .iter()
-            .map(Result::unwrap)
-            .collect()
-    };
-    let record = RecordBuf::builder()
-        .set_name("q")
-        .set_flags(Flags::SEGMENTED | Flags::MATE_REVERSE_COMPLEMENTED | Flags::FIRST_SEGMENT)
-        .set_reference_sequence_id(0)
-        .set_alignment_start(Position::try_from(101).unwrap())
-        .set_cigar(cigar("2S124M1D3M"))
-        .set_mate_reference_sequence_id(0)
-        .set_mate_alignment_start(Position::try_from(100).unwrap())
-        .set_data(
-            [(Tag::MATE_CIGAR, Value::from("3S124M2S"))]
-                .into_iter()
-                .collect(),
-        )
-        .build();
-    let header = noodles::sam::Header::default();
+    let mut builder = SamBuilder::new();
+    let record = builder.add_pair(Pair {
+        cigar1: Some("2S124M1D3M".into()),
+        cigar2: Some("3S124M2S".into()),
+        ..Pair::at(101, 100)
+    })[0]
+        .clone();
+    let header = builder.header();
     let ends: Vec<_> = [223, 224, 225, 226]
         .into_iter()
-        .map(|position| crate::template_end_distance(&record, &header, position).unwrap())
+        .map(|position| crate::template_end_distance(&record, header, position).unwrap())
         .collect();
     assert_eq!(ends, [Some(1), Some(1), Some(0), None]);
     let five_prime = |offset| crate::five_prime_distance(&record, offset).unwrap();

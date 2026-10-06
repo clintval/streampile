@@ -1,4 +1,5 @@
 use super::{Read, read, unfiltered};
+use crate::testing::{Pair, SamBuilder, Strand};
 use crate::{AgreementStrategy, DisagreementStrategy, EntryKind, PileupTemplate};
 
 const AGREEMENTS: [AgreementStrategy; 3] = [
@@ -342,61 +343,46 @@ fn test_a_templates_strand_is_its_first_reads() {
     }
 }
 
+/// The templates' distances to both of their ends at each 0-based position of built pairs.
+fn template_ends(pair: Pair, positions: &[usize]) -> Vec<(Option<usize>, Option<usize>)> {
+    let mut builder = SamBuilder::new();
+    builder.add_pair(pair);
+    let mut pileups = builder.to_pileup_builder();
+    positions
+        .iter()
+        .map(|&position| {
+            let pileup = pileups.pileup("chr1", position).unwrap();
+            let templates = pileup.templates(
+                AgreementStrategy::default(),
+                DisagreementStrategy::default(),
+            );
+            let template = &templates[0];
+            (
+                template.five_prime_distance().unwrap(),
+                template.template_end_distance().unwrap(),
+            )
+        })
+        .collect()
+}
+
 #[test]
 fn test_a_templates_distances_are_its_first_reads_and_else_its_second_reads() {
-    let reads = [
-        read("t", 100, "10M", &"A".repeat(10))
-            .flag(99)
-            .mate("chr1", 105, 15)
-            .tag("MC:Z:10M"),
-        read("t", 105, "10M", &"C".repeat(10))
-            .flag(147)
-            .mate("chr1", 100, -15)
-            .tag("MC:Z:10M"),
-    ];
-    let mut builder = unfiltered(&reads);
-    let mut distances = Vec::new();
-    for position in [100, 104, 105, 109, 110, 114] {
-        let pileup = builder.pileup("chr1", position).unwrap();
-        let templates = pileup.templates(
-            AgreementStrategy::default(),
-            DisagreementStrategy::default(),
-        );
-        let template = &templates[0];
-        distances.push((
-            template.five_prime_distance().unwrap(),
-            template.template_end_distance().unwrap(),
-        ));
-    }
+    let pair = Pair {
+        cigar1: Some("10M".into()),
+        cigar2: Some("10M".into()),
+        ..Pair::at(101, 106)
+    };
     let expected = [(0, 14), (4, 10), (5, 9), (9, 5), (10, 4), (14, 0)];
     assert_eq!(
-        distances,
+        template_ends(pair, &[100, 104, 105, 109, 110, 114]),
         expected.map(|(five, end)| (Some(five), Some(end)))
     );
-    let deleted = [
-        read("t", 100, "2M1D7M", &"A".repeat(9))
-            .flag(99)
-            .mate("chr1", 100, 10)
-            .tag("MC:Z:10M"),
-        read("t", 100, "10M", &"C".repeat(10))
-            .flag(147)
-            .mate("chr1", 100, -10)
-            .tag("MC:Z:2M1D7M"),
-    ];
-    let mut builder = unfiltered(&deleted);
-    let pileup = builder.pileup("chr1", 102).unwrap();
-    let templates = pileup.templates(
-        AgreementStrategy::default(),
-        DisagreementStrategy::default(),
-    );
-    let template = &templates[0];
-    assert_eq!(
-        (
-            template.five_prime_distance().unwrap(),
-            template.template_end_distance().unwrap()
-        ),
-        (Some(2), Some(7))
-    );
+    let deleted = Pair {
+        cigar1: Some("2M1D7M".into()),
+        cigar2: Some("10M".into()),
+        ..Pair::at(101, 101)
+    };
+    assert_eq!(template_ends(deleted, &[102]), [(Some(2), Some(7))]);
 }
 
 #[test]
@@ -447,29 +433,15 @@ fn test_a_pileup_without_a_base_deletion_or_skip_has_no_templates() {
 
 #[test]
 fn test_a_template_of_a_pair_that_is_not_fr_has_no_template_end() {
-    let reads = [
-        read("t", 100, "10M", &"A".repeat(10))
-            .flag(83)
-            .mate("chr1", 200, 0)
-            .tag("MC:Z:10M"),
-        read("t", 200, "10M", &"C".repeat(10))
-            .flag(163)
-            .mate("chr1", 100, 0)
-            .tag("MC:Z:10M"),
-    ];
-    let mut builder = unfiltered(&reads);
-    for position in [105, 205] {
-        let pileup = builder.pileup("chr1", position).unwrap();
-        let templates = pileup.templates(
-            AgreementStrategy::default(),
-            DisagreementStrategy::default(),
-        );
-        let template = &templates[0];
-        assert!(!template.entries().next().unwrap().is_fr_pair().unwrap());
-        assert_eq!(
-            template.template_end_distance().unwrap(),
-            None,
-            "{position}"
-        );
-    }
+    let outward = Pair {
+        cigar1: Some("10M".into()),
+        cigar2: Some("10M".into()),
+        strand1: Strand::Minus,
+        strand2: Strand::Plus,
+        ..Pair::at(101, 201)
+    };
+    assert_eq!(
+        template_ends(outward, &[105, 205]),
+        [(Some(4), None), (None, None)]
+    );
 }

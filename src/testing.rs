@@ -52,9 +52,9 @@ pub enum Strand {
 pub struct Pair {
     /// The name of both reads, or the next sequential name.
     pub name: Option<String>,
-    /// The first read's bases, or random bases of the builder's read length.
+    /// The first read's bases, or random bases, as many as its CIGAR reads.
     pub bases1: Option<String>,
-    /// The second read's bases, or random bases of the builder's read length.
+    /// The second read's bases, or random bases, as many as its CIGAR reads.
     pub bases2: Option<String>,
     /// The first read's qualities, or the builder's base quality at every base.
     pub quals1: Option<Vec<u8>>,
@@ -140,7 +140,7 @@ impl Pair {
 pub struct Frag {
     /// The read's name, or the next sequential name.
     pub name: Option<String>,
-    /// The read's bases, or random bases of the builder's read length.
+    /// The read's bases, or random bases, as many as its CIGAR reads.
     pub bases: Option<String>,
     /// The read's qualities, or the builder's base quality at every base.
     pub quals: Option<Vec<u8>>,
@@ -317,8 +317,9 @@ impl SamBuilder {
             attrs,
         } = pair;
         let name = name.unwrap_or_else(|| self.next_name());
-        let bases1 = bases1.unwrap_or_else(|| self.random_bases());
-        let bases2 = bases2.unwrap_or_else(|| self.random_bases());
+        let (cigar1, cigar2) = (self.cigar(cigar1), self.cigar(cigar2));
+        let bases1 = bases1.unwrap_or_else(|| self.random_bases(&cigar1));
+        let bases2 = bases2.unwrap_or_else(|| self.random_bases(&cigar2));
         let mut r1 = record(&Read {
             name: &name,
             quals: self.quals(quals1, &bases1),
@@ -326,7 +327,7 @@ impl SamBuilder {
             contig,
             start: start1,
             unmapped: unmapped1 || start1 == 0,
-            cigar: self.cigar(cigar1),
+            cigar: cigar1,
             mapq: mapq1,
             strand: strand1,
             flags: Flags::SEGMENTED | Flags::FIRST_SEGMENT,
@@ -339,7 +340,7 @@ impl SamBuilder {
             contig: contig2.unwrap_or(contig),
             start: start2,
             unmapped: unmapped2 || start2 == 0,
-            cigar: self.cigar(cigar2),
+            cigar: cigar2,
             mapq: mapq2,
             strand: strand2,
             flags: Flags::SEGMENTED | Flags::LAST_SEGMENT,
@@ -366,7 +367,8 @@ impl SamBuilder {
             attrs,
         } = frag;
         let name = name.unwrap_or_else(|| self.next_name());
-        let bases = bases.unwrap_or_else(|| self.random_bases());
+        let cigar = self.cigar(cigar);
+        let bases = bases.unwrap_or_else(|| self.random_bases(&cigar));
         let built = record(&Read {
             name: &name,
             quals: self.quals(quals, &bases),
@@ -374,7 +376,7 @@ impl SamBuilder {
             contig,
             start,
             unmapped: unmapped || start == 0,
-            cigar: self.cigar(cigar),
+            cigar,
             mapq,
             strand,
             flags: Flags::empty(),
@@ -474,8 +476,8 @@ impl SamBuilder {
         name
     }
 
-    fn random_bases(&mut self) -> String {
-        (0..self.read_length)
+    fn random_bases(&mut self, cigar: &Cigar) -> String {
+        (0..cigar.read_length())
             .map(|_| {
                 self.seed = self
                     .seed

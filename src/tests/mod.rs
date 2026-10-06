@@ -17,7 +17,7 @@ use crate::{Pileup, Records, StreamingPileupBuilder};
 pub(crate) const HEADER: &str =
     "@HD\tVN:1.6\tSO:coordinate\n@SQ\tSN:chr1\tLN:1000\n@SQ\tSN:chr2\tLN:1000\n";
 
-/// A read built field by field, with Q40 bases unless given, and `*` as in SAM.
+/// A read with no mate built field by field, with Q40 bases unless given, and `*` as in SAM.
 #[derive(Clone, Debug)]
 pub(crate) struct Read {
     name: String,
@@ -26,8 +26,6 @@ pub(crate) struct Read {
     start: Option<usize>,
     mapq: u8,
     cigar: String,
-    mate: Option<(String, usize)>,
-    tlen: i32,
     bases: String,
     quals: Option<Vec<u8>>,
     tags: Vec<String>,
@@ -43,8 +41,6 @@ pub(crate) fn read(name: &str, start: usize, cigar: &str, bases: &str) -> Read {
         start: Some(start),
         mapq: 60,
         cigar: cigar.to_owned(),
-        mate: None,
-        tlen: 0,
         bases: bases.to_owned(),
         quals,
         tags: Vec::new(),
@@ -88,12 +84,6 @@ impl Read {
         self
     }
 
-    pub(crate) fn mate(mut self, contig: &str, start: usize, tlen: i32) -> Self {
-        self.mate = Some((contig.to_owned(), start));
-        self.tlen = tlen;
-        self
-    }
-
     pub(crate) fn tag(mut self, tag: &str) -> Self {
         self.tags.push(tag.to_owned());
         self
@@ -101,11 +91,6 @@ impl Read {
 
     fn to_sam(&self) -> String {
         let position = self.start.map_or(0, |start| start + 1);
-        let (rnext, pnext) = match &self.mate {
-            Some((contig, start)) if *contig == self.contig => ("=".to_owned(), start + 1),
-            Some((contig, start)) => (contig.clone(), start + 1),
-            None => ("*".to_owned(), 0),
-        };
         let quals = self.quals.as_ref().map_or_else(
             || "*".to_owned(),
             |quals| {
@@ -116,18 +101,8 @@ impl Read {
             },
         );
         let mut line = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.name,
-            self.flag,
-            self.contig,
-            position,
-            self.mapq,
-            self.cigar,
-            rnext,
-            pnext,
-            self.tlen,
-            self.bases,
-            quals,
+            "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}",
+            self.name, self.flag, self.contig, position, self.mapq, self.cigar, self.bases, quals,
         );
         for tag in &self.tags {
             line.push('\t');

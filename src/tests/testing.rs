@@ -297,3 +297,16 @@ fn test_the_record_helpers_change_one_field() {
     let bases = SamBuilder::with_bases(record, "GGGG");
     assert_eq!(bases.sequence().as_ref(), b"GGGG");
 }
+
+#[test]
+fn test_random_bases_are_as_many_as_the_cigar_reads() {
+    let mut builder = SamBuilder::new().read_length(10);
+    let pair = builder.add_pair(Pair {
+        cigar1: Some("5S10M2D3M".into()),
+        cigar2: Some("4M1I4M".into()),
+        ..Pair::at(10, 20)
+    });
+    let lengths: Vec<usize> = pair.iter().map(|record| record.sequence().len()).collect();
+    assert_eq!(lengths, [18, 9]);
+    assert_eq!(builder.add_frag(Frag::at(30))[0].sequence().len(), 10);
+}
