@@ -843,6 +843,9 @@ impl Pileup {
         let mut footprint = Footprint::default();
         for alignment in alignments.try_iter()? {
             let alignment = alignment?;
+            if !alignment.getattr("reference_name")?.eq(&contig)? {
+                continue;
+            }
             let mut record = bam::Record::default();
             bridge::read(&alignment, &mut record)?;
             let flags = record.flags();
@@ -863,7 +866,7 @@ impl Pileup {
                         source,
                     })
                 })?;
-            if !placed || !alignment.getattr("reference_name")?.eq(&contig)? {
+            if !placed {
                 continue;
             }
             let query_length = footprint.query_length;

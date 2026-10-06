@@ -414,6 +414,13 @@ def test_from_alignments_drops_reads_on_other_contigs() -> None:
         assert pileup.bases == [base]
 
 
+def test_from_alignments_ignores_a_malformed_read_on_another_contig() -> None:
+    reads = [record("good", 0, "5M", "ACGTA"), record("bad", 0, "5M", "ACG", contig="chr2")]
+    assert Pileup.from_alignments(reads, "chr1", 2).bases == ["G"]
+    with pytest.raises(ValueError, match="Read bad is invalid"):
+        Pileup.from_alignments(reads, "chr2", 2)
+
+
 def test_a_pileup_is_frozen_and_compared_and_hashed_by_its_fields() -> None:
     read = record("r", 10, "4M", "ACGT")
     pileup = Pileup("chr1", 11, (PileupRead(read, 1, 1, BASE),))
