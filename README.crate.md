@@ -23,7 +23,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pileup = pileup?;
         for entry in pileup.iter().filter(|entry| entry.passes(30)) {
             let ends = (entry.five_prime_distance(), entry.template_end_distance()?);
-            println!("{} {:?} {:?}", pileup.position(), entry.base(), ends);
+            let base = entry.base().map(char::from);
+            println!("{} {:?} {:?}", pileup.position(), base, ends);
         }
     }
     builder.close()?;
