@@ -16,6 +16,18 @@ from streampile._pileup import DEFAULT_EXCLUDE_FLAGS
 from streampile._table import TabulationWriter
 from streampile._tabulate import tabulate
 
+MAX_DEFAULT_THREADS: int = 8
+"""The most threads used by default; more decompress a BAM no faster."""
+
+
+def default_threads() -> int:
+    """The CPUs this process may run on, at most `MAX_DEFAULT_THREADS`."""
+    if sys.platform == "linux":
+        available = len(os.sched_getaffinity(0))
+    else:
+        available = os.cpu_count() or 1
+    return max(1, min(MAX_DEFAULT_THREADS, available))
+
 
 @contextmanager
 def _staged(out: Path, index: IndexFormat | None) -> Generator[Path, None, None]:
@@ -125,8 +137,8 @@ def main(argv: list[str] | None = None) -> int:
     tabulate_parser.add_argument(
         "--threads",
         type=int,
-        default=1,
-        help="threads decompressing the BAM and compressing a BGZF table (default: 1)",
+        default=default_threads(),
+        help="threads for BGZF decompression and compression (default: available CPUs, at most 8)",
     )
     tabulate_parser.add_argument(
         "--out",
