@@ -20,6 +20,8 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyString, PyType};
 
+use crate::auxiliary;
+
 const DELEGATE_OFFSET: usize = size_of::<pyo3::ffi::PyObject>() + size_of::<*const c_void>();
 
 const MOST_CIGAR_OPERATORS: usize = 0xFFFF;
@@ -157,7 +159,7 @@ pub(crate) fn verify(py: Python<'_>) -> PyResult<()> {
                     .is_ok()
         })
         && same_record(&direct, &through_attributes)
-        && direct.data().as_bytes() == b"MCZ10M\0XIc\xf9XBBs\x02\0\0\0\x01\0\xfe\xff";
+        && direct.data().as_bytes() == b"MCZ10M\0";
     VERIFIED.store(agrees, Ordering::Relaxed);
     DIRECT.store(agrees, Ordering::Relaxed);
     Ok(())
@@ -192,7 +194,8 @@ fn is_aligned_segment(object: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(kind.is(aligned_segment.bind(py)) || kind.is_subclass(aligned_segment.bind(py))?)
 }
 
-/// Stages the record of an `AlignedSegment` from its `bam1_t`.
+/// Stages the record of an `AlignedSegment` from its `bam1_t`, keeping, of its tags, only the
+/// `MC` tag a pileup reads, or all of them when they cannot be read.
 ///
 /// # Safety
 ///
@@ -251,6 +254,17 @@ unsafe fn stage_delegate(object: &Bound<'_, PyAny>, staged: &mut Vec<u8>) -> PyR
         .0
         .iter()
         .map(|op| u32::from_ne_bytes(*op));
+    let aux = &data[qualities_end..];
+    let mut mate_cigar = Vec::new();
+    let aux = match auxiliary::find_field(aux, *b"MC") {
+        Ok(Some(field)) => {
+            mate_cigar.extend_from_slice(b"MC");
+            mate_cigar.extend_from_slice(&aux[field.start as usize..field.end as usize]);
+            &mate_cigar[..]
+        }
+        Ok(None) => &[],
+        Err(_) => aux,
+    };
     stage(
         staged,
         &head,
@@ -258,7 +272,7 @@ unsafe fn stage_delegate(object: &Bound<'_, PyAny>, staged: &mut Vec<u8>) -> PyR
         ops,
         operators,
         |staged| staged.extend_from_slice(&data[cigar_end..qualities_end]),
-        &data[qualities_end..],
+        aux,
     )
 }
 

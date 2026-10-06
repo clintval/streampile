@@ -186,10 +186,17 @@ pub(crate) fn walk(data: &[u8], mut visit: impl FnMut([u8; 2], Field)) -> Result
 /// Finds the value of the first field with a tag in a record's auxiliary data, reading no
 /// further than it.
 pub(crate) fn find(data: &[u8], tag: [u8; 2]) -> Result<Option<AuxValue<'_>>> {
+    find_field(data, tag)?
+        .map(|field| field.value(data))
+        .transpose()
+}
+
+/// Finds the first field with a tag in a record's auxiliary data, reading no further than it.
+pub(crate) fn find_field(data: &[u8], tag: [u8; 2]) -> Result<Option<Field>> {
     for field in fields(data) {
         let (found, field) = field?;
         if found == tag {
-            return field.value(data).map(Some);
+            return Ok(Some(field));
         }
     }
     Ok(None)
