@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use noodles::sam::alignment::RecordBuf;
 use noodles::sam::alignment::record::data::field::Tag;
 use noodles::sam::alignment::record_buf::data::field::Value;
+use noodles::sam::alignment::record_buf::data::field::value::Array;
 
 use super::{Read, bases, builder, name, names, read};
 use crate::template::{Alignment, parse_cigar};
@@ -387,8 +388,19 @@ fn test_a_template_end_from_an_invalid_mate_cigar_is_an_error_naming_the_read() 
             "{value}: {refused:?}"
         );
     }
-    let refused = with_mate_cigar(Value::from(50_i32));
-    assert!(matches!(refused, Err(Error::InvalidMateCigar { .. })));
+    for (value, shown) in [
+        (Value::from(50_i32), "50"),
+        (Value::from(4_000_000_000_u32), "4000000000"),
+        (Value::Float(1.5), "1.5"),
+        (Value::Character(b'M'), "M"),
+        (Value::Array(Array::Int32(vec![1, -2])), "1,-2"),
+    ] {
+        let refused = with_mate_cigar(value).unwrap_err();
+        assert_eq!(
+            refused.to_string(),
+            format!("read q has an invalid MC tag: {shown}")
+        );
+    }
 }
 
 /// A forward read and its reverse mate at fgbio's 1-based starts, as fgbio's `SamBuilder.addPair`

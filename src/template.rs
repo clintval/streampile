@@ -18,6 +18,7 @@ use bstr::ByteSlice;
 use noodles::sam;
 use noodles::sam::alignment::Record;
 use noodles::sam::alignment::record::cigar::op::Kind;
+use noodles::sam::alignment::record::data::field::value::Array;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 
 use crate::error::{Error, Result};
@@ -272,17 +273,42 @@ fn mate_cigar<R: Record + ?Sized>(record: &R) -> Result<Vec<(Kind, i64)>> {
         Value::String(text) => parse_cigar(text),
         _ => None,
     }
-    .ok_or_else(|| invalid_mate_cigar(record, value))
+    .ok_or_else(|| invalid_mate_cigar(record, &value))
 }
 
 /// The error of a record whose `MC` tag holds a value that is not a usable CIGAR string.
-fn invalid_mate_cigar<R: Record + ?Sized>(record: &R, value: Value<'_>) -> Error {
+fn invalid_mate_cigar<R: Record + ?Sized>(record: &R, value: &Value<'_>) -> Error {
     Error::InvalidMateCigar {
         name: record_name(record),
-        value: match value {
-            Value::String(text) => text.to_str_lossy().into_owned(),
-            other => format!("{other:?}"),
-        },
+        value: value_text(value),
+    }
+}
+
+/// A tag's value as SAM text spells it after the type, such as `1,-2` for an array of 1 and -2.
+fn value_text(value: &Value<'_>) -> String {
+    fn join<T: ToString>(values: impl Iterator<Item = io::Result<T>>) -> String {
+        let texts: Vec<String> = values
+            .map(|value| value.map_or_else(|_| "?".to_owned(), |value| value.to_string()))
+            .collect();
+        texts.join(",")
+    }
+    match value {
+        Value::Character(character) => char::from(*character).to_string(),
+        Value::Int8(number) => number.to_string(),
+        Value::UInt8(number) => number.to_string(),
+        Value::Int16(number) => number.to_string(),
+        Value::UInt16(number) => number.to_string(),
+        Value::Int32(number) => number.to_string(),
+        Value::UInt32(number) => number.to_string(),
+        Value::Float(number) => number.to_string(),
+        Value::String(text) | Value::Hex(text) => text.to_str_lossy().into_owned(),
+        Value::Array(Array::Int8(values)) => join(values.iter()),
+        Value::Array(Array::UInt8(values)) => join(values.iter()),
+        Value::Array(Array::Int16(values)) => join(values.iter()),
+        Value::Array(Array::UInt16(values)) => join(values.iter()),
+        Value::Array(Array::Int32(values)) => join(values.iter()),
+        Value::Array(Array::UInt32(values)) => join(values.iter()),
+        Value::Array(Array::Float(values)) => join(values.iter()),
     }
 }
 
@@ -344,7 +370,7 @@ pub(crate) fn ends<R: Record + ?Sized>(record: &R, header: &sam::Header) -> Resu
             .get(&Tag::MATE_CIGAR)
             .transpose()?
             .unwrap_or(Value::String(b"".as_bstr()));
-        return Err(invalid_mate_cigar(record, value));
+        return Err(invalid_mate_cigar(record, &value));
     }
     let ops = record
         .cigar()
