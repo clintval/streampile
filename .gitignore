@@ -167,5 +167,6 @@ cython_debug/
 # Jupyter notebook files
 *.ipynb
 
-# Benchmark scratch files
-benchmarks/out/
+# Benchmarks and examples kept outside the repository
+benchmarks/
+examples/

@@ -9,6 +9,7 @@ description = "Forward-only pileups streamed from coordinate-sorted BAM records"
 repository = "https://github.com/clintval/streampile"
 documentation = "https://docs.rs/streampile"
 readme = "README.crate.md"
+autoexamples = false
 categories = ["science::bioinformatics"]
 keywords = ["bioinformatics", "pileup", "bam", "genomics", "sequencing"]
 include = [
@@ -17,7 +18,6 @@ include = [
     "/LICENSE",
     "/NOTICE",
     "/README.crate.md",
-    "/examples/**/*.rs",
     "/src/**/*.rs",
     "/tests/data/reads.bam",
 ]
@@ -27,10 +27,6 @@ name = "streampile"
 
 [package.metadata.docs.rs]
 features = ["testing"]
-
-[[example]]
-name = "sweep"
-test = true
 
 [features]
 default = ["libdeflate"]
@@ -48,7 +44,6 @@ thiserror = "2"
 [dev-dependencies]
 fgumi-consensus = { version = "0.7", default-features = false }
 noodles = { version = "0.115.0", features = ["bgzf", "core"] }
-sha2 = "0.10"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

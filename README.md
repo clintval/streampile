@@ -22,7 +22,7 @@ pip install streampile
 ### Building Pileups
 
 A `StreamingPileupBuilder` reads records once and piles them up at the 0-based positions you ask for, moving forward only.
-Give the `AlignmentFile` threads to decompress the BAM with, which pays at depth, as the [benchmarks](https://github.com/clintval/streampile/blob/main/benchmarks/README.md) show; for CRAM, also give it `reference_filename`.
+Give the `AlignmentFile` threads to decompress the BAM with, which pays at depth; for CRAM, also give it `reference_filename`.
 
 ```pycon
 >>> from pysam import AlignmentFile
