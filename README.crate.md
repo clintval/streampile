@@ -42,5 +42,6 @@ A source of records can be any coordinate-sorted stream, and a record type can c
 
 - `libdeflate` (default): inflates BGZF blocks with libdeflate, which compiles C code. Build with `default-features = false` to inflate them in pure Rust.
 - `testing`: adds `streampile::testing`, whose `SamBuilder` builds test records as fgbio's does and piles them up in memory with a `StreamingPileupBuilder`.
+- `python`: builds the `streampile._native` extension module of the Python package with [PyO3](https://pyo3.rs). It adds no Rust API and needs a Python interpreter to build.
 
 The same core runs the [streampile](https://pypi.org/project/streampile/) Python package, which reads records with pysam.

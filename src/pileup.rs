@@ -23,6 +23,7 @@ pub(crate) const NONE: u32 = u32::MAX;
 /// A [`Skip`](EntryKind::Skip) is a reference skip, the CIGAR `N` operator, not an `N` base,
 /// which is a [`Base`](EntryKind::Base).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum EntryKind {
     /// An aligned base, a match or a mismatch.
     Base,
@@ -35,7 +36,7 @@ pub enum EntryKind {
 }
 
 impl EntryKind {
-    /// The kind's name as the Python package spells it.
+    /// The kind's name in snake case: `base`, `deletion`, `insertion`, or `skip`.
     pub fn as_str(self) -> &'static str {
         match self {
             EntryKind::Base => "base",

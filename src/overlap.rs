@@ -18,6 +18,7 @@ const NO_CALL_QUALITY: u8 = 2;
 
 /// How the quality of a template is made from two of its reads holding the same base.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum AgreementStrategy {
     /// The sum of the two qualities, at most 93.
     #[default]
@@ -29,7 +30,7 @@ pub enum AgreementStrategy {
 }
 
 impl AgreementStrategy {
-    /// The strategy's name as the Python package spells it.
+    /// The strategy's name in snake case: `consensus`, `max_qual`, or `pass_through`.
     pub fn as_str(self) -> &'static str {
         match self {
             AgreementStrategy::Consensus => "consensus",
@@ -55,6 +56,7 @@ impl FromStr for AgreementStrategy {
 
 /// How a template's base and quality are made from two of its reads holding different bases.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum DisagreementStrategy {
     /// The base of the higher quality, at the higher quality less the lower and at least 2, or an
     /// `N` at quality 2 when the qualities are equal.
@@ -68,7 +70,7 @@ pub enum DisagreementStrategy {
 }
 
 impl DisagreementStrategy {
-    /// The strategy's name as the Python package spells it.
+    /// The strategy's name in snake case: `consensus`, `mask_both`, or `mask_lower_qual`.
     pub fn as_str(self) -> &'static str {
         match self {
             DisagreementStrategy::Consensus => "consensus",
