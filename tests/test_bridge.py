@@ -2,6 +2,7 @@ from array import array
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from typing import Literal
 
 import pytest
 from pysam import AlignmentFile
@@ -91,7 +92,7 @@ def test_both_bridges_read_random_records_alike(tmp_path: Path, seed: int) -> No
     ],
 )
 def test_a_mate_cigar_that_is_not_a_string_is_piled_up_alike_by_both_bridges(
-    value: object, value_type: str | None, shown: str
+    value: "float | str | array[int]", value_type: Literal["f", "A", "I"] | None, shown: str
 ) -> None:
     read = record("p", 2, "5M", "ACGTA", flag=0x1 | 0x20 | 0x40)
     read.next_reference_id = 0

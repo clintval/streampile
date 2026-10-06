@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+from typing import final
 
 import pysam
 import pytest
@@ -957,12 +958,14 @@ def test_a_builder_is_used_and_dropped_on_other_threads() -> None:
     alive = weakref.ref(sink)
     builders = [StreamingPileupBuilder(reads, tap=sink.write)]
     del sink
+
+    def bases(columns: Iterator[Pileup]) -> list[list[str]]:
+        return [pileup.bases for pileup in columns]
+
     with ThreadPoolExecutor(1) as pool:
         assert pool.submit(lambda: builders[0].pileup("chr1", 11).bases).result() == ["C"]
-        columns = builders[0].columns("chr1", 12, 14)
-        swept = pool.submit(list, columns).result()
-        assert [pileup.bases for pileup in swept] == [["G"], ["T"]]
-        del columns
+        swept = pool.submit(bases, builders[0].columns("chr1", 12, 14)).result()
+        assert swept == [["G"], ["T"]]
         pool.submit(builders.clear).result()
     assert alive() is None
 
@@ -986,9 +989,11 @@ def test_a_tap_asking_its_builder_for_a_pileup_raises_a_runtime_error(asked: str
 
 @pytest.mark.parametrize("through", ["callbacks", "records"])
 def test_a_reference_cycle_through_a_builder_is_collected(through: str) -> None:
+    @final
     class Owner:
         def __init__(self, reads: list[AlignedSegment]) -> None:
-            self.reads = iter(reads)
+            self.reads: Iterator[AlignedSegment] = iter(reads)
+            self.builder: StreamingPileupBuilder
             if through == "callbacks":
                 self.builder = StreamingPileupBuilder(reads, read_filter=self.keep, tap=self.write)
             else:
