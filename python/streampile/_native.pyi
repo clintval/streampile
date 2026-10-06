@@ -8,17 +8,52 @@ from typing import Final
 from typing import final
 
 from pysam import AlignedSegment
+from pysam import AlignmentFile
 from pysam import AlignmentHeader
+from pysam import FastaFile
 from typing_extensions import Self
 from typing_extensions import override
 
 from streampile._pileup import PileupReadType
+from streampile._table import TabulatedBase
 
 DEFAULT_EXCLUDE_FLAGS: Final[int]
 DEFAULT_MIN_BASE_QUALITY: Final[int]
 
 def direct_bridge(enabled: bool | None = None) -> bool:
     """Whether records are read from htslib's `bam1_t`, and with `enabled`, set it first."""
+
+def normalize_allele(
+    pos: int,
+    reference_bases: str,
+    alternate_bases: str,
+    reference: Callable[[int, int], str],
+    floor: int = 0,
+) -> tuple[int, str, str] | None:
+    """Trim and left-align an allele as `bcftools norm` does."""
+
+@final
+class Tabulation:
+    """The per-read and per-base work of a `Tabulator`, over one reference."""
+
+    def __new__(
+        cls,
+        reference: FastaFile,
+        *,
+        min_base_quality: int = 0,
+        min_mapping_quality: int = 0,
+        exclude_flags: int = ...,
+    ) -> Self: ...
+    def accepts(self, record: AlignedSegment) -> bool:
+        """Whether a read passes the flag and mapping-quality filters and has bases to count."""
+    def alleles(
+        self, record: AlignedSegment
+    ) -> tuple[list[tuple[int, str, str, int, int]], list[tuple[int, int]]]:
+        """The alleles a read is counted for, and the stretches of those it is not counted for."""
+    def tabulate_contig(
+        self, alignments: AlignmentFile, contig: str, spans: list[tuple[int, int]]
+    ) -> Iterator[TabulatedBase]:
+        """The rows of every base of the spans of one contig, in order."""
 
 @final
 class PileupRead:
