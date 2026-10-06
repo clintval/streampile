@@ -175,34 +175,52 @@ impl Field {
 /// Walks every field of a record's auxiliary data, calling `visit` with each tag and the range
 /// of its type and value.
 pub(crate) fn walk(data: &[u8], mut visit: impl FnMut([u8; 2], Field)) -> Result<()> {
-    let mut at = 0;
-    while at < data.len() {
-        let tag = data
-            .get(at..at + 2)
-            .ok_or_else(|| invalid_data("an auxiliary field is truncated"))?;
-        let tag = [tag[0], tag[1]];
-        let start = at + 2;
-        let (_, length) = decode(&data[start.min(data.len())..])?;
-        let end = start + length;
-        let field = Field {
-            start: u32::try_from(start).map_err(|_| invalid_data("auxiliary data is too long"))?,
-            end: u32::try_from(end).map_err(|_| invalid_data("auxiliary data is too long"))?,
-        };
+    for field in fields(data) {
+        let (tag, field) = field?;
         visit(tag, field);
-        at = end;
     }
     Ok(())
 }
 
-/// Finds the value of one field of a record's auxiliary data.
+/// Finds the value of the first field with a tag in a record's auxiliary data, reading no
+/// further than it.
 pub(crate) fn find(data: &[u8], tag: [u8; 2]) -> Result<Option<AuxValue<'_>>> {
-    let mut found = None;
-    walk(data, |field_tag, field| {
-        if found.is_none() && field_tag == tag {
-            found = Some(field);
+    for field in fields(data) {
+        let (found, field) = field?;
+        if found == tag {
+            return field.value(data).map(Some);
         }
-    })?;
-    found.map(|field| field.value(data)).transpose()
+    }
+    Ok(None)
+}
+
+/// Each field of a record's auxiliary data with its tag, in order, ending at the first error.
+fn fields(data: &[u8]) -> impl Iterator<Item = Result<([u8; 2], Field)>> + '_ {
+    let mut at = 0;
+    std::iter::from_fn(move || {
+        if at >= data.len() {
+            return None;
+        }
+        let field = next_field(data, at);
+        at = field
+            .as_ref()
+            .map_or(data.len(), |(_, field)| field.end as usize);
+        Some(field)
+    })
+}
+
+fn next_field(data: &[u8], at: usize) -> Result<([u8; 2], Field)> {
+    let tag = data
+        .get(at..at + 2)
+        .ok_or_else(|| invalid_data("an auxiliary field is truncated"))?;
+    let start = at + 2;
+    let (_, length) = decode(&data[start.min(data.len())..])?;
+    let field = Field {
+        start: u32::try_from(start).map_err(|_| invalid_data("auxiliary data is too long"))?,
+        end: u32::try_from(start + length)
+            .map_err(|_| invalid_data("auxiliary data is too long"))?,
+    };
+    Ok(([tag[0], tag[1]], field))
 }
 
 /// Decodes a type byte and the value after it, and returns the value and the bytes it took.

@@ -445,6 +445,12 @@ fn test_malformed_aux_fields_are_errors() {
         );
     }
     assert_eq!(auxiliary::find(b"", *b"XA").unwrap(), None);
+    let truncated_after = b"XAc\x01XBi\x01";
+    assert_eq!(
+        auxiliary::find(truncated_after, *b"XA").unwrap(),
+        Some(AuxValue::Integer(1))
+    );
+    assert!(auxiliary::find(truncated_after, *b"XB").is_err());
     let data = b"XAc\xffXBC\xffXCs\xfe\xffXDS\xfe\xffXEI\x01\x00\x00\x80XFHff\x00";
     let found: Vec<Option<AuxValue<'_>>> = [*b"XA", *b"XB", *b"XC", *b"XD", *b"XE", *b"XF"]
         .map(|tag| auxiliary::find(data, tag).unwrap())
