@@ -207,8 +207,9 @@ pub(crate) fn from_five_prime(reverse: bool, length: usize, offset: usize) -> Op
 /// so a read that spans no reference ends before it starts. The header resolves the record's
 /// contigs, which a BAM record holds as indices.
 ///
-/// A forward record of a pair otherwise FR with no `MC` tag, or one that is not a CIGAR string, is
-/// an error naming the record.
+/// A forward record whose mate is mapped to its contig on the other strand, whatever the pair's
+/// orientation, is an error naming the record when it has no `MC` tag, or one that is not a CIGAR
+/// string; a reverse record needs no `MC` tag here.
 pub fn is_fr_pair<R: Record + ?Sized>(record: &R, header: &sam::Header) -> Result<bool> {
     Ok(pairing(record, header)?.is_some())
 }
@@ -322,8 +323,10 @@ fn value_text(value: &Value<'_>) -> String {
 /// outward-facing pair, and for a read of an FR pair only at a position past the mate's 5′ end.
 /// The header resolves the record's contigs, which a BAM record holds as indices.
 ///
-/// A record of an FR pair with no `MC` tag, or one that is not a CIGAR string spanning at least
-/// one base, is an error naming the record.
+/// It reads the mate's CIGAR from `MC` for a forward record whose mate is mapped to its contig on
+/// the other strand, as [`is_fr_pair`] does, and for a reverse record of an FR pair. Such a record
+/// is an error naming it when it has no `MC` tag, or one that is not a CIGAR string, or, for a
+/// record of an FR pair, one that spans no reference.
 pub fn template_end_distance<R: Record + ?Sized>(
     record: &R,
     header: &sam::Header,

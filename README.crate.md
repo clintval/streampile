@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-The `template_end_distance()` method counts the template's bases to the 5′ end of the mate of a read in an FR pair, walking the mate's CIGAR from the `MC` tag and never reading the template length (TLEN), and is an error for a read of an FR pair without a usable `MC` tag.
+The `template_end_distance()` method counts the template's bases to the 5′ end of the mate of a read in an FR pair, walking the mate's CIGAR from the `MC` tag and never reading the template length (TLEN), and is an error for a read without a usable `MC` tag that needs one: a forward read whose mate is mapped to its contig on the other strand, or a reverse read of an FR pair.
 A pair is FR, as `is_fr_pair()` says, when the forward read's aligned 5′ position is at or before the reverse read's, as in htsjdk 5.0.0, so a read of any other pair has no template end.
 A pileup's `templates()` sees each template once, calling the bases of overlapping mates at the quality floor into one with the agreement and disagreement strategies of fgbio's `CallOverlappingConsensusBases`, as fgumi implements them.
 A `tap` receives every record once, in input order, so records can be written on as they are passed.

@@ -24,15 +24,17 @@ pub enum Error {
         source: io::Error,
     },
 
-    /// A forward read of an FR pair has no `MC` tag to find its mate's 5′ end with.
+    /// A read needs its mate's CIGAR and has no `MC` tag: a forward read whose mate is mapped to its
+    /// contig on the other strand, to classify its pair, or a reverse read of an FR pair, to
+    /// measure its template.
     #[error("read {name} has no MC tag to find its mate's 5' end with")]
     MissingMateCigar {
         /// The name of the read.
         name: String,
     },
 
-    /// A forward read of an FR pair has an `MC` tag that is not a CIGAR string spanning at least
-    /// one reference base.
+    /// A read that needs its mate's CIGAR has an `MC` tag that is not a CIGAR string, or, for a read
+    /// of an FR pair, one that spans no reference.
     #[error("read {name} has an invalid MC tag: {value}")]
     InvalidMateCigar {
         /// The name of the read.

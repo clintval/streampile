@@ -626,8 +626,9 @@ impl PileupRead {
     /// by hand that holds no base, whose position is unknown.
     ///
     /// Raises:
-    ///     ValueError: for a read of an FR pair with no `MC` tag, or one that is not a CIGAR
-    ///         string spanning at least one base.
+    ///     ValueError: for a forward read whose mate is mapped to its contig on the other strand,
+    ///         or a reverse read of an FR pair, with no `MC` tag, or one that is not a CIGAR
+    ///         string, or, for a read of an FR pair, one that spans no reference.
     #[getter]
     fn template_end_distance(&self) -> PyResult<Option<usize>> {
         self.held.template_end_distance().map_err(to_python)
@@ -641,8 +642,8 @@ impl PileupRead {
     /// never from the template length (TLEN).
     ///
     /// Raises:
-    ///     ValueError: for a forward read of a pair otherwise FR with no `MC` tag, or one that is
-    ///         not a CIGAR string.
+    ///     ValueError: for a forward read whose mate is mapped to its contig on the other strand,
+    ///         whatever the pair's orientation, with no `MC` tag, or one that is not a CIGAR string.
     #[getter]
     fn is_fr_pair(&self) -> PyResult<bool> {
         self.held.is_fr_pair().map_err(to_python)
@@ -1340,7 +1341,7 @@ impl PileupTemplate {
     /// second read's `template_end_distance`.
     ///
     /// Raises:
-    ///     ValueError: for a read of an FR pair with no usable `MC` tag.
+    ///     ValueError: where the read's `template_end_distance` or `is_fr_pair` raises.
     #[getter]
     fn five_prime_distance(&self) -> PyResult<Option<usize>> {
         self.template.five_prime_distance().map_err(to_python)
@@ -1354,7 +1355,7 @@ impl PileupTemplate {
     /// not FR.
     ///
     /// Raises:
-    ///     ValueError: for a read of an FR pair with no usable `MC` tag.
+    ///     ValueError: where the read's `template_end_distance` or `is_fr_pair` raises.
     #[getter]
     fn template_end_distance(&self) -> PyResult<Option<usize>> {
         self.template.template_end_distance().map_err(to_python)

@@ -262,3 +262,38 @@ fn test_only_a_forward_read_of_an_fr_pair_needs_a_mate_cigar() {
     let tandem = SamBuilder::without_mate_cigar(records[0].clone());
     assert!(!is_fr_pair(&tandem, &header).unwrap());
 }
+
+/// A forward read needs its mate's CIGAR to classify any pair whose reads are on opposite strands
+/// of one contig, an outward-facing one too, and a reverse read needs it only to measure the
+/// template of an FR pair.
+#[test]
+fn test_which_reads_need_their_mates_cigar() {
+    let without = |records: Vec<RecordBuf>| -> Vec<RecordBuf> {
+        records
+            .into_iter()
+            .map(SamBuilder::without_mate_cigar)
+            .collect()
+    };
+    let (header, inward) = pair(100, "100M", false, 150, "100M", true);
+    let inward = without(inward);
+    assert!(matches!(
+        is_fr_pair(&inward[0], &header),
+        Err(Error::MissingMateCigar { .. })
+    ));
+    assert!(is_fr_pair(&inward[1], &header).unwrap());
+    assert!(matches!(
+        template_end_distance(&inward[1], &header, 160),
+        Err(Error::MissingMateCigar { .. })
+    ));
+    let (header, outward) = pair(500, "100M", false, 100, "100M", true);
+    let outward = without(outward);
+    assert!(matches!(
+        is_fr_pair(&outward[0], &header),
+        Err(Error::MissingMateCigar { .. })
+    ));
+    assert!(!is_fr_pair(&outward[1], &header).unwrap());
+    assert_eq!(
+        template_end_distance(&outward[1], &header, 150).unwrap(),
+        None
+    );
+}

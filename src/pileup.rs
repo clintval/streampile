@@ -585,8 +585,10 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
     /// read of an FR pair only at a position past the mate's 5′ end, where a read runs through its
     /// mate.
     ///
-    /// A read of an FR pair with no `MC` tag, or one that is not a CIGAR string spanning at least
-    /// one base, is an error naming the read.
+    /// It reads the mate's CIGAR from `MC` for a forward read whose mate is mapped to its contig on
+    /// the other strand, as [`is_fr_pair`](PileupEntry::is_fr_pair) does, and for a reverse read
+    /// of an FR pair. Such a read is an error naming it when it has no `MC` tag, or one that is not
+    /// a CIGAR string, or, for a read of an FR pair, one that spans no reference.
     pub fn template_end_distance(&self) -> Result<Option<usize>> {
         let ends = self.live.derived.ends(self.record())?;
         Ok(ends.and_then(|ends| ends.distance(self.position as usize)))
@@ -596,8 +598,9 @@ impl<'a, R: AlignmentRecord> PileupEntry<'a, R> {
     /// `SamPairUtil.getPairOrientation` classifies it, with the forward read's aligned 5′
     /// position at or before the reverse read's, as [`is_fr_pair`](crate::is_fr_pair) says.
     ///
-    /// A forward read of a pair otherwise FR with no `MC` tag, or one that is not a CIGAR string,
-    /// is an error naming the read.
+    /// A forward read whose mate is mapped to its contig on the other strand, whatever the pair's
+    /// orientation, is an error naming the read when it has no `MC` tag, or one that is not a
+    /// CIGAR string; a reverse read needs no `MC` tag here.
     pub fn is_fr_pair(&self) -> Result<bool> {
         self.live.derived.is_fr_pair(self.record())
     }
@@ -844,9 +847,8 @@ impl<'a, R: AlignmentRecord> PileupTemplate<'a, R> {
     /// at that end.
     ///
     /// It is the first read's [`five_prime_distance`](PileupEntry::five_prime_distance) where it
-    /// holds a base here, and otherwise the second read's
-    /// [`template_end_distance`](PileupEntry::template_end_distance), which is an error for a read
-    /// of an FR pair without a usable `MC` tag.
+    /// has one here, and otherwise the second read's
+    /// [`template_end_distance`](PileupEntry::template_end_distance), an error where that read's is.
     pub fn five_prime_distance(&self) -> Result<Option<usize>> {
         self.0.five_prime_distance()
     }
@@ -855,9 +857,10 @@ impl<'a, R: AlignmentRecord> PileupTemplate<'a, R> {
     /// the second read of an FR pair: 0 at that end.
     ///
     /// It is the first read's [`template_end_distance`](PileupEntry::template_end_distance), an
-    /// error for a read of an FR pair without a usable `MC` tag, and without the first read here
-    /// the second read's [`five_prime_distance`](PileupEntry::five_prime_distance) where that read
-    /// [`is_fr_pair`](PileupEntry::is_fr_pair). It is `None` for any pair that is not FR.
+    /// error where that read's is, and without the first read here the second read's
+    /// [`five_prime_distance`](PileupEntry::five_prime_distance) where that read
+    /// [`is_fr_pair`](PileupEntry::is_fr_pair), an error where that is. It is `None` for any pair
+    /// that is not FR.
     pub fn template_end_distance(&self) -> Result<Option<usize>> {
         self.0.template_end_distance()
     }
