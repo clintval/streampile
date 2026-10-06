@@ -265,7 +265,7 @@ class Pileup:
         """The entries of the reads at this position."""
     @property
     def min_base_quality(self) -> int:
-        """The base quality below which bases are left out of the filtered views."""
+        """The base quality below which bases are left out of the filtered views and template votes."""
     @property
     def unfiltered_depth(self) -> int:
         """The number of reads with a base, a deletion, or a skip at this position."""
@@ -341,7 +341,7 @@ class StreamingPileupBuilder:
         """The SAM flags of reads that are not piled up."""
     @property
     def min_base_quality(self) -> int:
-        """The quality floor of each pileup's filtered views."""
+        """The quality floor of each pileup's filtered views and template votes."""
     @property
     def proper_pairs_only(self) -> bool:
         """Whether only reads flagged as in a proper pair are piled up."""

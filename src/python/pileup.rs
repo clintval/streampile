@@ -841,7 +841,7 @@ impl PileupRead {
 ///     reference_pos: the 0-based position on the contig.
 ///     pileups: the entries of the reads at this position.
 ///     min_base_quality: the base quality below which bases are left out of `filtered_depth`,
-///         `bases`, and `qualities`.
+///         `bases`, `qualities`, and the votes of `templates()`.
 #[pyclass(module = "streampile", name = "Pileup", frozen, weakref)]
 pub(crate) struct Pileup {
     reference_name: Py<PyString>,
@@ -956,7 +956,7 @@ impl Pileup {
     ///     alignments: the reads to pile up.
     ///     contig: the name of the contig.
     ///     pos: the 0-based position on the contig.
-    ///     min_base_quality: the quality floor of the pileup's filtered views.
+    ///     min_base_quality: the quality floor of the pileup's filtered views and template votes.
     #[classmethod]
     #[pyo3(signature = (
         alignments,
@@ -1035,7 +1035,7 @@ impl Pileup {
         self.pileups_of(py).cloned()
     }
 
-    /// The base quality below which bases are left out of the filtered views.
+    /// The base quality below which bases are left out of the filtered views and template votes.
     #[getter]
     fn min_base_quality(&self) -> i64 {
         self.min_base_quality

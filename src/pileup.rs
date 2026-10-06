@@ -219,8 +219,8 @@ pub(crate) struct RawEntry {
 ///
 /// Every entry of an accepted read is kept: `min_base_quality` applies only to
 /// [`filtered_depth`](Pileup::filtered_depth), [`bases`](Pileup::bases), and
-/// [`qualities`](Pileup::qualities). [`templates`](Pileup::templates) sees each template once,
-/// calling the bases of overlapping mates into one.
+/// [`qualities`](Pileup::qualities), and to the votes of [`templates`](Pileup::templates), which
+/// sees each template once, calling the bases of overlapping mates into one.
 ///
 /// `R` is the type of record the builder's source reads: [`bam::Record`] for a BAM reader.
 #[derive(Debug)]
@@ -258,7 +258,8 @@ impl<'a, R: AlignmentRecord> Pileup<'a, R> {
         self.position
     }
 
-    /// The base quality below which bases are left out of the filtered views.
+    /// The base quality below which bases are left out of the filtered views and the votes of
+    /// templates.
     pub fn min_base_quality(&self) -> u8 {
         self.min_base_quality
     }

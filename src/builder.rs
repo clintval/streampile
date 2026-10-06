@@ -14,8 +14,8 @@ use crate::source::{AlignmentRecord, RecordSource};
 /// Secondary, QC-fail, duplicate, and supplementary reads, which are left out by default.
 pub const DEFAULT_EXCLUDE_FLAGS: Flags = Flags::from_bits_retain(0xF00);
 
-/// The default minimum base quality of a pileup's filtered views, as in pysam's `pileup()` and
-/// `samtools mpileup`.
+/// The default minimum base quality of a pileup's filtered views and template votes, as in pysam's
+/// `pileup()` and `samtools mpileup`.
 pub const DEFAULT_MIN_BASE_QUALITY: u8 = 13;
 
 const UNPLACED: usize = usize::MAX;
@@ -224,8 +224,9 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         self
     }
 
-    /// Sets the quality floor of each pileup's filtered views: [`DEFAULT_MIN_BASE_QUALITY`] by
-    /// default. Entries under it are kept, and only the views leave them out.
+    /// Sets the quality floor of each pileup's filtered views and of the votes of its templates:
+    /// [`DEFAULT_MIN_BASE_QUALITY`] by default. Entries under it are kept, and only the views and
+    /// the votes leave them out.
     #[must_use]
     pub fn min_base_quality(mut self, min_base_quality: u8) -> Self {
         self.options.min_base_quality = min_base_quality;
