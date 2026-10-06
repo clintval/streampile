@@ -42,17 +42,25 @@ Give the `AlignmentFile` threads to decompress the BAM with, which pays at depth
 
 ```
 
-At 12, the base of `lowqual` is under the quality floor, so it counts toward `unfiltered_depth` only.
+At position 12, the base of `lowqual` is under the quality floor, so it counts toward `unfiltered_depth` only.
 
 Filter reads with `read_filter`, and see each template once with `templates()`, which calls the bases of overlapping mates into one as fgbio's `CallOverlappingConsensusBases` does.
-The mates of `pair` overlap from 45 to 54: at 50 they agree, so their qualities add up, and at 52 they disagree, so the base of the higher quality is kept at the difference of the two.
+Overlapping mates read the same bases of their template twice: they agree where they read the same base, and disagree where they read different ones.
+The mates of `pair` overlap from position 45 to 54, agree on `T` at position 50, and disagree at position 52, where the first reads `G` at Q40 and the second `A` at Q20:
+
+```text
+position  40   45   50   55
+pair  99  GATCGGATCCTAGGC
+pair 147       GATCCTAAGCTAGCT
+                    ^ ^
+```
+
+By default, an agreeing base is called at the sum of the two qualities, and a disagreeing one as the base of the higher quality at their difference:
 
 ```pycon
 >>> with (
 ...     AlignmentFile("tests/data/reads.bam") as reads,
-...     StreamingPileupBuilder(
-...         reads, read_filter=lambda read: read.is_paired
-...     ) as builder,
+...     StreamingPileupBuilder(reads, read_filter=lambda read: read.is_paired) as builder,
 ... ):
 ...     agreeing = builder.pileup("chr1", 50)
 ...     disagreeing = builder.pileup("chr1", 52)
@@ -204,17 +212,41 @@ Alleles are normalized VCF alleles at 1-based positions, so they match a VCF by 
 
 The `alt_fwd` and `alt_rev` fields split each allele's reads by strand, and `no_calls` counts `N` bases apart from the depth.
 
+### Writing a Table
+
+A path ending in `.gz` is written with BGZF, indexed as it is written when given an index, and `metadata` adds `##key=value` lines above the header:
+
+```pycon
+>>> from pybgzf import IndexFormat
+>>> from streampile import TabulationWriter
+>>>
+>>> table = f"{mkdtemp()}/counts.tsv.gz"
+>>> with TabulationWriter.from_path(
+...     table, index=IndexFormat.TBI, metadata={"min_base_quality": 30}
+... ) as writer:
+...     writer.write_all(bases)
+
+```
+
 ### Reading a Table
 
 ```pycon
 >>> from streampile import TabulationReader
 >>>
->>> for base in TabulationReader.from_path("tests/data/counts.tsv"):
+>>> for base in TabulationReader.from_path(table):
 ...     print(base.pos, base.depth, base.alts, base.alt_reads)
-21 5 () ()
-22 5 () ()
-23 4 ('C',) (1,)
-24 4 () ()
+10 4 () ()
+11 4 ('T', 'GG') (1, 1)
+12 4 () ()
+
+```
+
+With the index, a region can be read alone; it is half-open and 0-based, as in BED:
+
+```pycon
+>>> for base in TabulationReader.query(table, "chr1", 10, 11):
+...     print(base.pos, base.depth, base.alts, base.alt_reads)
+11 4 ('T', 'GG') (1, 1)
 
 ```
 
@@ -250,12 +282,6 @@ chr1	24	A	4	0	3	2	1
 ```
 
 The `--threads` option sets the threads decompressing the BAM and compressing a BGZF table: by default, the CPUs available, at most 8.
-With the index, a region of the table can be read back:
-
-```python
-for base in TabulationReader.query("counts.tsv.gz", "chr1", 20, 24):
-    print(base.pos, base.depth, base.alts)
-```
 
 The examples read `tests/data/reads.bam`, whose reads are named for what they carry, such as `plain`, `snv`, `mnv`, `lowqual`, `insertion`, and `deletion`.
 
