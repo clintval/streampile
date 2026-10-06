@@ -32,6 +32,65 @@ struct Options {
     aux_tags: Vec<[u8; 2]>,
 }
 
+impl Options {
+    /// Whether a record passes the flag, mapping-quality, and proper-pair filters.
+    fn passes(&self, flags: Flags, mapping_quality: u8) -> bool {
+        let paired = flags.is_properly_segmented() || !self.proper_pairs_only;
+        paired
+            && passes(
+                flags,
+                mapping_quality,
+                self.exclude_flags,
+                self.min_mapping_quality,
+            )
+    }
+}
+
+/// Whether a read is mapped, has none of the flags excluded, and has at least the lowest mapping
+/// quality allowed, as builders and tabulate filter reads. A read with no mapping quality (255)
+/// passes every floor.
+pub(crate) fn passes(
+    flags: Flags,
+    mapping_quality: u8,
+    exclude_flags: Flags,
+    min_mapping_quality: u8,
+) -> bool {
+    !(flags.is_unmapped()
+        || flags.intersects(exclude_flags)
+        || mapping_quality < min_mapping_quality)
+}
+
+/// Whether a record with a 0-based start, -1 for none, is piled up wherever it spans: placed on a
+/// contig, passing the flag, mapping-quality, and proper-pair filters, placed with a
+/// reference-consuming CIGAR operator, which fills `footprint`, and then passing the read filter.
+fn admits<R: AlignmentRecord>(
+    options: &Options,
+    read_filter: Option<&mut ReadFilter<'_, R>>,
+    record: &R,
+    start: i64,
+    footprint: &mut Footprint,
+) -> Result<bool> {
+    let bam = record.bam();
+    let mapping_quality = bam.mapping_quality().map_or(255, u8::from);
+    if bam.reference_sequence_id().is_none()
+        || start < 0
+        || !options.passes(bam.flags(), mapping_quality)
+    {
+        return Ok(false);
+    }
+    let placed = footprint
+        .fill(start, bam.cigar().as_bytes(), bam.sequence().len())
+        .map_err(|source| Error::InvalidRecord {
+            name: record_name(bam),
+            source,
+        })?;
+    Ok(placed
+        && match read_filter {
+            Some(read_filter) => read_filter(record)?,
+            None => true,
+        })
+}
+
 impl Default for Options {
     fn default() -> Self {
         Self {
@@ -227,26 +286,22 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     /// piled up wherever it spans.
     pub fn accepts(&mut self, record: &S::Record) -> Result<bool> {
         let bam = record.bam();
-        let invalid = |source| Error::InvalidRecord {
-            name: record_name(bam),
-            source,
-        };
-        let start = bam.alignment_start().transpose().map_err(invalid)?;
-        let placed = bam.reference_sequence_id().is_some()
-            && self.passes(bam.flags(), bam.mapping_quality().map_or(255, u8::from))
-            && Footprint::default()
-                .fill(
-                    start.map_or(-1, |start| usize::from(start) as i64 - 1),
-                    bam.cigar().as_bytes(),
-                    bam.sequence().len(),
-                )
-                .map_err(invalid)?;
-        Ok(placed
-            && start.is_some()
-            && match self.read_filter.as_mut() {
-                Some(read_filter) => read_filter(record)?,
-                None => true,
-            })
+        let start = bam
+            .alignment_start()
+            .transpose()
+            .map_err(|source| Error::InvalidRecord {
+                name: record_name(bam),
+                source,
+            })?
+            .map_or(-1, |start| usize::from(start) as i64 - 1);
+        let read_filter = self.read_filter.as_mut();
+        admits(
+            &self.options,
+            read_filter,
+            record,
+            start,
+            &mut Footprint::default(),
+        )
     }
 
     /// Advances to a position on a contig, at or after the last one, and piles up the records
@@ -380,13 +435,6 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
         }
     }
 
-    fn passes(&self, flags: Flags, mapping_quality: u8) -> bool {
-        !(flags.intersects(self.options.exclude_flags)
-            || mapping_quality < self.options.min_mapping_quality
-            || (self.options.proper_pairs_only && !flags.is_properly_segmented())
-            || flags.is_unmapped())
-    }
-
     fn reference_sequence_id(&self, contig: &str) -> Result<usize> {
         self.header
             .reference_sequences()
@@ -493,34 +541,16 @@ impl<'f, S: RecordSource> StreamingPileupBuilder<'f, S> {
     }
 
     fn accept(&mut self, index: u32, pos: i64) -> Result<bool> {
-        let live = &self.slots[index as usize];
-        let mapping_quality = live.record.bam().mapping_quality().map_or(255, u8::from);
-        if !self.passes(live.flags, mapping_quality) || live.start < 0 {
-            return Ok(false);
-        }
         let live = &mut self.slots[index as usize];
-        let record = live.record.bam();
-        let invalid = |source| Error::InvalidRecord {
-            name: record_name(record),
-            source,
-        };
-        let placed = live
-            .footprint
-            .fill(
-                live.start,
-                record.cigar().as_bytes(),
-                record.sequence().len(),
-            )
-            .map_err(invalid)?;
-        if !placed {
-            return Ok(false);
-        }
-        if let Some(read_filter) = self.read_filter.as_mut()
-            && !read_filter(&live.record)?
-        {
-            return Ok(false);
-        }
-        if live.footprint.end <= pos {
+        let read_filter = self.read_filter.as_mut();
+        let admitted = admits(
+            &self.options,
+            read_filter,
+            &live.record,
+            live.start,
+            &mut live.footprint,
+        )?;
+        if !admitted || live.footprint.end <= pos {
             return Ok(false);
         }
         live.derived = Derived::default();

@@ -595,3 +595,9 @@ def test_a_tabulator_reads_back_its_reference_and_options(reference: FastaFile) 
     assert (tabulator.reference, options) == (reference, (20, 5, 4))
     assert tabulator.accepts(record("kept", 10, "4M", "ACGT", header=HEADER))
     assert not tabulator.accepts(record("low", 10, "4M", "ACGT", mapq=4, header=HEADER))
+
+
+def test_a_read_with_no_stored_bases_is_piled_up_but_not_tabulated(reference: FastaFile) -> None:
+    read = record("bare", 10, "4M", "*", header=HEADER)
+    assert StreamingPileupBuilder([]).accepts(read)
+    assert not Tabulator(reference).accepts(read)

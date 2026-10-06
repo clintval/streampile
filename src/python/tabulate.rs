@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use noodles::bam;
+use noodles::sam::alignment::record::Flags;
 use noodles::sam::alignment::record::cigar::op::Kind;
 use pyo3::exceptions::PyValueError;
 use pyo3::intern;
@@ -12,6 +13,7 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 
 use super::{Int, bridge};
 use crate::DEFAULT_EXCLUDE_FLAGS;
+use crate::builder::passes;
 use crate::pileup::record_name;
 
 const REFERENCE_PADDING: i64 = 10_000;
@@ -480,12 +482,16 @@ struct Options {
 }
 
 impl Options {
+    /// Whether a read passes the flag and mapping-quality filters a builder applies and has
+    /// bases to count: a builder piles up a read with no stored bases (SEQ `*`), as htslib does,
+    /// where its alleles cannot be counted. Tabulate has no proper-pair filter or read filter.
     fn accepts(self, record: &bam::Record) -> bool {
-        let flags = record.flags();
-        !flags.is_unmapped()
-            && flags.bits() & self.exclude_flags == 0
-            && record.mapping_quality().map_or(255, u8::from) >= self.min_mapping_quality
-            && !record.sequence().is_empty()
+        passes(
+            record.flags(),
+            record.mapping_quality().map_or(255, u8::from),
+            Flags::from_bits_retain(self.exclude_flags),
+            self.min_mapping_quality,
+        ) && !record.sequence().is_empty()
             && !record.cigar().is_empty()
     }
 
