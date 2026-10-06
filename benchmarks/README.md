@@ -2,27 +2,26 @@
 
 The `benchmark.py` script piles up every base of a territory and counts, at each base, the reads holding each base at base quality 30 or more, the reads with a deletion there, and the reads with an insertion after it, from reads with mapping quality 20 or more.
 It runs each engine in its own process, prints its time and peak resident memory, and prints a digest of its counts.
-The `htslib` and `streampile` digests agree unless a read opens with an insertion, which only streampile reports, or has no stored qualities (QUAL `*`), which streampile counts at quality 255 and the `htslib` engine skips; nothing checks them.
+The `htslib`, `streampile`, and `rust` digests agree unless a read opens with an insertion, which only streampile reports, or has no stored qualities (QUAL `*`), which streampile counts at quality 255 and the `htslib` engine skips; nothing checks them.
+Build the Rust example first, as the `rust` engine runs it, and run the script from the repository's root:
 
 ```console
+cargo build --release --example sweep
 uv run python benchmarks/benchmark.py \
-    --bam reads.bam --ref reference.fa --intervals territory.bed --threads 4 --runs 3
+    --bam reads.bam --ref reference.fa --intervals territory.bed \
+    --threads 4 --runs 3 --rebuild-columns 500
 ```
 
-The `--engines` option picks the engines, `--threads` sets the threads pysam decompresses the BAM with, and `--runs` reports each engine's fastest of that many runs.
-The same sweep runs on the Rust crate alone, with no Python, printing the same digest, with the threads decompressing the BAM given last:
-
-```console
-cargo run --release --example sweep -- reads.bam territory.bed 4
-```
-
+The `--engines` option picks the engines, `--threads` sets the threads decompressing the BAM, and `--runs` reports each engine's fastest of that many runs.
 The engines are:
 
 - `htslib`: pysam's `AlignmentFile.pileup` over each span, counting each entry in Python.
 - `streampile`: `StreamingPileupBuilder.columns` over each span, counting each entry in Python.
+- `columns`: the same sweep, reading only each pileup's `unfiltered_depth`, so without touching an entry in Python.
+- `records`: pysam reading every record of the BAM and nothing more; its count is of records, not columns.
 - `tabulate`: `streampile.tabulate`, which also groups MNVs and normalizes indels.
-- `rebuild`: building each column from scratch from every overlapping read's aligned pairs, on `--rebuild-columns` evenly spaced columns (2,000 by default; 500 in the results below).
-- `examples/sweep`: the Rust crate's `StreamingPileupBuilder` over each span, reading the BAM with noodles and counting each entry in Rust.
+- `rebuild`: building each column from scratch from every overlapping read's aligned pairs, on `--rebuild-columns` evenly spaced columns (2,000 by default).
+- `rust`: the Rust crate's `StreamingPileupBuilder` over each span, in `examples/sweep.rs`, reading the BAM with noodles and counting each entry in Rust; its time is the one it prints, and its peak memory is its process's.
 
 The BAMs are synthetic, coordinate-sorted, overlapping 2x150 pairs over 600 targets of 205 bases (123 kb), with the per-base tags of a duplex consensus (`cd`, `ce`, `ad`, `bd`, `ae`, `be`, `ac`, `bc`, `aq`, `bq`), about 2.4 kB of tags a read, and occasional mismatches, indels, low base qualities, low mapping qualities, and QC-fail reads.
 The 30x BAM holds 54,000 reads (29 MB), and the 800x BAM 1.44 million reads (748 MB, 3.9 GB decompressed).

@@ -1,8 +1,8 @@
 """Time piling up every base of a territory with streampile and with pysam's htslib pileup.
 
-Each engine counts, at every base, the reads holding each base at the quality floor, the reads
-with a deletion there, and the reads with an insertion after it. The pileup engines' counts agree
-unless a read opens with an insertion or has no stored qualities. Each engine runs in its own
+Each counting engine counts, at every base, the reads holding each base at the quality floor, the
+reads with a deletion there, and the reads with an insertion after it. The pileup engines' counts
+agree unless a read opens with an insertion or has no stored qualities. Each engine runs in its own
 process, so its peak resident memory is its own, and reads the BAM with `--threads` threads
 decompressing it.
 """
@@ -31,7 +31,8 @@ from streampile import tabulate
 MIN_BASE_QUALITY = 30
 MIN_MAPPING_QUALITY = 20
 EXCLUDE_FLAGS = 0xF04
-ENGINES = ("htslib", "streampile", "tabulate", "rebuild")
+ENGINES = ("htslib", "streampile", "columns", "records", "tabulate", "rebuild", "rust")
+SWEEP = Path(__file__).parent.parent / "target" / "release" / "examples" / "sweep"
 
 
 def read_territory(bed: Path) -> Territory:
@@ -66,6 +67,26 @@ def streampile_counts(bam: Path, spans: list[Bed3], threads: int) -> Iterator[Co
                         continue
                     counts["-" if entry.is_del else entry.base or "N"] += 1
                 yield counts
+
+
+def streampile_depths(bam: Path, spans: list[Bed3], threads: int) -> Iterator[Counter[str]]:
+    """Sweep each column of the territory without touching an entry, reading only its depth."""
+    with (
+        AlignmentFile(str(bam), threads=threads) as reads,
+        StreamingPileupBuilder(
+            reads, min_mapping_quality=MIN_MAPPING_QUALITY, exclude_flags=EXCLUDE_FLAGS
+        ) as builder,
+    ):
+        for span in spans:
+            for pileup in builder.columns(span.refname, span.start, span.end):
+                yield Counter({"depth": pileup.unfiltered_depth})
+
+
+def records(bam: Path, threads: int) -> Iterator[Counter[str]]:
+    """Read every record of the BAM with pysam, and nothing more, one count per record."""
+    with AlignmentFile(str(bam), threads=threads) as reads:
+        for _ in reads.fetch(until_eof=True):
+            yield Counter()
 
 
 def htslib_counts(bam: Path, spans: list[Bed3], threads: int) -> Iterator[Counter[str]]:
@@ -152,16 +173,30 @@ def tabulate_rows(bam: Path, reference: Path, territory: Territory, threads: int
             yield f"{base.depth},{base.ref_reads},{base.alts},{base.alt_reads}"
 
 
-def peak_megabytes() -> float:
-    """The peak resident memory of this process, in megabytes."""
-    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+def peak_megabytes(who: int = resource.RUSAGE_SELF) -> float:
+    """The peak resident memory of this process, or of its largest child, in megabytes."""
+    peak = resource.getrusage(who).ru_maxrss
     return peak / 1e6 if sys.platform == "darwin" else peak / 1e3
+
+
+def sweep(sweeper: Path, bam: Path, bed: Path, threads: int) -> None:
+    """Run the Rust example and print its time, its peak memory, columns, and digest."""
+    if not sweeper.is_file():
+        raise SystemExit(f"Build {sweeper} first: cargo build --release --example sweep")
+    command = [str(sweeper), str(bam), str(bed), str(threads)]
+    printed = subprocess.run(command, check=True, capture_output=True, text=True).stdout
+    _, seconds, columns, digest = printed.strip().split("\t")
+    peak = peak_megabytes(resource.RUSAGE_CHILDREN)
+    print(f"rust\t{seconds}\t{peak:.0f}\t{columns}\t{digest}")
 
 
 def run(
     engine: str, bam: Path, reference: Path, bed: Path, rebuild_columns: int, threads: int
 ) -> None:
-    """Run one engine and print its time, peak memory, columns, and a digest of its counts."""
+    """Run one engine and print its time, peak memory, columns, and a digest of its counts.
+
+    The `records` engine counts records rather than columns.
+    """
     territory = read_territory(bed)
     spans = spans_in_header_order(bam, territory)
     started = time.perf_counter()
@@ -177,6 +212,10 @@ def run(
             counts = rebuilt_counts(bam, spans, rebuild_columns, threads)
         elif engine == "streampile":
             counts = streampile_counts(bam, spans, threads)
+        elif engine == "columns":
+            counts = streampile_depths(bam, spans, threads)
+        elif engine == "records":
+            counts = records(bam, threads)
         else:
             counts = htslib_counts(bam, spans, threads)
         for column in counts:
@@ -203,8 +242,12 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=1, help="report the best of this many runs")
     parser.add_argument("--rebuild-columns", type=int, default=2000)
     parser.add_argument("--threads", type=int, default=1, help="threads decompressing the BAM")
+    parser.add_argument("--sweep", type=Path, default=SWEEP, help="the Rust example to run")
     # fmt: on
     args = parser.parse_args()
+    if args.engine == "rust":
+        sweep(args.sweep, args.bam, args.intervals, args.threads)
+        return
     if args.engine is not None:
         run(args.engine, args.bam, args.ref, args.intervals, args.rebuild_columns, args.threads)
         return
@@ -213,6 +256,7 @@ def main() -> None:
         command = [sys.executable, __file__, "--bam", str(args.bam), "--ref", str(args.ref)]
         command += ["--intervals", str(args.intervals), "--engine", engine]
         command += ["--rebuild-columns", str(args.rebuild_columns), "--threads", str(args.threads)]
+        command += ["--sweep", str(args.sweep)]
         rows: list[str] = [
             subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
             for _ in range(args.runs)
