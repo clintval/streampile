@@ -1,0 +1,200 @@
+chr1	0	all	1	1	A	40	plain/0/base/0/0/None/0/A/40/None/None
+chr1	0	kept	1	1	A	40	plain/0/base/0/0/None/0/A/40/None/None
+chr1	1	all	1	1	C	40	plain/0/base/1/1/None/0/C/40/None/None
+chr1	1	kept	1	1	C	40	plain/0/base/1/1/None/0/C/40/None/None
+chr1	2	all	2	2	GG	40,40	plain/0/base/2/2/None/0/G/40/None/None snv/0/base/0/0/None/0/G/40/None/None
+chr1	2	kept	2	2	GG	40,40	plain/0/base/2/2/None/0/G/40/None/None snv/0/base/0/0/None/0/G/40/None/None
+chr1	3	all	2	2	TT	40,40	plain/0/base/3/3/None/0/T/40/None/None snv/0/base/1/1/None/0/T/40/None/None
+chr1	3	kept	2	2	TT	40,40	plain/0/base/3/3/None/0/T/40/None/None snv/0/base/1/1/None/0/T/40/None/None
+chr1	4	all	3	3	AAA	40,40,40	plain/0/base/4/4/None/0/A/40/None/None snv/0/base/2/2/None/0/A/40/None/None mnv/16/base/0/0/None/0/A/40/None/None
+chr1	4	kept	3	3	AAA	40,40,40	plain/0/base/4/4/None/0/A/40/None/None snv/0/base/2/2/None/0/A/40/None/None mnv/16/base/0/0/None/0/A/40/None/None
+chr1	5	all	4	4	GGGG	40,40,40,40	plain/0/base/5/5/None/0/G/40/None/None snv/0/base/3/3/None/0/G/40/None/None mnv/16/base/1/1/None/0/G/40/None/None lowqual/0/base/0/0/None/0/G/40/None/None
+chr1	5	kept	4	4	GGGG	40,40,40,40	plain/0/base/5/5/None/0/G/40/None/None snv/0/base/3/3/None/0/G/40/None/None mnv/16/base/1/1/None/0/G/40/None/None lowqual/0/base/0/0/None/0/G/40/None/None
+chr1	6	all	4	4	GGGG	40,40,40,40	plain/0/base/6/6/None/0/G/40/None/None snv/0/base/4/4/None/0/G/40/None/None mnv/16/base/2/2/None/0/G/40/None/None lowqual/0/base/1/1/None/0/G/40/None/None
+chr1	6	kept	4	4	GGGG	40,40,40,40	plain/0/base/6/6/None/0/G/40/None/None snv/0/base/4/4/None/0/G/40/None/None mnv/16/base/2/2/None/0/G/40/None/None lowqual/0/base/1/1/None/0/G/40/None/None
+chr1	7	all	4	4	CCCC	40,40,40,40	plain/0/base/7/7/None/0/C/40/None/None snv/0/base/5/5/None/0/C/40/None/None mnv/16/base/3/3/None/0/C/40/None/None lowqual/0/base/2/2/None/0/C/40/None/None
+chr1	7	kept	4	4	CCCC	40,40,40,40	plain/0/base/7/7/None/0/C/40/None/None snv/0/base/5/5/None/0/C/40/None/None mnv/16/base/3/3/None/0/C/40/None/None lowqual/0/base/2/2/None/0/C/40/None/None
+chr1	8	all	4	4	TTTT	40,40,40,40	plain/0/base/8/8/None/0/T/40/None/None snv/0/base/6/6/None/0/T/40/None/None mnv/16/base/4/4/None/0/T/40/None/None lowqual/0/base/3/3/None/0/T/40/None/None
+chr1	8	kept	4	4	TTTT	40,40,40,40	plain/0/base/8/8/None/0/T/40/None/None snv/0/base/6/6/None/0/T/40/None/None mnv/16/base/4/4/None/0/T/40/None/None lowqual/0/base/3/3/None/0/T/40/None/None
+chr1	9	all	4	4	AAAA	40,40,40,40	plain/0/base/9/9/None/0/A/40/None/None snv/0/base/7/7/None/0/A/40/None/None mnv/16/base/5/5/None/0/A/40/None/None lowqual/0/base/4/4/None/0/A/40/None/None
+chr1	9	kept	4	4	AAAA	40,40,40,40	plain/0/base/9/9/None/0/A/40/None/None snv/0/base/7/7/None/0/A/40/None/None mnv/16/base/5/5/None/0/A/40/None/None lowqual/0/base/4/4/None/0/A/40/None/None
+chr1	10	all	4	4	ATGA	40,40,40,40	plain/0/base/10/10/None/0/A/40/None/None snv/0/base/8/8/None/0/T/40/None/None mnv/16/base/6/6/None/0/G/40/None/None lowqual/0/base/5/5/None/0/A/40/None/None
+chr1	10	kept	4	4	ATGA	40,40,40,40	plain/0/base/10/10/None/0/A/40/None/None snv/0/base/8/8/None/0/T/40/None/None mnv/16/base/6/6/None/0/G/40/None/None lowqual/0/base/5/5/None/0/A/40/None/None
+chr1	11	all	4	4	CCGC	40,40,40,40	plain/0/base/11/11/None/0/C/40/None/None snv/0/base/9/9/None/0/C/40/None/None mnv/16/base/7/7/None/0/G/40/None/None lowqual/0/base/6/6/None/0/C/40/None/None
+chr1	11	kept	4	4	CCGC	40,40,40,40	plain/0/base/11/11/None/0/C/40/None/None snv/0/base/9/9/None/0/C/40/None/None mnv/16/base/7/7/None/0/G/40/None/None lowqual/0/base/6/6/None/0/C/40/None/None
+chr1	12	all	4	4	GGGG	40,40,40,2	plain/0/base/12/12/None/0/G/40/None/None snv/0/base/10/10/None/0/G/40/None/None mnv/16/base/8/8/None/0/G/40/None/None lowqual/0/base/7/7/None/0/G/2/None/None
+chr1	12	kept	4	4	GGGG	40,40,40,2	plain/0/base/12/12/None/0/G/40/None/None snv/0/base/10/10/None/0/G/40/None/None mnv/16/base/8/8/None/0/G/40/None/None lowqual/0/base/7/7/None/0/G/2/None/None
+chr1	13	all	4	4	TTTT	40,40,40,40	plain/0/base/13/13/None/0/T/40/None/None snv/0/base/11/11/None/0/T/40/None/None mnv/16/base/9/9/None/0/T/40/None/None lowqual/0/base/8/8/None/0/T/40/None/None
+chr1	13	kept	4	4	TTTT	40,40,40,40	plain/0/base/13/13/None/0/T/40/None/None snv/0/base/11/11/None/0/T/40/None/None mnv/16/base/9/9/None/0/T/40/None/None lowqual/0/base/8/8/None/0/T/40/None/None
+chr1	14	all	4	4	TTTT	40,40,40,40	plain/0/base/14/14/None/0/T/40/None/None snv/0/base/12/12/None/0/T/40/None/None mnv/16/base/10/10/None/0/T/40/None/None lowqual/0/base/9/9/None/0/T/40/None/None
+chr1	14	kept	4	4	TTTT	40,40,40,40	plain/0/base/14/14/None/0/T/40/None/None snv/0/base/12/12/None/0/T/40/None/None mnv/16/base/10/10/None/0/T/40/None/None lowqual/0/base/9/9/None/0/T/40/None/None
+chr1	15	all	4	4	AAAA	40,40,40,40	plain/0/base/15/15/None/0/A/40/None/None snv/0/base/13/13/None/0/A/40/None/None mnv/16/base/11/11/None/0/A/40/None/None lowqual/0/base/10/10/None/0/A/40/None/None
+chr1	15	kept	4	4	AAAA	40,40,40,40	plain/0/base/15/15/None/0/A/40/None/None snv/0/base/13/13/None/0/A/40/None/None mnv/16/base/11/11/None/0/A/40/None/None lowqual/0/base/10/10/None/0/A/40/None/None
+chr1	16	all	5	5	GGGGG	40,40,40,40,40	plain/0/base/16/16/None/0/G/40/None/None snv/0/base/14/14/None/0/G/40/None/None mnv/16/base/12/12/None/0/G/40/None/None lowqual/0/base/11/11/None/0/G/40/None/None deletion/16/base/0/0/None/0/G/40/None/None
+chr1	16	kept	5	5	GGGGG	40,40,40,40,40	plain/0/base/16/16/None/0/G/40/None/None snv/0/base/14/14/None/0/G/40/None/None mnv/16/base/12/12/None/0/G/40/None/None lowqual/0/base/11/11/None/0/G/40/None/None deletion/16/base/0/0/None/0/G/40/None/None
+chr1	17	all	5	5	CCCCC	40,40,40,40,40	plain/0/base/17/17/None/0/C/40/None/None snv/0/base/15/15/None/0/C/40/None/None mnv/16/base/13/13/None/0/C/40/None/None lowqual/0/base/12/12/None/0/C/40/None/None deletion/16/base/1/1/None/0/C/40/None/None
+chr1	17	kept	5	5	CCCCC	40,40,40,40,40	plain/0/base/17/17/None/0/C/40/None/None snv/0/base/15/15/None/0/C/40/None/None mnv/16/base/13/13/None/0/C/40/None/None lowqual/0/base/12/12/None/0/C/40/None/None deletion/16/base/1/1/None/0/C/40/None/None
+chr1	18	all	5	5	CCCCC	40,40,40,40,40	plain/0/base/18/18/None/0/C/40/None/None snv/0/base/16/16/None/0/C/40/None/None mnv/16/base/14/14/None/0/C/40/None/None lowqual/0/base/13/13/None/0/C/40/None/None deletion/16/base/2/2/None/0/C/40/None/None
+chr1	18	kept	5	5	CCCCC	40,40,40,40,40	plain/0/base/18/18/None/0/C/40/None/None snv/0/base/16/16/None/0/C/40/None/None mnv/16/base/14/14/None/0/C/40/None/None lowqual/0/base/13/13/None/0/C/40/None/None deletion/16/base/2/2/None/0/C/40/None/None
+chr1	19	all	5	5	AAAAA	40,40,40,40,40	plain/0/base/19/19/None/0/A/40/None/None snv/0/base/17/17/None/0/A/40/None/None mnv/16/base/15/15/None/0/A/40/None/None lowqual/0/base/14/14/None/0/A/40/None/None deletion/16/base/3/3/None/0/A/40/None/None
+chr1	19	kept	5	5	AAAAA	40,40,40,40,40	plain/0/base/19/19/None/0/A/40/None/None snv/0/base/17/17/None/0/A/40/None/None mnv/16/base/15/15/None/0/A/40/None/None lowqual/0/base/14/14/None/0/A/40/None/None deletion/16/base/3/3/None/0/A/40/None/None
+chr1	20	all	5	5	TTTTT	40,40,40,40,40	snv/0/base/18/18/None/0/T/40/None/None mnv/16/base/16/16/None/0/T/40/None/None lowqual/0/base/15/15/None/0/T/40/None/None deletion/16/base/4/4/None/0/T/40/None/None clipped/0/base/2/2/None/0/T/40/None/None
+chr1	20	kept	5	5	TTTTT	40,40,40,40,40	snv/0/base/18/18/None/0/T/40/None/None mnv/16/base/16/16/None/0/T/40/None/None lowqual/0/base/15/15/None/0/T/40/None/None deletion/16/base/4/4/None/0/T/40/None/None clipped/0/base/2/2/None/0/T/40/None/None
+chr1	21	all	5	5	GGGGG	40,40,40,40,40	snv/0/base/19/19/None/0/G/40/None/None mnv/16/base/17/17/None/0/G/40/None/None lowqual/0/base/16/16/None/0/G/40/None/None deletion/16/base/5/5/None/0/G/40/None/None clipped/0/base/3/3/None/0/G/40/None/None
+chr1	21	kept	5	5	GGGGG	40,40,40,40,40	snv/0/base/19/19/None/0/G/40/None/None mnv/16/base/17/17/None/0/G/40/None/None lowqual/0/base/16/16/None/0/G/40/None/None deletion/16/base/5/5/None/0/G/40/None/None clipped/0/base/3/3/None/0/G/40/None/None
+chr1	22	all	4	4	CCCC	40,40,40,40	mnv/16/base/18/18/None/0/C/40/None/None lowqual/0/base/17/17/None/0/C/40/None/None deletion/16/base/6/6/None/0/C/40/None/None clipped/0/base/4/4/None/0/C/40/None/None
+chr1	22	kept	4	4	CCCC	40,40,40,40	mnv/16/base/18/18/None/0/C/40/None/None lowqual/0/base/17/17/None/0/C/40/None/None deletion/16/base/6/6/None/0/C/40/None/None clipped/0/base/4/4/None/0/C/40/None/None
+chr1	23	all	4	4	AAAA	40,40,40,40	mnv/16/base/19/19/None/0/A/40/None/None lowqual/0/base/18/18/None/0/A/40/None/None deletion/16/base/7/7/None/0/A/40/None/None clipped/0/base/5/5/None/0/A/40/None/None
+chr1	23	kept	4	4	AAAA	40,40,40,40	mnv/16/base/19/19/None/0/A/40/None/None lowqual/0/base/18/18/None/0/A/40/None/None deletion/16/base/7/7/None/0/A/40/None/None clipped/0/base/5/5/None/0/A/40/None/None
+chr1	24	all	3	3	AAA	40,40,40	lowqual/0/base/19/19/None/0/A/40/None/None deletion/16/base/8/8/None/0/A/40/None/None clipped/0/base/6/6/None/0/A/40/None/None
+chr1	24	kept	3	3	AAA	40,40,40	lowqual/0/base/19/19/None/0/A/40/None/None deletion/16/base/8/8/None/0/A/40/None/None clipped/0/base/6/6/None/0/A/40/None/None
+chr1	25	all	2	2	AA	40,40	deletion/16/base/9/9/None/0/A/40/None/None clipped/0/base/7/7/None/0/A/40/None/None
+chr1	25	kept	2	2	AA	40,40	deletion/16/base/9/9/None/0/A/40/None/None clipped/0/base/7/7/None/0/A/40/None/None
+chr1	26	all	3	3	AAA	40,40,40	deletion/16/base/10/10/None/0/A/40/None/None clipped/0/base/8/8/None/0/A/40/None/None insertion/0/base/0/0/None/0/A/40/None/None
+chr1	26	kept	3	3	AAA	40,40,40	deletion/16/base/10/10/None/0/A/40/None/None clipped/0/base/8/8/None/0/A/40/None/None insertion/0/base/0/0/None/0/A/40/None/None
+chr1	27	all	3	3	AA	40,40	deletion/16/deletion/None/11/None/0/None/40/None/None clipped/0/base/9/9/None/0/A/40/None/None insertion/0/base/1/1/None/0/A/40/None/None
+chr1	27	kept	3	3	AA	40,40	deletion/16/deletion/None/11/None/0/None/40/None/None clipped/0/base/9/9/None/0/A/40/None/None insertion/0/base/1/1/None/0/A/40/None/None
+chr1	28	all	3	3	GGG	40,40,40	deletion/16/base/11/11/None/0/G/40/None/None clipped/0/base/10/10/None/0/G/40/None/None insertion/0/base/2/2/None/0/G/40/None/None
+chr1	28	kept	3	3	GGG	40,40,40	deletion/16/base/11/11/None/0/G/40/None/None clipped/0/base/10/10/None/0/G/40/None/None insertion/0/base/2/2/None/0/G/40/None/None
+chr1	29	all	3	3	TTT	40,40,40	deletion/16/base/12/12/None/0/T/40/None/None clipped/0/base/11/11/None/0/T/40/None/None insertion/0/base/3/3/None/0/T/40/None/None
+chr1	29	kept	3	3	TTT	40,40,40	deletion/16/base/12/12/None/0/T/40/None/None clipped/0/base/11/11/None/0/T/40/None/None insertion/0/base/3/3/None/0/T/40/None/None
+chr1	30	all	4	4	CCCC	40,40,40,40	deletion/16/base/13/13/None/0/C/40/None/None clipped/0/base/12/12/None/0/C/40/None/None insertion/0/base/4/4/None/0/C/40/None/None spliced/0/base/0/0/None/0/C/40/None/None
+chr1	30	kept	4	4	CCCC	40,40,40,40	deletion/16/base/13/13/None/0/C/40/None/None clipped/0/base/12/12/None/0/C/40/None/None insertion/0/base/4/4/None/0/C/40/None/None spliced/0/base/0/0/None/0/C/40/None/None
+chr1	31	all	4	4	CCCC	40,40,40,40	deletion/16/base/14/14/None/0/C/40/None/None clipped/0/base/13/13/None/0/C/40/None/None insertion/0/base/5/5/None/0/C/40/None/None spliced/0/base/1/1/None/0/C/40/None/None
+chr1	31	kept	4	4	CCCC	40,40,40,40	deletion/16/base/14/14/None/0/C/40/None/None clipped/0/base/13/13/None/0/C/40/None/None insertion/0/base/5/5/None/0/C/40/None/None spliced/0/base/1/1/None/0/C/40/None/None
+chr1	32	all	5	5	AAAAA	40,40,40,40,40	deletion/16/base/15/15/None/0/A/40/None/None clipped/0/base/14/14/None/0/A/40/None/None insertion/0/base/6/6/None/0/A/40/None/None spliced/0/base/2/2/None/0/A/40/None/None duplicate/1024/base/0/0/None/0/A/40/None/None
+chr1	32	kept	5	5	AAAAA	40,40,40,40,40	deletion/16/base/15/15/None/0/A/40/None/None clipped/0/base/14/14/None/0/A/40/None/None insertion/0/base/6/6/None/0/A/40/None/None spliced/0/base/2/2/None/0/A/40/None/None duplicate/1024/base/0/0/None/0/A/40/None/None
+chr1	33	all	5	5	TTTTT	40,40,40,40,40	deletion/16/base/16/16/None/0/T/40/None/None clipped/0/base/15/15/None/0/T/40/None/None insertion/0/base/7/7/None/0/T/40/None/None insertion/0/insertion/None/None/8/2/None/None/TT/[40,40] spliced/0/base/3/3/None/0/T/40/None/None duplicate/1024/base/1/1/None/0/T/40/None/None
+chr1	33	kept	5	5	TTTTT	40,40,40,40,40	deletion/16/base/16/16/None/0/T/40/None/None clipped/0/base/15/15/None/0/T/40/None/None insertion/0/base/7/7/None/0/T/40/None/None insertion/0/insertion/None/None/8/2/None/None/TT/[40,40] spliced/0/base/3/3/None/0/T/40/None/None duplicate/1024/base/1/1/None/0/T/40/None/None
+chr1	34	all	5	5	GGGGG	40,40,40,40,40	deletion/16/base/17/17/None/0/G/40/None/None clipped/0/base/16/16/None/0/G/40/None/None insertion/0/base/10/10/None/0/G/40/None/None spliced/0/base/4/4/None/0/G/40/None/None duplicate/1024/base/2/2/None/0/G/40/None/None
+chr1	34	kept	5	5	GGGGG	40,40,40,40,40	deletion/16/base/17/17/None/0/G/40/None/None clipped/0/base/16/16/None/0/G/40/None/None insertion/0/base/10/10/None/0/G/40/None/None spliced/0/base/4/4/None/0/G/40/None/None duplicate/1024/base/2/2/None/0/G/40/None/None
+chr1	35	all	5	4	AAAA	40,40,40,40	deletion/16/base/18/18/None/0/A/40/None/None clipped/0/base/17/17/None/0/A/40/None/None insertion/0/base/11/11/None/0/A/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/3/3/None/0/A/40/None/None
+chr1	35	kept	5	4	AAAA	40,40,40,40	deletion/16/base/18/18/None/0/A/40/None/None clipped/0/base/17/17/None/0/A/40/None/None insertion/0/base/11/11/None/0/A/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/3/3/None/0/A/40/None/None
+chr1	36	all	4	3	CCC	40,40,40	deletion/16/base/19/19/None/0/C/40/None/None insertion/0/base/12/12/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/4/4/None/0/C/40/None/None
+chr1	36	kept	4	3	CCC	40,40,40	deletion/16/base/19/19/None/0/C/40/None/None insertion/0/base/12/12/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/4/4/None/0/C/40/None/None
+chr1	37	all	4	3	GGG	40,40,40	deletion/16/base/20/20/None/0/G/40/None/None insertion/0/base/13/13/None/0/G/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/5/5/None/0/G/40/None/None
+chr1	37	kept	4	3	GGG	40,40,40	deletion/16/base/20/20/None/0/G/40/None/None insertion/0/base/13/13/None/0/G/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/5/5/None/0/G/40/None/None
+chr1	38	all	3	2	TT	40,40	insertion/0/base/14/14/None/0/T/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/6/6/None/0/T/40/None/None
+chr1	38	kept	3	2	TT	40,40	insertion/0/base/14/14/None/0/T/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/6/6/None/0/T/40/None/None
+chr1	39	all	3	2	CC	40,40	insertion/0/base/15/15/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/7/7/None/0/C/40/None/None
+chr1	39	kept	3	2	CC	40,40	insertion/0/base/15/15/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/7/7/None/0/C/40/None/None
+chr1	40	all	4	3	GGG	40,40,40	insertion/0/base/16/16/None/0/G/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/8/8/None/0/G/40/None/None pair/99/base/0/0/None/0/G/40/None/None
+chr1	40	kept	4	3	GGG	40,40,40	insertion/0/base/16/16/None/0/G/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/8/8/None/0/G/40/None/None pair/99/base/0/0/None/0/G/40/None/None
+chr1	41	all	4	3	AAA	40,40,40	insertion/0/base/17/17/None/0/A/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/9/9/None/0/A/40/None/None pair/99/base/1/1/None/0/A/40/None/None
+chr1	41	kept	4	3	AAA	40,40,40	insertion/0/base/17/17/None/0/A/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None duplicate/1024/base/9/9/None/0/A/40/None/None pair/99/base/1/1/None/0/A/40/None/None
+chr1	42	all	3	2	TT	40,40	insertion/0/base/18/18/None/0/T/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/2/2/None/0/T/40/None/None
+chr1	42	kept	3	2	TT	40,40	insertion/0/base/18/18/None/0/T/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/2/2/None/0/T/40/None/None
+chr1	43	all	3	2	CC	40,40	insertion/0/base/19/19/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/3/3/None/0/C/40/None/None
+chr1	43	kept	3	2	CC	40,40	insertion/0/base/19/19/None/0/C/40/None/None spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/3/3/None/0/C/40/None/None
+chr1	44	all	2	1	G	40	spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/4/4/None/0/G/40/None/None
+chr1	44	kept	2	1	G	40	spliced/0/skip/None/None/None/0/None/None/None/None pair/99/base/4/4/None/0/G/40/None/None
+chr1	45	all	3	3	GGG	40,40,40	spliced/0/base/5/5/None/0/G/40/None/None pair/99/base/5/5/None/0/G/40/None/None pair/147/base/0/0/None/0/G/40/None/None
+chr1	45	kept	2	2	GG	40,40	spliced/0/base/5/5/None/0/G/40/None/None pair/99/base/5/5/None/0/G/40/None/None
+chr1	46	all	3	3	AAA	40,40,40	spliced/0/base/6/6/None/0/A/40/None/None pair/99/base/6/6/None/0/A/40/None/None pair/147/base/1/1/None/0/A/40/None/None
+chr1	46	kept	2	2	AA	40,40	spliced/0/base/6/6/None/0/A/40/None/None pair/99/base/6/6/None/0/A/40/None/None
+chr1	47	all	3	3	TTT	40,40,40	spliced/0/base/7/7/None/0/T/40/None/None pair/99/base/7/7/None/0/T/40/None/None pair/147/base/2/2/None/0/T/40/None/None
+chr1	47	kept	2	2	TT	40,40	spliced/0/base/7/7/None/0/T/40/None/None pair/99/base/7/7/None/0/T/40/None/None
+chr1	48	all	3	3	CCC	40,40,40	spliced/0/base/8/8/None/0/C/40/None/None pair/99/base/8/8/None/0/C/40/None/None pair/147/base/3/3/None/0/C/40/None/None
+chr1	48	kept	2	2	CC	40,40	spliced/0/base/8/8/None/0/C/40/None/None pair/99/base/8/8/None/0/C/40/None/None
+chr1	49	all	3	3	CCC	40,40,40	spliced/0/base/9/9/None/0/C/40/None/None pair/99/base/9/9/None/0/C/40/None/None pair/147/base/4/4/None/0/C/40/None/None
+chr1	49	kept	2	2	CC	40,40	spliced/0/base/9/9/None/0/C/40/None/None pair/99/base/9/9/None/0/C/40/None/None
+chr1	50	all	2	2	TT	40,40	pair/99/base/10/10/None/0/T/40/None/None pair/147/base/5/5/None/0/T/40/None/None
+chr1	50	kept	1	1	T	40	pair/99/base/10/10/None/0/T/40/None/None
+chr1	51	all	2	2	AA	40,40	pair/99/base/11/11/None/0/A/40/None/None pair/147/base/6/6/None/0/A/40/None/None
+chr1	51	kept	1	1	A	40	pair/99/base/11/11/None/0/A/40/None/None
+chr1	52	all	2	2	GG	40,40	pair/99/base/12/12/None/0/G/40/None/None pair/147/base/7/7/None/0/G/40/None/None
+chr1	52	kept	1	1	G	40	pair/99/base/12/12/None/0/G/40/None/None
+chr1	53	all	2	2	GG	40,40	pair/99/base/13/13/None/0/G/40/None/None pair/147/base/8/8/None/0/G/40/None/None
+chr1	53	kept	1	1	G	40	pair/99/base/13/13/None/0/G/40/None/None
+chr1	54	all	2	2	CC	40,40	pair/99/base/14/14/None/0/C/40/None/None pair/147/base/9/9/None/0/C/40/None/None
+chr1	54	kept	1	1	C	40	pair/99/base/14/14/None/0/C/40/None/None
+chr1	55	all	1	1	T	40	pair/147/base/10/10/None/0/T/40/None/None
+chr1	55	kept	1	1	T	40	pair/147/base/10/10/None/0/T/40/None/None
+chr1	56	all	1	1	A	40	pair/147/base/11/11/None/0/A/40/None/None
+chr1	56	kept	1	1	A	40	pair/147/base/11/11/None/0/A/40/None/None
+chr1	57	all	1	1	G	40	pair/147/base/12/12/None/0/G/40/None/None
+chr1	57	kept	1	1	G	40	pair/147/base/12/12/None/0/G/40/None/None
+chr1	58	all	1	1	C	40	pair/147/base/13/13/None/0/C/40/None/None
+chr1	58	kept	1	1	C	40	pair/147/base/13/13/None/0/C/40/None/None
+chr1	59	all	1	1	T	40	pair/147/base/14/14/None/0/T/40/None/None
+chr1	59	kept	1	1	T	40	pair/147/base/14/14/None/0/T/40/None/None
+chr2	0	all	0	0			
+chr2	0	kept	0	0			
+chr2	1	all	0	0			
+chr2	1	kept	0	0			
+chr2	2	all	0	0			
+chr2	2	kept	0	0			
+chr2	3	all	0	0			
+chr2	3	kept	0	0			
+chr2	4	all	0	0			
+chr2	4	kept	0	0			
+chr2	5	all	1	1	C	40	other/0/base/0/0/None/0/C/40/None/None
+chr2	5	kept	1	1	C	40	other/0/base/0/0/None/0/C/40/None/None
+chr2	6	all	1	1	G	40	other/0/base/1/1/None/0/G/40/None/None
+chr2	6	kept	1	1	G	40	other/0/base/1/1/None/0/G/40/None/None
+chr2	7	all	1	1	A	40	other/0/base/2/2/None/0/A/40/None/None
+chr2	7	kept	1	1	A	40	other/0/base/2/2/None/0/A/40/None/None
+chr2	8	all	1	1	T	40	other/0/base/3/3/None/0/T/40/None/None
+chr2	8	kept	1	1	T	40	other/0/base/3/3/None/0/T/40/None/None
+chr2	9	all	1	1	A	40	other/0/base/4/4/None/0/A/40/None/None
+chr2	9	kept	1	1	A	40	other/0/base/4/4/None/0/A/40/None/None
+chr2	10	all	1	1	G	40	other/0/base/5/5/None/0/G/40/None/None
+chr2	10	kept	1	1	G	40	other/0/base/5/5/None/0/G/40/None/None
+chr2	11	all	1	1	C	40	other/0/base/6/6/None/0/C/40/None/None
+chr2	11	kept	1	1	C	40	other/0/base/6/6/None/0/C/40/None/None
+chr2	12	all	1	1	T	40	other/0/base/7/7/None/0/T/40/None/None
+chr2	12	kept	1	1	T	40	other/0/base/7/7/None/0/T/40/None/None
+chr2	13	all	1	1	A	40	other/0/base/8/8/None/0/A/40/None/None
+chr2	13	kept	1	1	A	40	other/0/base/8/8/None/0/A/40/None/None
+chr2	14	all	1	1	G	40	other/0/base/9/9/None/0/G/40/None/None
+chr2	14	kept	1	1	G	40	other/0/base/9/9/None/0/G/40/None/None
+chr2	15	all	1	1	G	40	other/0/base/10/10/None/0/G/40/None/None
+chr2	15	kept	1	1	G	40	other/0/base/10/10/None/0/G/40/None/None
+chr2	16	all	1	1	C	40	other/0/base/11/11/None/0/C/40/None/None
+chr2	16	kept	1	1	C	40	other/0/base/11/11/None/0/C/40/None/None
+chr2	17	all	1	1	A	40	other/0/base/12/12/None/0/A/40/None/None
+chr2	17	kept	1	1	A	40	other/0/base/12/12/None/0/A/40/None/None
+chr2	18	all	1	1	T	40	other/0/base/13/13/None/0/T/40/None/None
+chr2	18	kept	1	1	T	40	other/0/base/13/13/None/0/T/40/None/None
+chr2	19	all	1	1	C	40	other/0/base/14/14/None/0/C/40/None/None
+chr2	19	kept	1	1	C	40	other/0/base/14/14/None/0/C/40/None/None
+chr2	20	all	1	1	G	40	other/0/base/15/15/None/0/G/40/None/None
+chr2	20	kept	1	1	G	40	other/0/base/15/15/None/0/G/40/None/None
+chr2	21	all	1	1	A	40	other/0/base/16/16/None/0/A/40/None/None
+chr2	21	kept	1	1	A	40	other/0/base/16/16/None/0/A/40/None/None
+chr2	22	all	1	1	T	40	other/0/base/17/17/None/0/T/40/None/None
+chr2	22	kept	1	1	T	40	other/0/base/17/17/None/0/T/40/None/None
+chr2	23	all	1	1	C	40	other/0/base/18/18/None/0/C/40/None/None
+chr2	23	kept	1	1	C	40	other/0/base/18/18/None/0/C/40/None/None
+chr2	24	all	1	1	G	40	other/0/base/19/19/None/0/G/40/None/None
+chr2	24	kept	1	1	G	40	other/0/base/19/19/None/0/G/40/None/None
+chr2	25	all	0	0			
+chr2	25	kept	0	0			
+chr2	26	all	0	0			
+chr2	26	kept	0	0			
+chr2	27	all	0	0			
+chr2	27	kept	0	0			
+chr2	28	all	0	0			
+chr2	28	kept	0	0			
+chr2	29	all	0	0			
+chr2	29	kept	0	0			
+chr2	30	all	0	0			
+chr2	30	kept	0	0			
+chr2	31	all	0	0			
+chr2	31	kept	0	0			
+chr2	32	all	0	0			
+chr2	32	kept	0	0			
+chr2	33	all	0	0			
+chr2	33	kept	0	0			
+chr2	34	all	0	0			
+chr2	34	kept	0	0			
+chr2	35	all	0	0			
+chr2	35	kept	0	0			
+chr2	36	all	0	0			
+chr2	36	kept	0	0			
+chr2	37	all	0	0			
+chr2	37	kept	0	0			
+chr2	38	all	0	0			
+chr2	38	kept	0	0			
+chr2	39	all	0	0			
+chr2	39	kept	0	0			
