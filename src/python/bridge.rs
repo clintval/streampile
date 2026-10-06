@@ -266,16 +266,10 @@ fn stage_attributes(object: &Bound<'_, PyAny>, staged: &mut Vec<u8>) -> PyResult
     };
     let mut aux = Vec::new();
     if object.call_method1("has_tag", ("MC",))?.is_truthy()? {
-        let value = object.call_method1("get_tag", ("MC",))?;
-        if let Ok(text) = value.cast::<PyString>() {
-            aux.extend_from_slice(b"MCZ");
-            aux.extend_from_slice(text.to_str()?.as_bytes());
-            aux.push(0);
-        } else {
-            let value: i32 = value.extract()?;
-            aux.extend_from_slice(b"MCi");
-            aux.extend_from_slice(&value.to_le_bytes());
-        }
+        let (value, kind): (Bound<'_, PyAny>, String) =
+            object.call_method1("get_tag", ("MC", true))?.extract()?;
+        aux.extend_from_slice(b"MC");
+        stage_value(&value, kind.as_bytes(), &mut aux)?;
     }
     let mut name = name.unwrap_or_else(|| "*".to_owned()).into_bytes();
     name.push(0);
@@ -304,6 +298,63 @@ fn stage_attributes(object: &Bound<'_, PyAny>, staged: &mut Vec<u8>) -> PyResult
         },
         &aux,
     )
+}
+
+/// Stages a tag's type and value as BAM stores them, from the value and the type pysam reads.
+fn stage_value(value: &Bound<'_, PyAny>, kind: &[u8], staged: &mut Vec<u8>) -> PyResult<()> {
+    match kind {
+        [b'Z' | b'H'] => {
+            staged.extend_from_slice(kind);
+            staged.extend_from_slice(value.cast::<PyString>()?.to_str()?.as_bytes());
+            staged.push(0);
+        }
+        [b'A'] => {
+            staged.extend_from_slice(kind);
+            let text = value.cast::<PyString>()?.to_str()?;
+            staged.push(text.bytes().next().unwrap_or(b' '));
+        }
+        [b'B', subtype] => {
+            staged.extend_from_slice(kind);
+            let length = u32::try_from(value.len()?)
+                .map_err(|_| PyValueError::new_err("An array tag is too long."))?;
+            staged.extend_from_slice(&length.to_le_bytes());
+            for element in value.try_iter()? {
+                stage_number(&element?, *subtype, staged)?;
+            }
+        }
+        [number] => {
+            staged.push(*number);
+            stage_number(value, *number, staged)?;
+        }
+        _ => {
+            return Err(PyValueError::new_err(format!(
+                "A tag has the unknown type {}.",
+                String::from_utf8_lossy(kind)
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Stages a number of one of BAM's numeric types, little-endian.
+fn stage_number(value: &Bound<'_, PyAny>, kind: u8, staged: &mut Vec<u8>) -> PyResult<()> {
+    match kind {
+        b'c' => staged.extend_from_slice(&value.extract::<i8>()?.to_le_bytes()),
+        b'C' => staged.extend_from_slice(&value.extract::<u8>()?.to_le_bytes()),
+        b's' => staged.extend_from_slice(&value.extract::<i16>()?.to_le_bytes()),
+        b'S' => staged.extend_from_slice(&value.extract::<u16>()?.to_le_bytes()),
+        b'i' => staged.extend_from_slice(&value.extract::<i32>()?.to_le_bytes()),
+        b'I' => staged.extend_from_slice(&value.extract::<u32>()?.to_le_bytes()),
+        b'f' => staged.extend_from_slice(&value.extract::<f32>()?.to_le_bytes()),
+        b'd' => staged.extend_from_slice(&value.extract::<f64>()?.to_le_bytes()),
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "A tag has the unknown type {}.",
+                char::from(other)
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn nibble(base: u8) -> u8 {

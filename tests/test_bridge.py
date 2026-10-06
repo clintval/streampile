@@ -1,3 +1,4 @@
+from array import array
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from streampile import Pileup
 from streampile import StreamingPileupBuilder
 from streampile import _native
 
+from .records import record
 from .records import write_bam
 from .test_golden import OPTIONS
 from .test_golden import columns
@@ -77,3 +79,34 @@ def test_both_bridges_read_random_records_alike(tmp_path: Path, seed: int) -> No
         assert sweep(path, exclude_flags=0, min_base_quality=20) == direct
     finally:
         assert _native.direct_bridge(True)
+
+
+@pytest.mark.parametrize(
+    ("value", "value_type", "shown"),
+    [
+        (1.5, "f", "1.5"),
+        (array("i", [1, 2]), None, "1,2"),
+        ("M", "A", "M"),
+        (4_000_000_000, "I", "4000000000"),
+    ],
+)
+def test_a_mate_cigar_that_is_not_a_string_is_piled_up_alike_by_both_bridges(
+    value: object, value_type: str | None, shown: str
+) -> None:
+    read = record("p", 2, "5M", "ACGTA", flag=0x1 | 0x20 | 0x40)
+    read.next_reference_id = 0
+    read.next_reference_start = 8
+    read.set_tag("MC", value, value_type=value_type)  # pyright: ignore[reportUnknownMemberType]
+    fragment = record("f", 2, "5M", "ACGTA")
+    fragment.set_tag("MC", value, value_type=value_type)  # pyright: ignore[reportUnknownMemberType]
+    for direct in (True, False):
+        assert _native.direct_bridge(direct) is direct
+        try:
+            with StreamingPileupBuilder([read, fragment], exclude_flags=0) as builder:
+                pileup = builder.pileup("chr1", 4)
+        finally:
+            assert _native.direct_bridge(True)
+        assert pileup.bases == ["G", "G"]
+        with pytest.raises(ValueError, match=rf"^Read p has an invalid MC tag: {shown}\.$"):
+            _ = pileup.pileups[0].template_end_distance
+        assert pileup.pileups[1].template_end_distance is None
