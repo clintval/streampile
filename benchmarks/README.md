@@ -1,14 +1,15 @@
 # Benchmarks
 
-`benchmark.py` piles up every base of a territory and counts, at each base, the reads holding each base at base quality 30 or more, the reads with a deletion there, and the reads with an insertion after it, from reads with mapping quality 20 or more.
+The `benchmark.py` script piles up every base of a territory and counts, at each base, the reads holding each base at base quality 30 or more, the reads with a deletion there, and the reads with an insertion after it, from reads with mapping quality 20 or more.
 It runs each engine in its own process, prints its time and peak resident memory, and prints a digest of its counts.
 The `htslib` and `streampile` digests agree unless a read opens with an insertion, which only streampile reports, or has no stored qualities (QUAL `*`), which streampile counts at quality 255 and the `htslib` engine skips; nothing checks them.
 
 ```console
-uv run python benchmarks/benchmark.py --bam reads.bam --ref reference.fa --intervals territory.bed --threads 4 --runs 3
+uv run python benchmarks/benchmark.py \
+    --bam reads.bam --ref reference.fa --intervals territory.bed --threads 4 --runs 3
 ```
 
-`--engines` picks the engines, `--threads` sets the threads pysam decompresses the BAM with, and `--runs` reports each engine's fastest of that many runs.
+The `--engines` option picks the engines, `--threads` sets the threads pysam decompresses the BAM with, and `--runs` reports each engine's fastest of that many runs.
 The same sweep runs on the Rust crate alone, with no Python, printing the same digest, with the threads decompressing the BAM given last:
 
 ```console
@@ -37,5 +38,5 @@ Results on an Apple M3 Max with 16 cores, the best of three runs, at load averag
 
 At 800x, the `streampile` engine is about 3.5 times as fast as the `htslib` engine, and most of its time is spent counting each of its entries in Python.
 Sweeping the same columns through the Python API without touching an entry takes 4.5 seconds with one decompression thread and 2.5 with four, where pysam alone takes 2.7 and 1.0 to iterate the records.
-`tabulate` is 2.3 times as fast with four decompression threads, and the Rust sweep 1.7 times, so decompressing the BAM is a large part of each.
+The `tabulate` engine is 2.3 times as fast with four decompression threads, and the Rust sweep 1.7 times, so decompressing the BAM is a large part of each.
 Rebuilding each column from aligned pairs costs about 12 ms a column at 800x, or about 25 minutes for this territory.

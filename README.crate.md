@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`template_end_distance()` measures to the 5′ end of the mate of a read in an FR pair, found from the `MC` tag and never from the template length (TLEN), and is an error for a forward read without a usable `MC` tag.
+The `template_end_distance()` method measures to the 5′ end of the mate of a read in an FR pair, found from the `MC` tag and never from the template length (TLEN), and is an error for a forward read without a usable `MC` tag.
 A `tap` receives every record once, in input order, so records can be written on as they are passed.
 A source of records can be any coordinate-sorted stream, and a record type can carry more beside its BAM record.
 
