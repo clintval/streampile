@@ -75,7 +75,8 @@ impl ArraySubtype {
                 return Err(invalid_data(format!(
                     "invalid array subtype {}",
                     other.escape_ascii()
-                )));
+                ))
+                .into());
             }
         })
     }
@@ -282,7 +283,8 @@ fn decode(src: &[u8]) -> Result<(AuxValue<'_>, usize)> {
             return Err(invalid_data(format!(
                 "invalid auxiliary field type {}",
                 other.escape_ascii()
-            )));
+            ))
+            .into());
         }
     })
 }

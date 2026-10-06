@@ -1,8 +1,6 @@
 use std::io;
 
-fn invalid_data(message: impl Into<String>) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, message.into())
-}
+use crate::error::invalid_data;
 
 const MATCH: u32 = 0;
 const INSERTION: u32 = 1;

@@ -523,7 +523,11 @@ fn test_a_template_end_is_absent_for_a_read_past_its_mates_alignment() {
 
 #[test]
 fn test_a_mate_cigar_must_span_a_base_with_operators_bam_allows() {
-    let mate = |text: &str| parse_cigar(text.as_bytes()).and_then(|ops| Alignment::new(0, ops));
+    let mate = |text: &str| {
+        parse_cigar(text.as_bytes())
+            .map(|ops| Alignment::new(0, ops))
+            .filter(Alignment::spans_reference)
+    };
     for valid in ["10M2I3D4N1=1X5S2H1P", "+3M", "268435455M268435455N"] {
         assert!(mate(valid).is_some(), "{valid}");
     }

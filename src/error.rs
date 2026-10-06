@@ -90,6 +90,7 @@ pub enum Error {
 /// A result whose error is an [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub(crate) fn invalid_data(message: impl Into<String>) -> Error {
-    Error::Io(io::Error::new(io::ErrorKind::InvalidData, message.into()))
+/// An error of malformed data, as noodles reports one.
+pub(crate) fn invalid_data(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message.into())
 }

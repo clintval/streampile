@@ -764,7 +764,7 @@ fn complement(base: u8) -> u8 {
 }
 
 /// The name of a record, or `*` for a record with none.
-pub(crate) fn record_name(record: &bam::Record) -> String {
+pub(crate) fn record_name<R: noodles::sam::alignment::Record + ?Sized>(record: &R) -> String {
     record
         .name()
         .map_or_else(|| "*".to_owned(), |name| name.to_str_lossy().into_owned())

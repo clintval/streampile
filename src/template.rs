@@ -21,6 +21,7 @@ use noodles::sam::alignment::record::cigar::op::Kind;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 
 use crate::error::{Error, Result};
+use crate::pileup::record_name;
 
 const LONGEST_OPERATOR: usize = (1 << 28) - 1;
 
@@ -36,17 +37,14 @@ pub(crate) struct Alignment {
 }
 
 impl Alignment {
-    /// The alignment of CIGAR operators placed at a 0-based start, or `None` without a base on
-    /// the reference.
-    pub(crate) fn new(start: i64, ops: Vec<(Kind, i64)>) -> Option<Self> {
+    /// The alignment of CIGAR operators placed at a 0-based start, which ends before it starts
+    /// when no operator consumes the reference.
+    pub(crate) fn new(start: i64, ops: Vec<(Kind, i64)>) -> Self {
         let span: i64 = ops
             .iter()
             .filter(|(kind, _)| kind.consumes_reference())
             .map(|(_, len)| len)
             .sum();
-        if span == 0 {
-            return None;
-        }
         let soft = |op: &&(Kind, i64)| op.0 == Kind::SoftClip;
         let clip = |op: &&(Kind, i64)| matches!(op.0, Kind::SoftClip | Kind::HardClip);
         let leading = ops
@@ -67,14 +65,19 @@ impl Alignment {
             .filter(|(kind, _)| kind.consumes_read())
             .map(|(_, len)| len)
             .sum();
-        Some(Self {
+        Self {
             start,
             end: start + span - 1,
             leading,
             trailing,
             length,
             ops,
-        })
+        }
+    }
+
+    /// Whether the alignment holds a base or a deletion on the reference.
+    pub(crate) fn spans_reference(&self) -> bool {
+        self.end >= self.start
     }
 
     /// The query offset at a 0-based reference position, and whether a base lies there.
@@ -148,14 +151,6 @@ pub(crate) fn parse_cigar(text: &[u8]) -> Option<Vec<(Kind, i64)>> {
     (!ops.is_empty()).then_some(ops)
 }
 
-/// The number of reference positions CIGAR operators span.
-fn reference_span(ops: &[(Kind, i64)]) -> i64 {
-    ops.iter()
-        .filter(|(kind, _)| kind.consumes_reference())
-        .map(|(_, len)| len)
-        .sum()
-}
-
 /// The distance of a read's base, at a query offset, from the read's 5′ end, in bases as
 /// sequenced: the offset for a forward read and counted from the other end for a reverse one, so
 /// soft-clipped bases count and hard-clipped ones do not. It is `None` for an offset past the read.
@@ -194,13 +189,12 @@ pub fn is_fr_pair<R: Record + ?Sized>(record: &R, header: &sam::Header) -> Resul
     Ok(pairing(record, header)?.is_some())
 }
 
-/// A read of an FR pair: its own CIGAR and 0-based start, its mate's 0-based start, and, for a
-/// forward read, its mate's CIGAR, read from `MC` to classify the pair.
+/// A read of an FR pair: its 0-based start, its mate's, and, for a forward read, its mate's
+/// alignment, read from `MC` to classify the pair.
 struct Pairing {
     start: i64,
-    ops: Vec<(Kind, i64)>,
     mate_start: i64,
-    mate_ops: Option<Vec<(Kind, i64)>>,
+    mate: Option<Alignment>,
 }
 
 /// The pairing of a record of an FR pair, or `None` for any other record.
@@ -230,24 +224,17 @@ fn pairing<R: Record + ?Sized>(record: &R, header: &sam::Header) -> Result<Optio
         usize::from(start) as i64 - 1,
         usize::from(mate_start) as i64 - 1,
     );
-    let ops = record
-        .cigar()
-        .iter()
-        .map(|op| op.map(|op| (op.kind(), op.len() as i64)))
-        .collect::<io::Result<Vec<_>>>()?;
-    let (fr, mate_ops) = if reverse {
-        let end = start + reference_span(&ops) - 1;
+    let (fr, mate) = if reverse {
+        let end = start + record.cigar().alignment_span()? as i64 - 1;
         (mate_start <= end, None)
     } else {
-        let mate_ops = mate_cigar(record)?;
-        let mate_end = mate_start + reference_span(&mate_ops) - 1;
-        (start <= mate_end, Some(mate_ops))
+        let mate = Alignment::new(mate_start, mate_cigar(record)?);
+        (start <= mate.end, Some(mate))
     };
     Ok(fr.then_some(Pairing {
         start,
-        ops,
         mate_start,
-        mate_ops,
+        mate,
     }))
 }
 
@@ -255,7 +242,7 @@ fn pairing<R: Record + ?Sized>(record: &R, header: &sam::Header) -> Result<Optio
 fn mate_cigar<R: Record + ?Sized>(record: &R) -> Result<Vec<(Kind, i64)>> {
     let Some(value) = record.data().get(&Tag::MATE_CIGAR).transpose()? else {
         return Err(Error::MissingMateCigar {
-            name: name_of(record),
+            name: record_name(record),
         });
     };
     match &value {
@@ -268,19 +255,12 @@ fn mate_cigar<R: Record + ?Sized>(record: &R) -> Result<Vec<(Kind, i64)>> {
 /// The error of a record whose `MC` tag holds a value that is not a usable CIGAR string.
 fn invalid_mate_cigar<R: Record + ?Sized>(record: &R, value: Value<'_>) -> Error {
     Error::InvalidMateCigar {
-        name: name_of(record),
+        name: record_name(record),
         value: match value {
             Value::String(text) => text.to_str_lossy().into_owned(),
             other => format!("{other:?}"),
         },
     }
-}
-
-/// A record's name, `*` for a record with none.
-fn name_of<R: Record + ?Sized>(record: &R) -> String {
-    record
-        .name()
-        .map_or_else(|| "*".to_owned(), |name| name.to_str_lossy().into_owned())
 }
 
 /// The number of the template's bases between a 0-based reference position of a record and the
@@ -303,21 +283,27 @@ pub fn template_end_distance<R: Record + ?Sized>(
     let Some(pairing) = pairing(record, header)? else {
         return Ok(None);
     };
-    let mate_ops = match pairing.mate_ops {
-        Some(ops) => ops,
-        None => mate_cigar(record)?,
+    let mate = match pairing.mate {
+        Some(mate) => mate,
+        None => Alignment::new(pairing.mate_start, mate_cigar(record)?),
     };
-    let Some(mate) = Alignment::new(pairing.mate_start, mate_ops) else {
+    if !mate.spans_reference() {
         let value = record
             .data()
             .get(&Tag::MATE_CIGAR)
             .transpose()?
             .unwrap_or(Value::String(b"".as_bstr()));
         return Err(invalid_mate_cigar(record, value));
-    };
-    let Some(read) = Alignment::new(pairing.start, pairing.ops) else {
+    }
+    let ops = record
+        .cigar()
+        .iter()
+        .map(|op| op.map(|op| (op.kind(), op.len() as i64)))
+        .collect::<io::Result<Vec<_>>>()?;
+    let read = Alignment::new(pairing.start, ops);
+    if !read.spans_reference() {
         return Ok(None);
-    };
+    }
     let reverse = record.flags()?.is_reverse_complemented();
     Ok(usize::try_from(distance(&read, &mate, reverse, position as i64)).ok())
 }
