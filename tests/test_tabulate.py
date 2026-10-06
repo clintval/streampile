@@ -587,3 +587,11 @@ def test_a_base_written_as_equals_is_the_reference_base(tmp_path: Path) -> None:
             [Allele(pos=4, ref="A", alt="T", start=4, end=5)],
             [],
         )
+
+
+def test_a_tabulator_reads_back_its_reference_and_options(reference: FastaFile) -> None:
+    tabulator = Tabulator(reference, min_base_quality=20, min_mapping_quality=5, exclude_flags=4)
+    options = (tabulator.min_base_quality, tabulator.min_mapping_quality, tabulator.exclude_flags)
+    assert (tabulator.reference, options) == (reference, (20, 5, 4))
+    assert tabulator.accepts(record("kept", 10, "4M", "ACGT", header=HEADER))
+    assert not tabulator.accepts(record("low", 10, "4M", "ACGT", mapq=4, header=HEADER))
