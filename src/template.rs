@@ -157,7 +157,7 @@ pub(crate) fn parse_cigar(text: &[u8]) -> Option<Vec<(Kind, i64)>> {
 pub fn five_prime_distance<R: Record + ?Sized>(
     record: &R,
     query_offset: usize,
-) -> io::Result<Option<usize>> {
+) -> Result<Option<usize>> {
     let length = record.cigar().read_length()?;
     let reverse = record.flags()?.is_reverse_complemented();
     Ok(from_five_prime(reverse, length, query_offset))

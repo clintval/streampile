@@ -549,7 +549,7 @@ fn test_a_mate_cigar_must_span_a_base_with_operators_bam_allows() {
 /// The template ends of any alignment record, here a `RecordBuf` holding fgbio #1172's deletion
 /// case, as the public functions give them.
 #[test]
-fn test_the_template_ends_of_a_record_buf() {
+fn test_the_template_ends_of_a_record_buf() -> crate::Result<()> {
     let mut builder = SamBuilder::new();
     let record = builder.add_pair(Pair {
         cigar1: Some("2S124M1D3M".into()),
@@ -563,9 +563,12 @@ fn test_the_template_ends_of_a_record_buf() {
         .map(|position| crate::template_end_distance(&record, header, position).unwrap())
         .collect();
     assert_eq!(ends, [Some(1), Some(1), Some(0), None]);
-    let five_prime = |offset| crate::five_prime_distance(&record, offset).unwrap();
+    let five_prime = |offset| -> crate::Result<Option<usize>> {
+        crate::five_prime_distance(&record, offset)
+    };
     assert_eq!(
-        (five_prime(0), five_prime(128), five_prime(129)),
+        (five_prime(0)?, five_prime(128)?, five_prime(129)?),
         (Some(0), Some(128), None)
     );
+    Ok(())
 }
