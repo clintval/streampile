@@ -49,8 +49,8 @@ dev = [
     "poethepoet ~=0.48",
     "pytest ~=9.1",
     "pytest-cov ~=7.1",
-    "pytest-doctestplus ~=1.7",
     "ruff ~=0.16",
+    "sybil[pytest] ~=10.1",
     "ty ~=0.0.83",
     "validate-pyproject[all] ~=0.26",
 ]
@@ -66,6 +66,7 @@ features      = ["python"]
 no-default-features = true
 include       = [
     { path = "CONTRIBUTING.md", format = "sdist" },
+    { path = "conftest.py", format = "sdist" },
     { path = "tests/**/*", format = "sdist" },
 ]
 exclude       = [
@@ -132,20 +133,12 @@ addopts    = [
     "--cov-fail-under=95",
     "--cov-report=term-missing",
     "--cov=streampile",
-    "--doctest-glob=*.md",
-    "--doctest-plus",
     "--import-mode=importlib",
 ]
-doctest_plus = "enabled"
 filterwarnings = ["error"]
-doctest_optionflags = [
-    "ELLIPSIS",
-    "IGNORE_EXCEPTION_DETAIL",
-    "NORMALIZE_WHITESPACE",
-]
 
 [tool.mypy]
-files                       = ["python/", "tests/"]
+files                       = ["python/", "tests/", "conftest.py"]
 strict                      = true
 warn_unreachable            = true
 enable_error_code           = [
@@ -154,7 +147,7 @@ enable_error_code           = [
 ]
 
 [tool.pyright]
-include                            = ["python/", "tests/"]
+include                            = ["python/", "tests/", "conftest.py"]
 enableTypeIgnoreComments           = false
 reportUnnecessaryTypeIgnoreComment = "error"
 reportImportCycles                 = false
@@ -165,7 +158,7 @@ reportUnusedCallResult             = false
 pythonVersion                      = "3.11"
 
 [tool.ty.src]
-include = ["python/", "tests/"]
+include = ["python/", "tests/", "conftest.py"]
 
 [tool.ty.analysis]
 respect-type-ignore-comments = false
@@ -174,7 +167,7 @@ respect-type-ignore-comments = false
 unused-ignore-comment = "error"
 
 [tool.ruff]
-include        = ["python/**/*.py", "tests/**/*.py"]
+include        = ["python/**/*.py", "tests/**/*.py", "conftest.py"]
 src            = [".", "python"]
 line-length    = 100
 target-version = "py311"
