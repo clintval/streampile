@@ -11,10 +11,10 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P1W"
 
 [options.exclude-newer-package]
-bedspec = false
 pybgzf = false
 superintervals = false
 typeline = false
+bedspec = false
 
 [[package]]
 name = "ast-serialize"
@@ -706,19 +706,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pytest-doctestplus"
-version = "1.7.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-    { name = "pytest" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/59/43/6db18218cdfa15bd03cba3292345223925011ba7428e6183da97c6b1dcb1/pytest_doctestplus-1.7.1.tar.gz", hash = "sha256:64ae16dbda66c3db775ef596828d8d7adda09c6f34dd85099c119e4ff8cfe5b6", size = 50286, upload-time = "2026-01-26T22:13:46.54Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f4/72/8e70c7c3238cba0afa8dbef94a1ce7d88ecd0fab3d8d0da394a1c3964a41/pytest_doctestplus-1.7.1-py3-none-any.whl", hash = "sha256:18c0ff78d7ad08a15f415b153b3c407078c8a8c055ceb9055b5c7be5eb7c80be", size = 25567, upload-time = "2026-01-26T22:13:45.148Z" },
-]
-
-[[package]]
 name = "pyyaml"
 version = "6.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -817,8 +804,8 @@ dev = [
     { name = "poethepoet" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "pytest-doctestplus" },
     { name = "ruff" },
+    { name = "sybil", extra = ["pytest"] },
     { name = "ty" },
     { name = "validate-pyproject", extra = ["all"] },
 ]
@@ -840,8 +827,8 @@ dev = [
     { name = "poethepoet", specifier = "~=0.48" },
     { name = "pytest", specifier = "~=9.1" },
     { name = "pytest-cov", specifier = "~=7.1" },
-    { name = "pytest-doctestplus", specifier = "~=1.7" },
     { name = "ruff", specifier = "~=0.16" },
+    { name = "sybil", extras = ["pytest"], specifier = "~=10.1" },
     { name = "ty", specifier = "~=0.0.83" },
     { name = "validate-pyproject", extras = ["all"], specifier = "~=0.26" },
 ]
@@ -890,6 +877,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/57/e5/6fd8f0703a199fdbcad77285531a8c8eeef21bae8c714537ec79ca5af55d/superintervals-1.0.2-cp315-cp315-musllinux_1_2_aarch64.whl", hash = "sha256:4565fdd4a1897718cd6e4aac132adfdf1be94f6e4247567119c73d3ebc9e565d", size = 2507104, upload-time = "2026-10-01T13:53:24.383Z" },
     { url = "https://files.pythonhosted.org/packages/3b/f3/d1b7ccf3708091f931de378061f369d83f56040cea974484e61e7d4b3ea5/superintervals-1.0.2-cp315-cp315-musllinux_1_2_x86_64.whl", hash = "sha256:bafe01c584d8b6ff92fa37bb6ddda7c466b89f3982719291adab3452180be6da", size = 2589887, upload-time = "2026-10-01T13:53:28.815Z" },
     { url = "https://files.pythonhosted.org/packages/24/cf/a32eff14b9779bb1f5b4360f8ddc05e139dfcb45c49f933099c1f49bd0be/superintervals-1.0.2-cp315-cp315-win_amd64.whl", hash = "sha256:d7f46cfd87ca72d5997c013c1d933614704ebe090091f16aa82f2da11b2dc887", size = 613391, upload-time = "2026-10-01T13:53:31.132Z" },
+]
+
+[[package]]
+name = "sybil"
+version = "10.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1c/03/50135b55ba14509654b2f624eaf7e318d654182ebe9f712fb74e98e418d0/sybil-10.1.0.tar.gz", hash = "sha256:062249c8886a0ab19e45d1c3afd5631ec806e7a95cf5153c96560f5e47756cbd", size = 82376, upload-time = "2026-06-13T09:40:44.584Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/fe/4094754188b52f8333ba24b377192918936597769a574a9dd8446f69e1f1/sybil-10.1.0-py3-none-any.whl", hash = "sha256:b3015f7e0ca3fe197ae67117c440710b62ea500078d4414ebd0ab804d12c9897", size = 40930, upload-time = "2026-06-13T09:40:43.139Z" },
+]
+
+[package.optional-dependencies]
+pytest = [
+    { name = "pytest" },
 ]
 
 [[package]]

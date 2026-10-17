@@ -24,22 +24,24 @@ pip install streampile
 A `StreamingPileupBuilder` reads records once and piles them up at the 0-based positions you ask for, moving forward only.
 Give the `AlignmentFile` threads to decompress the BAM with, which pays at depth; for CRAM, also give it `reference_filename`.
 
-```pycon
->>> from pysam import AlignmentFile
->>> from streampile import StreamingPileupBuilder
->>>
->>> with (
-...     AlignmentFile("tests/data/reads.bam", threads=4) as reads,
-...     StreamingPileupBuilder(reads, min_base_quality=30) as builder,
-... ):
-...     first = builder.pileup("chr1", 10)
-...     second = builder.pileup("chr1", 12)
->>>
->>> first.unfiltered_depth, first.filtered_depth, first.bases
-(4, 4, ['A', 'T', 'G', 'A'])
->>> second.unfiltered_depth, second.filtered_depth, second.bases
-(4, 3, ['G', 'G', 'G'])
+```python
+from pysam import AlignmentFile
+from streampile import StreamingPileupBuilder
 
+with (
+    AlignmentFile("tests/data/reads.bam", threads=4) as reads,
+    StreamingPileupBuilder(reads, min_base_quality=30) as builder,
+):
+    first = builder.pileup("chr1", 10)
+    second = builder.pileup("chr1", 12)
+
+assert first.unfiltered_depth == 4
+assert first.filtered_depth == 4
+assert first.bases == ["A", "T", "G", "A"]
+
+assert second.unfiltered_depth == 4
+assert second.filtered_depth == 3
+assert second.bases == ["G", "G", "G"]
 ```
 
 At position 12, the base of `lowqual` is under the quality floor, so it counts toward `unfiltered_depth` only.
@@ -57,76 +59,76 @@ pair 147       GATCCTAAGCTAGCT
 
 By default, an agreeing base is called at the sum of the two qualities, and a disagreeing one as the base of the higher quality at their difference:
 
-```pycon
->>> with (
-...     AlignmentFile("tests/data/reads.bam") as reads,
-...     StreamingPileupBuilder(reads, read_filter=lambda read: read.is_paired) as builder,
-... ):
-...     agreeing = builder.pileup("chr1", 50)
-...     disagreeing = builder.pileup("chr1", 52)
->>>
->>> for pileup in (agreeing, disagreeing):
-...     template = pileup.templates()[0]
-...     print(pileup.bases, pileup.qualities, template.base, template.qual)
-['T', 'T'] [40, 40] T 80
-['G', 'A'] [40, 20] G 20
+```python
+with (
+    AlignmentFile("tests/data/reads.bam") as reads,
+    StreamingPileupBuilder(reads, read_filter=lambda read: read.is_paired) as builder,
+):
+    agreeing = builder.pileup("chr1", 50)
+    disagreeing = builder.pileup("chr1", 52)
 
+agreed = agreeing.templates()[0]
+disagreed = disagreeing.templates()[0]
+
+assert (agreeing.bases, agreeing.qualities) == (["T", "T"], [40, 40])
+assert (agreed.base, agreed.qual) == ("T", 80)
+
+assert (disagreeing.bases, disagreeing.qualities) == (["G", "A"], [40, 20])
+assert (disagreed.base, disagreed.qual) == ("G", 20)
 ```
 
 Other strategies mask a disagreement, or keep the base of the higher quality as it is:
 
-```pycon
->>> from streampile import DisagreementStrategy
->>>
->>> for strategy in DisagreementStrategy:
-...     template = disagreeing.templates(disagreement=strategy)[0]
-...     print(strategy, template.base, template.qual)
-consensus G 20
-mask_both N 2
-mask_lower_qual G 40
+```python
+from streampile import DisagreementStrategy
 
+masked = disagreeing.templates(disagreement=DisagreementStrategy.mask_both)[0]
+kept = disagreeing.templates(disagreement=DisagreementStrategy.mask_lower_qual)[0]
+
+assert (masked.base, masked.qual) == ("N", 2)
+assert (kept.base, kept.qual) == ("G", 40)
 ```
 
 A mate whose base is under the quality floor does not vote, as it is left out of `bases`, so it neither masks nor lowers the other mate's base:
 
-```pycon
->>> with (
-...     AlignmentFile("tests/data/reads.bam") as reads,
-...     StreamingPileupBuilder(reads, min_base_quality=30) as builder,
-... ):
-...     floored = builder.pileup("chr1", 52)
->>>
->>> template = floored.templates(disagreement=DisagreementStrategy.mask_both)[0]
->>> floored.bases, template.base, template.qual
-(['G'], 'G', 40)
+```python
+with (
+    AlignmentFile("tests/data/reads.bam") as reads,
+    StreamingPileupBuilder(reads, min_base_quality=30) as builder,
+):
+    floored = builder.pileup("chr1", 52)
 
+template = floored.templates(disagreement=DisagreementStrategy.mask_both)[0]
+
+assert floored.bases == ["G"]
+assert (template.base, template.qual) == ("G", 40)
 ```
 
 A template also holds its `reads`, its strand, and its distances to both of its ends:
 
-```pycon
->>> template = disagreeing.templates()[0]
->>> template.is_reverse, template.five_prime_distance, template.template_end_distance
-(False, 12, 7)
+```python
+template = disagreeing.templates()[0]
 
+assert not template.is_reverse
+assert template.five_prime_distance == 12
+assert template.template_end_distance == 7
 ```
 
 Each entry also counts the template's bases from its base to the read's 5′ end and to the template's other end, the 5′ end of its mate in an FR pair, whose CIGAR comes from the `MC` tag:
 
-```pycon
->>> with (
-...     AlignmentFile("tests/data/reads.bam") as reads,
-...     StreamingPileupBuilder(reads) as builder,
-... ):
-...     pileup = builder.pileup("chr1", 45)
->>>
->>> for entry in pileup.pileups:
-...     flag = entry.alignment.flag
-...     print(flag, entry.five_prime_distance, entry.template_end_distance)
-0 5 None
-99 5 14
-147 14 5
+```python
+with (
+    AlignmentFile("tests/data/reads.bam") as reads,
+    StreamingPileupBuilder(reads) as builder,
+):
+    pileup = builder.pileup("chr1", 45)
 
+distances = [
+    (entry.alignment.flag, entry.five_prime_distance, entry.template_end_distance)
+    for entry in pileup.pileups
+]
+
+assert distances == [(0, 5, None), (99, 5, 14), (147, 14, 5)]
 ```
 
 The unpaired read has no template end, and the two mates of the pair mirror each other.
@@ -139,26 +141,24 @@ Each entry's `alignment` is the very record read, so pass `tap=writer.write` to 
 Pileups see each read as it was when the builder read it; changes made after that, including in `read_filter`, reach `tap` and `alignment` but not later pileups.
 Here every read is written to a new BAM, and a read whose base at position 10 is not the reference `A` is tagged `XV` with that base.
 
-```pycon
->>> from tempfile import mkdtemp
->>>
->>> tagged = f"{mkdtemp()}/tagged.bam"
->>> with (
-...     AlignmentFile("tests/data/reads.bam") as reads,
-...     AlignmentFile(tagged, "wb", template=reads) as writer,
-...     StreamingPileupBuilder(reads, tap=writer.write) as builder,
-... ):
-...     for entry in builder.pileup("chr1", 10).pileups:
-...         if entry.base not in (None, "A"):
-...             entry.alignment.set_tag("XV", entry.base)
->>>
->>> with AlignmentFile(tagged) as written:
-...     for read in written:
-...         if read.has_tag("XV"):
-...             print(read.query_name, read.get_tag("XV"))
-snv T
-mnv G
+```python
+from tempfile import mkdtemp
 
+tagged = f"{mkdtemp()}/tagged.bam"
+
+with (
+    AlignmentFile("tests/data/reads.bam") as reads,
+    AlignmentFile(tagged, "wb", template=reads) as writer,
+    StreamingPileupBuilder(reads, tap=writer.write) as builder,
+):
+    for entry in builder.pileup("chr1", 10).pileups:
+        if entry.base not in (None, "A"):
+            entry.alignment.set_tag("XV", entry.base)
+
+with AlignmentFile(tagged) as written:
+    variants = {read.query_name: read.get_tag("XV") for read in written if read.has_tag("XV")}
+
+assert variants == {"snv": "T", "mnv": "G"}
 ```
 
 ### Sweeping a Territory
@@ -166,20 +166,23 @@ mnv G
 The `columns` method yields the pileup at every position of a span.
 Its views, such as `bases`, `qualities`, and the depths, are computed in Rust, so prefer them to looping over `pileups` in Python, which is where the time goes at depth.
 
-```pycon
->>> from collections import Counter
->>>
->>> with (
-...     AlignmentFile("tests/data/reads.bam") as reads,
-...     StreamingPileupBuilder(reads, min_base_quality=30) as builder,
-... ):
-...     for pileup in builder.columns("chr1", 9, 13):
-...         print(pileup.reference_pos, dict(Counter(pileup.bases)))
-9 {'A': 4}
-10 {'A': 2, 'T': 1, 'G': 1}
-11 {'C': 3, 'G': 1}
-12 {'G': 3}
+```python
+from collections import Counter
 
+with (
+    AlignmentFile("tests/data/reads.bam") as reads,
+    StreamingPileupBuilder(reads, min_base_quality=30) as builder,
+):
+    counts = {
+        pileup.reference_pos: Counter(pileup.bases) for pileup in builder.columns("chr1", 9, 13)
+    }
+
+assert counts == {
+    9: {"A": 4},
+    10: {"A": 2, "T": 1, "G": 1},
+    11: {"C": 3, "G": 1},
+    12: {"G": 3},
+}
 ```
 
 Each pileup is a snapshot that outlives the builder moving on.
@@ -189,25 +192,29 @@ Each pileup is a snapshot that outlives the builder moving on.
 The `tabulate` function counts the reads of every allele at every base of a [bedspec](https://github.com/clintval/bedspec) `Territory`.
 Alleles are normalized VCF alleles at 1-based positions, so they match a VCF by `CHROM`, `POS`, `REF`, and `ALT`.
 
-```pycon
->>> from bedspec import Bed3
->>> from bedspec import Territory
->>> from pysam import FastaFile
->>> from streampile import tabulate
->>>
->>> territory = Territory([Bed3("chr1", start=9, end=12)])
->>> with (
-...     AlignmentFile("tests/data/reads.bam") as reads,
-...     FastaFile("tests/data/reference.fa") as reference,
-... ):
-...     bases = list(tabulate(reads, reference, territory, min_base_quality=30))
->>>
->>> for base in bases:
-...     print(base.pos, base.ref, base.alts, base.alt_reads, base.alt_fwd, base.alt_rev)
-10 A () () () ()
-11 A ('T', 'GG') (1, 1) (1, 0) (0, 1)
-12 C () () () ()
+```python
+from bedspec import Bed3
+from bedspec import Territory
+from pysam import FastaFile
+from streampile import tabulate
 
+territory = Territory([Bed3("chr1", start=9, end=12)])
+
+with (
+    AlignmentFile("tests/data/reads.bam") as reads,
+    FastaFile("tests/data/reference.fa") as reference,
+):
+    bases = list(tabulate(reads, reference, territory, min_base_quality=30))
+
+alleles = [
+    (base.pos, base.ref, base.alts, base.alt_reads, base.alt_fwd, base.alt_rev) for base in bases
+]
+
+assert alleles == [
+    (10, "A", (), (), (), ()),
+    (11, "A", ("T", "GG"), (1, 1), (1, 0), (0, 1)),
+    (12, "C", (), (), (), ()),
+]
 ```
 
 The `alt_fwd` and `alt_rev` fields split each allele's reads by strand, and `no_calls` counts `N` bases apart from the depth.
@@ -216,38 +223,37 @@ The `alt_fwd` and `alt_rev` fields split each allele's reads by strand, and `no_
 
 A path ending in `.gz` is written with BGZF, indexed as it is written when given an index, and `metadata` adds `##key=value` lines above the header:
 
-```pycon
->>> from pybgzf import IndexFormat
->>> from streampile import TabulationWriter
->>>
->>> table = f"{mkdtemp()}/counts.tsv.gz"
->>> with TabulationWriter.from_path(
-...     table, index=IndexFormat.TBI, metadata={"min_base_quality": 30}
-... ) as writer:
-...     writer.write_all(bases)
+```python
+from pybgzf import IndexFormat
+from streampile import TabulationWriter
 
+table = f"{mkdtemp()}/counts.tsv.gz"
+
+with TabulationWriter.from_path(
+    table, index=IndexFormat.TBI, metadata={"min_base_quality": 30}
+) as writer:
+    writer.write_all(bases)
 ```
 
 ### Reading a Table
 
-```pycon
->>> from streampile import TabulationReader
->>>
->>> for base in TabulationReader.from_path(table):
-...     print(base.pos, base.depth, base.alts, base.alt_reads)
-10 4 () ()
-11 4 ('T', 'GG') (1, 1)
-12 4 () ()
+```python
+from streampile import TabulationReader
 
+rows = [
+    (base.pos, base.depth, base.alts, base.alt_reads) for base in TabulationReader.from_path(table)
+]
+
+assert rows == [(10, 4, (), ()), (11, 4, ("T", "GG"), (1, 1)), (12, 4, (), ())]
 ```
 
 With the index, a region can be read alone; it is half-open and 0-based, as in BED:
 
-```pycon
->>> for base in TabulationReader.query(table, "chr1", 10, 11):
-...     print(base.pos, base.depth, base.alts, base.alt_reads)
-11 4 ('T', 'GG') (1, 1)
+```python
+region = TabulationReader.query(table, "chr1", 10, 11)
+rows = [(base.pos, base.depth, base.alts, base.alt_reads) for base in region]
 
+assert rows == [(11, 4, ("T", "GG"), (1, 1))]
 ```
 
 ## Command Line
