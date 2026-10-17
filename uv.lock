@@ -11,10 +11,10 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P1W"
 
 [options.exclude-newer-package]
+bedspec = false
 pybgzf = false
 superintervals = false
 typeline = false
-bedspec = false
 
 [[package]]
 name = "ast-serialize"
@@ -94,7 +94,7 @@ wheels = [
 
 [[package]]
 name = "bedspec"
-version = "4.0.0"
+version = "4.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pybgzf" },
@@ -102,9 +102,9 @@ dependencies = [
     { name = "typeline" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/02/be/92045b73ab0e56e86185a1e8a49e39a59d331eff562a18be523f2bacf0d6/bedspec-4.0.0.tar.gz", hash = "sha256:1fcd90b19b78b747a711efd353fea74bf38cab3a7335065ce3a5965c88a3e9e3", size = 56282, upload-time = "2026-10-03T17:37:46.317Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6f/a5/67522df244fe10f860465dbffa6b6c7d5f8df66178a157783d9b8ba619b2/bedspec-4.1.1.tar.gz", hash = "sha256:811b1455cf8efb82c02c2e3f6239c4117a8fb71038d990ab3cecb06d42e81a94", size = 56213, upload-time = "2026-10-06T20:28:06.925Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2d/a8/df8502a4f7250049ad93e279706f7145b44fd0b2fb01b62beabeb41d56b2/bedspec-4.0.0-py3-none-any.whl", hash = "sha256:d51762b30c510b703d9f26be81ddb6cded2a7f58b5999b204dc70d7b0c15758a", size = 21968, upload-time = "2026-10-03T17:37:44.741Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/f3/912c229df0a068f4926fa9382965e1545c54f01f96149c52c27939592239/bedspec-4.1.1-py3-none-any.whl", hash = "sha256:7d264f065ff2435856838e9c23fc87f1590b9027ccd4d2099c19eab761f05a41", size = 21903, upload-time = "2026-10-06T20:28:05.615Z" },
 ]
 
 [[package]]
@@ -612,20 +612,20 @@ wheels = [
 
 [[package]]
 name = "pybgzf"
-version = "0.1.2"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ab/16/dcd3f77a8c2ccc4b3b28c47ac8ace3ed2cbe7f13b5ba6aa1733dbb84dc94/pybgzf-0.1.2.tar.gz", hash = "sha256:53267a31b027c5d84823ed7d23ae152358d88d5cae392c459de6d929d7313b2e", size = 146209, upload-time = "2026-10-04T16:10:31.947Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/be/c20875c293b208b9bbfcb4492198d25a91c31958b595709361820254da60/pybgzf-0.2.0.tar.gz", hash = "sha256:c5c811bce3fe8f4106435c5571ebfa007c736eda937f19ed1f4bc409db286601", size = 147309, upload-time = "2026-10-06T16:10:34.483Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/18/08/00805caeff4f9008c8dc344db91a797a7b05f927a9c1ac779960bc1e23e8/pybgzf-0.1.2-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:ae8e7a76ef4fea8988f650b8e726a5e1e11bc8909cd1a4d2211be4398ba3dd75", size = 558519, upload-time = "2026-10-04T16:10:21.548Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/b6/fc4e04f1070512f8783ad708247c68154e327f63c7c4ffc746d2f75abaca/pybgzf-0.1.2-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:8c2fddf6d80cd5f68e2c88ae060ce90a5a8cee060d112ca7136501c438c51037", size = 533298, upload-time = "2026-10-04T16:10:22.993Z" },
-    { url = "https://files.pythonhosted.org/packages/c0/8a/280646f9533daff436abc5948a181b5154134972840c770866fe63e7da8c/pybgzf-0.1.2-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e1c428782b71297af77ad0c8c6b9284729dba64c57753841d5105ddfd4a8c846", size = 615652, upload-time = "2026-10-04T16:10:24.411Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/d3/574f3e1ab0bc2ff957afc97d7eddae5a3d11ef45978c299153bde8bf98d7/pybgzf-0.1.2-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:5434328997a8df271fa1ddcc168629699d879e4dd737d28ad53403c566ad3241", size = 609371, upload-time = "2026-10-04T16:10:26.538Z" },
-    { url = "https://files.pythonhosted.org/packages/39/f3/882c0b1aa05899ecc22c32b2cd56e4ba7520ef8551efc6323fa868494d18/pybgzf-0.1.2-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:9fd1f0ddd47fb7f8c275eddf7c858b6a30e5e8c199392fdffed8d1f5e706dd5a", size = 783071, upload-time = "2026-10-04T16:10:27.987Z" },
-    { url = "https://files.pythonhosted.org/packages/8a/a2/f24c13cb52c7cfc63b3f1a4825f709bb1505563f172decd1ba5788975144/pybgzf-0.1.2-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:0968e4314b2065ddf8d3e71c13830918642608bdc454cb8ed575fa22fcd2e3e7", size = 830774, upload-time = "2026-10-04T16:10:29.275Z" },
-    { url = "https://files.pythonhosted.org/packages/e7/c5/4ed0167314c623ffa4837d718ef19b51a571c6143fc6b8e4609b44b1de1a/pybgzf-0.1.2-cp311-abi3-win_amd64.whl", hash = "sha256:4f5697c8690be309b6f4696bec06d950360130541991d2976b167686de45f5e5", size = 454328, upload-time = "2026-10-04T16:10:30.651Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/46/1837f8e2606a7c4f2046b04d9b17fe6379bbb5a6a6750d81d239f1b391d1/pybgzf-0.2.0-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:50b39883d7b58ac359236cc8b86c18fa5760185d3c8c5f17a468f3d54cef06d5", size = 559380, upload-time = "2026-10-06T16:10:22.919Z" },
+    { url = "https://files.pythonhosted.org/packages/53/b6/df2a0f80dea3fb4f37247adf69c342e66585c5052728e4796a1e8f7240f9/pybgzf-0.2.0-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:cc35f2fb27f566927f1992d02c6a71187854ec6da81e8e5586234dbfa75b48c2", size = 534030, upload-time = "2026-10-06T16:10:24.596Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/5a/721592d1fd7160cdbd67d2122c9b02c6ff289f537568920747be3db288ec/pybgzf-0.2.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:df06186f55979b767e2a33115f510c7f20729ac791848bf3c8e4deef6448fc28", size = 616653, upload-time = "2026-10-06T16:10:26.443Z" },
+    { url = "https://files.pythonhosted.org/packages/39/96/06bff88fa1974b638465038d753a12a13d18cd2815a7f375ebb007ddb202/pybgzf-0.2.0-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:279bf6962e1b57bc8110eacf48ef5278030abf5123a9b62157558d378751bac7", size = 610066, upload-time = "2026-10-06T16:10:27.869Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/99/e4f6a56f7833b521d44312bced6a5cfd7b88ec8d0cebf5067c8f0f26efb9/pybgzf-0.2.0-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:d925845b9105882b083202928c6893b12b3351c224accdbda937235cafc30877", size = 783631, upload-time = "2026-10-06T16:10:29.94Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/6f/c3978d23e1dae2afa3654b7e1703051b26509826ecb45a988856ce7dac3e/pybgzf-0.2.0-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:8bc20d26cc90643612b7e053937212cc6e50fca7a118d550d68970631de3b10e", size = 831467, upload-time = "2026-10-06T16:10:31.705Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/bd/396626815c9d0383bee5e1a5652a7d1c8e4b769ad75f529cbb3d01ca5c41/pybgzf-0.2.0-cp311-abi3-win_amd64.whl", hash = "sha256:1ec13b22e278b8ac5faa60a0350bc3d327324face0e0a2b737fa7f8b9a33cda1", size = 455139, upload-time = "2026-10-06T16:10:33.115Z" },
 ]
 
 [[package]]
@@ -983,15 +983,15 @@ wheels = [
 
 [[package]]
 name = "typeline"
-version = "2.4.0"
+version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "msgspec" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/de/be/97da07b98df6e2d03afa3199bf29e41563c66b5ada68fb17538f4b024030/typeline-2.4.0.tar.gz", hash = "sha256:e6b22f6683ad2af4cfec39e5f8254da6f368798f6be3bdc37c734d2183944087", size = 62386, upload-time = "2026-10-04T23:43:01.137Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/1f/565dda914b11c348201c633d270623ee9e7d98be24299c566b9442c47ae3/typeline-2.4.1.tar.gz", hash = "sha256:5894bed8552a1fbab71965a848f0fce13c4ac9d72666902950efa5bf441bb44a", size = 62503, upload-time = "2026-10-06T20:25:10.52Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/65/a2e1275ce3a1df0ef331e454b28c0fb685777216bd0f0099ae4e9bbabb09/typeline-2.4.0-py3-none-any.whl", hash = "sha256:9d5e005a1e3dfa71ee54987bb1356fd9512b8e699b2723a863e1f8da268a4aef", size = 29421, upload-time = "2026-10-04T23:42:59.77Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/21/dbabaf45def7755649e2cfb6c331f81b48cddfddd6f0a656c6ead0067320/typeline-2.4.1-py3-none-any.whl", hash = "sha256:b07e75aee1d708bc50f9f4c133cf9b97c259fc7c5dc5ae027e0d4f8073acbb93", size = 29421, upload-time = "2026-10-06T20:25:08.894Z" },
 ]
 
 [[package]]
