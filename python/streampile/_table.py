@@ -220,7 +220,7 @@ class TabulationWriter(TsvWriter[TabulatedBase], FixedRecordType):
 
     @SubscriptableClassmethod
     @classmethod
-    def from_path(  # pyright: ignore[reportIncompatibleVariableOverride]
+    def from_path(  # pyright: ignore[reportIncompatibleVariableOverride]  # ty: ignore[invalid-attribute-override]
         cls,
         path: Path | str,
         /,
