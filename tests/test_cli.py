@@ -249,3 +249,63 @@ def test_tabulate_refuses_options_out_of_range_with_a_usage_error(
         run(tmp_path / "counts.tsv", option, value)
     assert exited.value.code == 2
     assert f"argument {option}: {error}" in capsys.readouterr().err
+
+
+def run_bin(out: Path, *extra: str, window: str = "20") -> int:
+    return main([
+        "bin",
+        "--bam",
+        str(DATA / "reads.bam"),
+        "--window",
+        window,
+        *extra,
+        "--out",
+        str(out),
+    ])
+
+
+def test_bin_writes_the_wig_shown_in_the_readme(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(ROOT)
+    shown = re.search(
+        r"```console\n(streampile bin.*?)```\n\n.*?```text\n(.*?)```",
+        README.read_text(),
+        re.DOTALL,
+    )
+    assert shown is not None
+    command = shown.group(1).replace("\\\n", " ").split()[1:]
+    out = tmp_path / command[command.index("--out") + 1]
+    command[command.index("--out") + 1] = str(out)
+    assert main(command) == 0
+    assert out.read_text() == shown.group(2)
+
+
+def test_bin_writes_the_contigs_given_in_order(tmp_path: Path) -> None:
+    out = tmp_path / "counts.wig"
+    assert run_bin(out, "--contigs", "chr2", "chr1", "--ref", str(DATA / "reference.fa")) == 0
+    assert out.read_text() == (
+        "fixedStep chrom=chr2 start=1 step=20 span=20\n1\n0\n"
+        + "fixedStep chrom=chr1 start=1 step=20 span=20\n5\n3\n1\n"
+    )
+
+
+def test_bin_refuses_flags_that_keep_secondary_or_supplementary_records(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="must hold the secondary and supplementary flags, 0x900"):
+        run_bin(tmp_path / "counts.wig", "--exclude-flags", "0x400")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_bin_writes_to_a_path_that_is_not_a_regular_file() -> None:
+    assert run_bin(Path("/dev/null")) == 0
+
+
+@pytest.mark.parametrize("window", ["0", "4294967296", "-1"])
+def test_bin_refuses_a_window_out_of_range_with_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], window: str
+) -> None:
+    with pytest.raises(SystemExit) as exited:
+        run_bin(tmp_path / "counts.wig", window=window)
+    assert exited.value.code == 2
+    error = f"argument --window: must be from 1 to 4294967295, found: {window}"
+    assert error in capsys.readouterr().err

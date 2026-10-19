@@ -256,6 +256,42 @@ rows = [(base.pos, base.depth, base.alts, base.alt_reads) for base in region]
 assert rows == [(11, 4, ("T", "GG"), (1, 1))]
 ```
 
+### Binning Templates
+
+The `bin_templates` function counts the templates that start in each window of every contig, as hmmcopy's `readCounter` counts reads for ichorCNA, but each template once.
+A template is counted where the first of its reads to pass the filters starts, so the two reads of `pair` count once, and a secondary or supplementary record never counts:
+
+```python
+from streampile import bin_templates
+
+with AlignmentFile("tests/data/reads.bam") as reads:
+    bins = list(bin_templates(reads, window=20, min_mapping_quality=20))
+
+assert [(contig.contig, contig.templates) for contig in bins] == [
+    ("chr1", (5, 3, 1)),
+    ("chr2", (1, 0)),
+]
+```
+
+Windows are 0-based and half-open from the start of each contig, and `duplicate` is left out by default, as in `tabulate`.
+The `write_wig` function writes the bins as the fixedStep WIG that `readCounter` writes and ichorCNA reads:
+
+```python
+from io import StringIO
+
+from streampile import write_wig
+
+wig = StringIO()
+write_wig(bins, wig)
+
+assert wig.getvalue().splitlines()[:4] == [
+    "fixedStep chrom=chr1 start=1 step=20 span=20",
+    "5",
+    "3",
+    "1",
+]
+```
+
 ## Command Line
 
 ```console
@@ -288,6 +324,28 @@ chr1	24	A	4	0	3	2	1
 ```
 
 The `--threads` option sets the threads decompressing the BAM and compressing a BGZF table: by default, the CPUs available, at most 8.
+
+To count the templates in each window of every contig into a WIG, run `bin`:
+
+```console
+streampile bin \
+    --bam tests/data/reads.bam \
+    --window 20 \
+    --min-mapping-quality 20 \
+    --out counts.wig
+```
+
+This writes:
+
+```text
+fixedStep chrom=chr1 start=1 step=20 span=20
+5
+3
+1
+fixedStep chrom=chr2 start=1 step=20 span=20
+1
+0
+```
 
 The examples read `tests/data/reads.bam`, whose reads are named for what they carry, such as `plain`, `snv`, `mnv`, `lowqual`, `insertion`, and `deletion`.
 

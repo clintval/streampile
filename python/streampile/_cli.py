@@ -12,6 +12,8 @@ from pybgzf import IndexFormat
 from pysam import AlignmentFile
 from pysam import FastaFile
 
+from streampile._bins import bin_templates
+from streampile._bins import write_wig
 from streampile._pileup import DEFAULT_EXCLUDE_FLAGS
 from streampile._table import TabulationWriter
 from streampile._tabulate import tabulate
@@ -87,8 +89,25 @@ def _tabulate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _bounded(text: str, most: int, base: int) -> int:
-    """An integer from 0 to `most`, written in a base, or with a prefix such as `0x` for base 0.
+def _bin(args: argparse.Namespace) -> int:
+    reference = None if args.ref is None else str(args.ref)
+    with AlignmentFile(
+        str(args.bam), reference_filename=reference, threads=args.threads
+    ) as alignments:
+        bins = bin_templates(
+            alignments,
+            args.window,
+            contigs=args.contigs,
+            min_mapping_quality=args.min_mapping_quality,
+            exclude_flags=args.exclude_flags,
+        )
+        with _staged(args.out, None) as out, out.open("w") as handle:
+            write_wig(bins, handle)
+    return 0
+
+
+def _bounded(text: str, most: int, base: int, least: int = 0) -> int:
+    """An integer from `least` to `most`, in a base, or with a prefix such as `0x` for base 0.
 
     Raises:
         argparse.ArgumentTypeError: if the text is not such an integer.
@@ -97,8 +116,8 @@ def _bounded(text: str, most: int, base: int) -> int:
         value = int(text, base)
     except ValueError:
         raise argparse.ArgumentTypeError(f"not an integer: {text}") from None
-    if not 0 <= value <= most:
-        raise argparse.ArgumentTypeError(f"must be from 0 to {most}, found: {text}")
+    if not least <= value <= most:
+        raise argparse.ArgumentTypeError(f"must be from {least} to {most}, found: {text}")
     return value
 
 
@@ -110,6 +129,11 @@ def _quality(text: str) -> int:
 def _flags(text: str) -> int:
     """SAM flags, from 0 to 0xFFFF, in any base Python reads."""
     return _bounded(text, 0xFFFF, 0)
+
+
+def _window(text: str) -> int:
+    """The width of a window, from 1 to 0xFFFFFFFF bases."""
+    return _bounded(text, 0xFFFFFFFF, 10, least=1)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -137,6 +161,26 @@ def main(argv: list[str] | None = None) -> int:
     tabulate_parser.add_argument("--out", type=Path, required=True, help="the table to write, as BGZF if it ends in .gz, .bgz, or .bgzf")
     # fmt: on
     tabulate_parser.set_defaults(run=_tabulate)
+    bin_parser = commands.add_parser(
+        "bin",
+        help="count the templates that start in each window of every contig",
+        description=(
+            "Write a fixedStep WIG of the templates that start in each window of every contig, "
+            "as hmmcopy's readCounter does, but counting each template once, at its first read "
+            "to pass the filters, and never a secondary or supplementary record."
+        ),
+    )
+    # fmt: off
+    bin_parser.add_argument("--bam", type=Path, required=True, help="indexed, coordinate-sorted BAM or CRAM")
+    bin_parser.add_argument("--ref", type=Path, help="indexed reference FASTA, to read a CRAM with")
+    bin_parser.add_argument("--window", type=_window, required=True, help="the width of each window, in bases")
+    bin_parser.add_argument("--contigs", nargs="+", help="the contigs to bin, in order (default: every contig of the alignment header)")
+    bin_parser.add_argument("--min-mapping-quality", type=_quality, default=0, help="lowest mapping quality of a counted read (default: 0)")
+    bin_parser.add_argument("--exclude-flags", type=_flags, default=DEFAULT_EXCLUDE_FLAGS, help=f"leave out reads with any of these SAM flags, which must hold 0x900 (default: {DEFAULT_EXCLUDE_FLAGS:#x})")
+    bin_parser.add_argument("--threads", type=int, default=default_threads(), help="threads for BAM decompression (default: available CPUs, at most 8)")
+    bin_parser.add_argument("--out", type=Path, required=True, help="the WIG to write")
+    # fmt: on
+    bin_parser.set_defaults(run=_bin)
     args = parser.parse_args(argv)
     return int(args.run(args))
 
