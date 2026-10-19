@@ -4,6 +4,7 @@
 // The doc comments of this module are Python docstrings, which name arguments without backticks.
 #![allow(clippy::doc_markdown)]
 
+mod bins;
 mod bridge;
 mod builder;
 mod pileup;
@@ -84,11 +85,23 @@ impl<'py> FromPyObject<'_, 'py> for Int {
 impl Int {
     /// The option's value as a `T`, or a `ValueError` naming the option when it is not one.
     pub(crate) fn of<T: TryFrom<i64> + Into<i64> + Copy>(self, name: &str, most: T) -> PyResult<T> {
+        self.at_least(0, name, most)
+    }
+
+    /// The option's value as a `T` of at least `least`, or a `ValueError` naming the option when
+    /// it is not one.
+    pub(crate) fn at_least<T: TryFrom<i64> + Into<i64> + Copy>(
+        self,
+        least: i64,
+        name: &str,
+        most: T,
+    ) -> PyResult<T> {
         self.value
+            .filter(|&value| value >= least)
             .and_then(|value| T::try_from(value).ok())
             .ok_or_else(|| {
                 PyValueError::new_err(format!(
-                    "{name} must be from 0 to {}, found: {}",
+                    "{name} must be from {least} to {}, found: {}",
                     most.into(),
                     self.text
                 ))
@@ -121,6 +134,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<pileup::PileupTemplate>()?;
     module.add_class::<tabulate::Tabulation>()?;
     module.add_class::<tabulate::ContigRows>()?;
+    module.add_class::<bins::TemplateBins>()?;
     module.add_function(wrap_pyfunction!(tabulate::normalize_allele, module)?)?;
     module.add("DEFAULT_EXCLUDE_FLAGS", DEFAULT_EXCLUDE_FLAGS.bits())?;
     module.add("DEFAULT_MIN_BASE_QUALITY", DEFAULT_MIN_BASE_QUALITY)?;

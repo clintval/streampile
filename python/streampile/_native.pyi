@@ -85,6 +85,22 @@ class ContigRows:
     def __next__(self) -> TabulatedBase: ...
 
 @final
+class TemplateBins:
+    """The templates that start in each window of contigs, binned one contig at a time, in order."""
+
+    def __new__(
+        cls,
+        alignments: AlignmentFile,
+        contigs: list[tuple[str, int, int]],
+        window: int,
+        *,
+        min_mapping_quality: int = 0,
+        exclude_flags: int = ...,
+    ) -> Self: ...
+    def __iter__(self) -> Self: ...
+    def __next__(self) -> tuple[str, list[int]]: ...
+
+@final
 class PileupRead:
     """One read at one pileup position.
 

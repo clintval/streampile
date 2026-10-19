@@ -1,5 +1,8 @@
 """Forward-only pileups streamed from coordinate-sorted alignment records."""
 
+from streampile._bins import ContigBins
+from streampile._bins import bin_templates
+from streampile._bins import write_wig
 from streampile._native import Pileup
 from streampile._native import PileupRead
 from streampile._native import PileupTemplate
@@ -24,6 +27,7 @@ __all__ = [
     "TABULATION_CODECS",
     "AgreementStrategy",
     "Allele",
+    "ContigBins",
     "DisagreementStrategy",
     "Pileup",
     "PileupRead",
@@ -34,6 +38,8 @@ __all__ = [
     "TabulationReader",
     "TabulationWriter",
     "Tabulator",
+    "bin_templates",
     "normalize",
     "tabulate",
+    "write_wig",
 ]
