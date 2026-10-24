@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -94,7 +94,7 @@ wheels = [
 
 [[package]]
 name = "bedspec"
-version = "4.1.1"
+version = "4.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pybgzf" },
@@ -102,9 +102,9 @@ dependencies = [
     { name = "typeline" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6f/a5/67522df244fe10f860465dbffa6b6c7d5f8df66178a157783d9b8ba619b2/bedspec-4.1.1.tar.gz", hash = "sha256:811b1455cf8efb82c02c2e3f6239c4117a8fb71038d990ab3cecb06d42e81a94", size = 56213, upload-time = "2026-10-06T20:28:06.925Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/65/08026374fe810da8853eef059645d59625371c0e73e9c2601e14ca849874/bedspec-4.2.0.tar.gz", hash = "sha256:670a792501c524b15318d581c2cc95cc2964ad783ba8208989abd659f8a14264", size = 89395, upload-time = "2026-10-16T20:58:33.164Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/f3/912c229df0a068f4926fa9382965e1545c54f01f96149c52c27939592239/bedspec-4.1.1-py3-none-any.whl", hash = "sha256:7d264f065ff2435856838e9c23fc87f1590b9027ccd4d2099c19eab761f05a41", size = 21903, upload-time = "2026-10-06T20:28:05.615Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/2a/b7e3a02796d73f59194cbc9c1ded47ffefdce3a7d6612c3a9ff01b3616ff/bedspec-4.2.0-py3-none-any.whl", hash = "sha256:abc52f9e4fb8e4213ba757408d96517a733dfcf19d092f238c2015ad0c8580c7", size = 40221, upload-time = "2026-10-16T20:58:31.857Z" },
 ]
 
 [[package]]
@@ -983,15 +983,28 @@ wheels = [
 
 [[package]]
 name = "typeline"
-version = "2.4.1"
+version = "3.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "msgspec" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/1f/565dda914b11c348201c633d270623ee9e7d98be24299c566b9442c47ae3/typeline-2.4.1.tar.gz", hash = "sha256:5894bed8552a1fbab71965a848f0fce13c4ac9d72666902950efa5bf441bb44a", size = 62503, upload-time = "2026-10-06T20:25:10.52Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/84/5df77d3a81fb3ae5c51475bee566d349f20b6ba3fb2c054c8bd8cb9a86db/typeline-3.0.1.tar.gz", hash = "sha256:bd33243e4b43e978ecbcffbe003b7469ae956a42e87d95d9c1f9bff439f43f11", size = 158915, upload-time = "2026-10-19T15:56:30.186Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/21/dbabaf45def7755649e2cfb6c331f81b48cddfddd6f0a656c6ead0067320/typeline-2.4.1-py3-none-any.whl", hash = "sha256:b07e75aee1d708bc50f9f4c133cf9b97c259fc7c5dc5ae027e0d4f8073acbb93", size = 29421, upload-time = "2026-10-06T20:25:08.894Z" },
+    { url = "https://files.pythonhosted.org/packages/89/cb/88f6d47551fc31e64692cf08a84bc322ac6079867e4640c5a3d236fd49f0/typeline-3.0.1-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:068308de23c73159d34b8aef4c320a6eb1f7d666b7e1e99cc2c12a8d32ff9627", size = 486958, upload-time = "2026-10-19T15:56:07.593Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/2d/3e53ef8d419c6deb672f330901a9d951aa8449159564c844416b080364bb/typeline-3.0.1-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:b983b25aad8ae1ad352413a30149c027d867282cc8813b9e400b42ba4a2143c7", size = 485732, upload-time = "2026-10-19T15:56:09.501Z" },
+    { url = "https://files.pythonhosted.org/packages/77/b4/671acc44a0754b73e319c9753fe22aa6cd5adf98b19b25cf67c989664c36/typeline-3.0.1-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ea046fe30dce155323b6561a04a4fbce22687b3ed0225ec0849713f5b2c91a0c", size = 523054, upload-time = "2026-10-19T15:56:11.105Z" },
+    { url = "https://files.pythonhosted.org/packages/67/65/039812b075264a2703e05436160dd09e5d47dfe42a70ddadb7ca66f6476a/typeline-3.0.1-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:cdcc173dd678194444e1ea0754d6f73143119377bb3718dcb1da5e3a98ce9d0f", size = 520731, upload-time = "2026-10-19T15:56:13.123Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/e8/87d564645ddaf2cd03f2ca9d7193cc1e325fb1b1843cf8c8d0847d1f598c/typeline-3.0.1-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:7a387303b0a392b043b1856cece643f81d5b2b60ec12ca9fbb4627e3b7c5a6e4", size = 700493, upload-time = "2026-10-19T15:56:14.586Z" },
+    { url = "https://files.pythonhosted.org/packages/79/b8/4d18c9b9ef032b2bc3b148185da2d5327144541c519b8b2a75123fbe96c4/typeline-3.0.1-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:f4f3b6625c41b7c395ad6cbe3ac95f3e3949976b420dbc3c646aa6fe0931ec1e", size = 737719, upload-time = "2026-10-19T15:56:16.131Z" },
+    { url = "https://files.pythonhosted.org/packages/03/8f/31ace531d4f222f6378a8949fc9634f8f68908a7ef37065fffbb73a41128/typeline-3.0.1-cp311-abi3-win_amd64.whl", hash = "sha256:6b0ebb9d554a22ec83e82936745cb66a41cf0bf89e75f120aed1c02c1a0c767d", size = 394114, upload-time = "2026-10-19T15:56:17.789Z" },
+    { url = "https://files.pythonhosted.org/packages/49/aa/153e559ed95cb53ace5731d00a73e37025d5f4f5f013862c0eb72b03986b/typeline-3.0.1-cp314-cp314t-macosx_10_12_x86_64.whl", hash = "sha256:d2d288d64c38326feaa87f851454fe5ba62d1cb02e3864f545ece81ca3817b7b", size = 484908, upload-time = "2026-10-19T15:56:19.391Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/12/748596c0ac946ec70919516464d4093847c2eaca3f8edd20fb2c7bb2b3fe/typeline-3.0.1-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:f66f1b446766e39cc7b724a0097afe0f5bcc4caf7bab31e8d0db0e3ea05337fc", size = 477980, upload-time = "2026-10-19T15:56:20.781Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/4b/17c52611b36fc823cca6b39e777b5bf9961ae4503bdf744c43be5b089100/typeline-3.0.1-cp314-cp314t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e0775b9e77ae5ab34a280e9aacf6f2fd2b7c3e5ac0f90854edea0f8841762a2c", size = 515253, upload-time = "2026-10-19T15:56:22.42Z" },
+    { url = "https://files.pythonhosted.org/packages/24/ea/c652d022824bfa5ddc2b08f898b1c2653ec5b86bfb12e2f28954a37a3779/typeline-3.0.1-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:62e67085bcbaec830102cae7c82ba569b8f521bb9178241e3e6480b55278d330", size = 514987, upload-time = "2026-10-19T15:56:23.836Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/24/3a359cc678d9655427838f22c62b1415736960387a3aa47191cee4c6a8d8/typeline-3.0.1-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:0c609ef42dc8b37fc8c7e493f459b2ffa5ac44e3ac761a9b01a969bf02de813d", size = 693975, upload-time = "2026-10-19T15:56:25.556Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/bf/c6a89e98c3416dc8f8cde9319a06c87c322e7b07e64f1cf8eb95b1383239/typeline-3.0.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:6ff347312adb707c7d6477102a3701c28de57b9345ed150d726d4811768d4308", size = 730445, upload-time = "2026-10-19T15:56:27.373Z" },
+    { url = "https://files.pythonhosted.org/packages/94/e8/8b2210152a057e8bb95b2324395d4739765dc6230f11afbfcdb6e3f0d002/typeline-3.0.1-cp314-cp314t-win_amd64.whl", hash = "sha256:869c65da650e3a63a6ad135772b00760e66fadbdff08e299136a8483e161c882", size = 383875, upload-time = "2026-10-19T15:56:28.777Z" },
 ]
 
 [[package]]
