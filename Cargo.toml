@@ -38,7 +38,7 @@ testing = ["noodles/core"]
 bstr = "1.12"
 noodles = { version = "0.116.0", features = ["bam", "sam"] }
 noodles-bgzf = "0.51.0"
-pyo3 = { version = "0.29", features = ["abi3-py311"], optional = true }
+pyo3 = { version = "0.30", features = ["abi3-py311"], optional = true }
 thiserror = "2"
 
 [dev-dependencies]
