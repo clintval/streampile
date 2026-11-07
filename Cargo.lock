@@ -389,9 +389,9 @@ dependencies = [
 
 [[package]]
 name = "fgumi-consensus"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af97a244d1ddb51cd99146fecb7beac4ab461c5d5885bb2cf5f6591e29fa2a9a"
+checksum = "047208cfa08153a2785f2092507723478f94ecf09453f3cb3f3066d0002a18d9"
 dependencies = [
  "ahash",
  "anyhow",
@@ -409,18 +409,18 @@ dependencies = [
 
 [[package]]
 name = "fgumi-dna"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c135700a3b1b2b8b9fe157f59efbc754d00b1c41f7a8dd485216df0da3b64e0"
+checksum = "c6d9ecbf2fadd3f8da58fa7866394e05c92ffe4d8003c2a7f75f5478464022b6"
 dependencies = [
  "ahash",
 ]
 
 [[package]]
 name = "fgumi-metrics"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "415b74bdc05341f37a1a72fbbafa66b4030ddd276740a84bcc1bfb372e47a94c"
+checksum = "f98418940880679a8c8f64d2c459ac87a0ec2fde4bd63d0073413b4d13d73707"
 dependencies = [
  "anyhow",
  "csv",
@@ -435,9 +435,9 @@ dependencies = [
 
 [[package]]
 name = "fgumi-raw-bam"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38923c7bda5928b533477cf388e04593b49cc18c14cea3dd2e7e73a3435f738c"
+checksum = "6be08c09a00223c62fa9c528c27aeb025c2814553a97b5bf988b6253c08f0fd9"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -450,9 +450,9 @@ dependencies = [
 
 [[package]]
 name = "fgumi-sam"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e6ad56de4138798f0ee49dca2fbb62ba997151ea4d881027d4e1455cd7678fa"
+checksum = "1dd48d91b7bb14bdea2f5aefc0fcec3ff3a51d3e8dc0f6ac0322ac38eddd9163"
 dependencies = [
  "anyhow",
  "bstr 1.13.1",
@@ -467,9 +467,9 @@ dependencies = [
 
 [[package]]
 name = "fgumi-tag"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a93d303adbae4c523fa372957495c96111282585721e3fefbdf560222475d8c"
+checksum = "60d435d0c7944c5dc98fc7045f7ecdb953e24807c694fdff6050ce93788c18b8"
 dependencies = [
  "anyhow",
  "noodles 0.115.0",
