@@ -110,8 +110,8 @@ fn sentence(message: &str) -> String {
 }
 
 // The bridge reads each pysam record in place, which only the GIL keeps from changing meanwhile.
-#[pymodule(gil_used = true)]
-fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pymodule(name = "_native", gil_used = true)]
+fn native_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     bridge::verify(module.py())?;
     module.add_function(wrap_pyfunction!(bridge::direct_bridge, module)?)?;
     module.add_class::<builder::StreamingPileupBuilder>()?;

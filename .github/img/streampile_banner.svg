@@ -1,0 +1,214 @@
+<svg width="1200" height="300" viewBox="0 0 1200 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="streampile: reads plain, snv, mnv and lowqual are read once, moving forward only; at position 10 the pileup holds A, T, G and A, and the columns from 9 to 12 give the counts A:4, then A:2 T:1 G:1, then C:3 G:1, then G:3 with the low-quality base of lowqual left out of the depth">
+<defs>
+<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#75908c" stroke-width="1.1"/></pattern>
+</defs>
+<rect width="1200" height="300" fill="#dcebfa"/>
+<rect x="527" y="59" width="344" height="204" rx="6" fill="url(#hatch)"/>
+<rect x="520" y="50" width="344" height="204" rx="6" fill="#f4f8fc"/>
+<rect x="520" y="50" width="344" height="204" rx="6" fill="none" stroke="#26443a" stroke-width="2.4"/>
+<text x="781.8" y="70" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10.5" fill="#26443a" text-anchor="middle">pileup("chr1", 10)</text>
+<text x="534" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="#4c6d63">ref</text>
+<line x1="534" y1="102.5" x2="850" y2="102.5" stroke="#75908c" stroke-width="1"/>
+<path d="M839,112 H602 Q599,112 599,115 V125 Q599,128 602,128 H839" fill="#f4f8fc" stroke="#26443a" stroke-width="1.1"/>
+<path d="M842.2,112 H850.5 M842.2,128 H850.5" fill="none" stroke="#26443a" stroke-width="1.1" stroke-dasharray="0.1 3.4" stroke-linecap="round"/>
+<text x="534" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="#4c6d63">plain</text>
+<path d="M839,134 H637 Q634,134 634,137 V147 Q634,150 637,150 H839" fill="#f4f8fc" stroke="#26443a" stroke-width="1.1"/>
+<path d="M842.2,134 H850.5 M842.2,150 H850.5" fill="none" stroke="#26443a" stroke-width="1.1" stroke-dasharray="0.1 3.4" stroke-linecap="round"/>
+<text x="534" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="#4c6d63">snv</text>
+<path d="M839,156 H672 Q669,156 669,159 V169 Q669,172 672,172 H839" fill="#f4f8fc" stroke="#26443a" stroke-width="1.1"/>
+<path d="M842.2,156 H850.5 M842.2,172 H850.5" fill="none" stroke="#26443a" stroke-width="1.1" stroke-dasharray="0.1 3.4" stroke-linecap="round"/>
+<text x="534" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="#4c6d63">mnv</text>
+<path d="M839,178 H689.5 Q686.5,178 686.5,181 V191 Q686.5,194 689.5,194 H839" fill="#f4f8fc" stroke="#26443a" stroke-width="1.1"/>
+<path d="M842.2,178 H850.5 M842.2,194 H850.5" fill="none" stroke="#26443a" stroke-width="1.1" stroke-dasharray="0.1 3.4" stroke-linecap="round"/>
+<text x="534" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="#4c6d63">lowqual</text>
+<rect x="771.8" y="78" width="20" height="124" rx="5" fill="#dcebfa"/>
+<text x="606.8" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<text x="624.2" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">C</text>
+<text x="641.8" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="659.2" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">T</text>
+<text x="676.8" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<text x="694.2" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="711.8" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="729.2" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">C</text>
+<text x="746.8" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">T</text>
+<text x="764.2" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<text x="781.8" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#4c6d63" text-anchor="middle">A</text>
+<text x="799.2" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#4c6d63" text-anchor="middle">C</text>
+<text x="816.8" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#4c6d63" text-anchor="middle">G</text>
+<text x="834.2" y="94" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#4c6d63" text-anchor="middle">T</text>
+<text x="606.8" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<text x="624.2" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">C</text>
+<text x="641.8" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="659.2" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">T</text>
+<text x="676.8" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<text x="694.2" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="711.8" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="729.2" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">C</text>
+<text x="746.8" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">T</text>
+<text x="764.2" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<text x="781.8" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">A</text>
+<text x="799.2" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">C</text>
+<text x="816.8" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">G</text>
+<text x="834.2" y="124" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">T</text>
+<text x="641.8" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="659.2" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">T</text>
+<text x="676.8" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<text x="694.2" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="711.8" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="729.2" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">C</text>
+<text x="746.8" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">T</text>
+<text x="764.2" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<rect x="774.8" y="136" width="14" height="12" rx="2" fill="#c9a56a" stroke="#26443a" stroke-width="0.8"/>
+<text x="781.8" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#f4f8fc" text-anchor="middle">T</text>
+<text x="799.2" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">C</text>
+<text x="816.8" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">G</text>
+<text x="834.2" y="146" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">T</text>
+<text x="676.8" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<text x="694.2" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="711.8" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="729.2" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">C</text>
+<text x="746.8" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">T</text>
+<text x="764.2" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<rect x="774.8" y="158" width="14" height="12" rx="2" fill="#7a99bd" stroke="#26443a" stroke-width="0.8"/>
+<text x="781.8" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#f4f8fc" text-anchor="middle">G</text>
+<rect x="792.2" y="158" width="14" height="12" rx="2" fill="#7a99bd" stroke="#26443a" stroke-width="0.8"/>
+<text x="799.2" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#f4f8fc" text-anchor="middle">G</text>
+<text x="816.8" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">G</text>
+<text x="834.2" y="168" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">T</text>
+<text x="694.2" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="711.8" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">G</text>
+<text x="729.2" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">C</text>
+<text x="746.8" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">T</text>
+<text x="764.2" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#75908c" text-anchor="middle">A</text>
+<text x="781.8" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">A</text>
+<text x="799.2" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">C</text>
+<rect x="809.8" y="180" width="14" height="12" rx="2" fill="url(#hatch)"/>
+<text x="816.8" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#4c6d63" text-anchor="middle">G</text>
+<text x="834.2" y="190" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a" text-anchor="middle">T</text>
+<rect x="771.8" y="78" width="20" height="124" rx="5" fill="none" stroke="#26443a" stroke-width="2"/>
+<g stroke="#75908c" stroke-width="1.1" stroke-linecap="round">
+<line x1="606.8" y1="210" x2="606.8" y2="204"/>
+<line x1="624.2" y1="210" x2="624.2" y2="207"/>
+<line x1="641.8" y1="210" x2="641.8" y2="207"/>
+<line x1="659.2" y1="210" x2="659.2" y2="207"/>
+<line x1="676.8" y1="210" x2="676.8" y2="207"/>
+<line x1="694.2" y1="210" x2="694.2" y2="204"/>
+<line x1="711.8" y1="210" x2="711.8" y2="207"/>
+<line x1="729.2" y1="210" x2="729.2" y2="207"/>
+<line x1="746.8" y1="210" x2="746.8" y2="207"/>
+<line x1="764.2" y1="210" x2="764.2" y2="207"/>
+<line x1="799.2" y1="210" x2="799.2" y2="207"/>
+<line x1="816.8" y1="210" x2="816.8" y2="207"/>
+<line x1="834.2" y1="210" x2="834.2" y2="207"/>
+</g>
+<line x1="606.8" y1="210" x2="849" y2="210" stroke="#26443a" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M844,205.5 L850,210 L844,214.5" fill="none" stroke="#26443a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="781.8" y1="202" x2="781.8" y2="210" stroke="#26443a" stroke-width="2" stroke-linecap="round"/>
+<text x="606.8" y="222.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="9.5" fill="#4c6d63" text-anchor="middle">0</text>
+<text x="694.2" y="222.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="9.5" fill="#4c6d63" text-anchor="middle">5</text>
+<text x="781.8" y="222.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="9.5" fill="#26443a" text-anchor="middle">10</text>
+<text x="692" y="241" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#4c6d63" text-anchor="middle">each record read once, forward only</text>
+<path d="M877,133 L894,152 L877,171" fill="none" stroke="#26443a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="913" y="59" width="244" height="204" rx="6" fill="url(#hatch)"/>
+<rect x="906" y="50" width="244" height="204" rx="6" fill="#f4f8fc"/>
+<rect x="906" y="50" width="244" height="204" rx="6" fill="none" stroke="#26443a" stroke-width="2.4"/>
+<text x="920" y="72" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10.5" fill="#26443a">columns("chr1", 9, 13)</text>
+<line x1="920" y1="82" x2="1136" y2="82" stroke="#75908c" stroke-width="1"/>
+<text x="940" y="115.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" fill="#26443a" text-anchor="end">9</text>
+<rect x="954" y="105" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="975" y="105" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="996" y="105" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="1017" y="105" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<text x="1048" y="115.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a">A:4</text>
+<text x="940" y="145.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" fill="#26443a" text-anchor="end">10</text>
+<rect x="954" y="135" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="975" y="135" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="996" y="135" width="18" height="13" rx="3" fill="#c9a56a" stroke="#26443a" stroke-width="1"/>
+<rect x="1017" y="135" width="18" height="13" rx="3" fill="#7a99bd" stroke="#26443a" stroke-width="1"/>
+<text x="1048" y="145.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a">A:2 <tspan fill="#866429">T</tspan>:1 <tspan fill="#46658f">G</tspan>:1</text>
+<text x="940" y="175.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" fill="#26443a" text-anchor="end">11</text>
+<rect x="954" y="165" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="975" y="165" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="996" y="165" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="1017" y="165" width="18" height="13" rx="3" fill="#7a99bd" stroke="#26443a" stroke-width="1"/>
+<text x="1048" y="175.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a">C:3 <tspan fill="#46658f">G</tspan>:1</text>
+<text x="940" y="205.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="12" fill="#26443a" text-anchor="end">12</text>
+<rect x="954" y="195" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="975" y="195" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="996" y="195" width="18" height="13" rx="3" fill="#4f7a6a" stroke="#26443a" stroke-width="1"/>
+<rect x="1017" y="195" width="18" height="13" rx="3" fill="url(#hatch)" opacity="0.55"/>
+<rect x="1017" y="195" width="18" height="13" rx="3" fill="none" stroke="#75908c" stroke-width="1" stroke-dasharray="2 2.5"/>
+<text x="1048" y="205.5" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11.5" fill="#26443a">G:3</text>
+<text x="1028" y="241" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#4c6d63" text-anchor="middle">lowqual is under Q30 at 12</text>
+<g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="7" text-anchor="middle" fill="#75908c">
+<text x="524" y="283">A</text>
+<text x="534.5" y="283">C</text>
+<text x="545.1" y="283">G</text>
+<text x="555.6" y="283">T</text>
+<text x="566.2" y="283">A</text>
+<text x="576.7" y="283">G</text>
+<text x="587.3" y="283">G</text>
+<text x="597.8" y="283">C</text>
+<text x="608.3" y="283">T</text>
+<text x="618.9" y="283">A</text>
+<text x="629.4" y="283" fill="#26443a" font-weight="bold">A</text>
+<text x="640" y="283">C</text>
+<text x="650.5" y="283">G</text>
+<text x="661.1" y="283">T</text>
+<text x="671.6" y="283">T</text>
+<text x="682.1" y="283">A</text>
+<text x="692.7" y="283">G</text>
+<text x="703.2" y="283">C</text>
+<text x="713.8" y="283">C</text>
+<text x="724.3" y="283">A</text>
+<text x="734.8" y="283">T</text>
+<text x="745.4" y="283">G</text>
+<text x="755.9" y="283">C</text>
+<text x="766.5" y="283">A</text>
+<text x="777" y="283">A</text>
+<text x="787.6" y="283">A</text>
+<text x="798.1" y="283">A</text>
+<text x="808.6" y="283">A</text>
+<text x="819.2" y="283">G</text>
+<text x="829.7" y="283">T</text>
+<text x="840.3" y="283">C</text>
+<text x="850.8" y="283">C</text>
+<text x="861.4" y="283">A</text>
+<text x="871.9" y="283">T</text>
+<text x="882.4" y="283">G</text>
+<text x="893" y="283">A</text>
+<text x="903.5" y="283">C</text>
+<text x="914.1" y="283">G</text>
+<text x="924.6" y="283">T</text>
+<text x="935.2" y="283">C</text>
+<text x="945.7" y="283">G</text>
+<text x="956.2" y="283">A</text>
+<text x="966.8" y="283">T</text>
+<text x="977.3" y="283">C</text>
+<text x="987.9" y="283">G</text>
+<text x="998.4" y="283">G</text>
+<text x="1008.9" y="283">A</text>
+<text x="1019.5" y="283">T</text>
+<text x="1030" y="283">C</text>
+<text x="1040.6" y="283">C</text>
+<text x="1051.1" y="283">T</text>
+<text x="1061.7" y="283">A</text>
+<text x="1072.2" y="283">G</text>
+<text x="1082.7" y="283">G</text>
+<text x="1093.3" y="283">C</text>
+<text x="1103.8" y="283">T</text>
+<text x="1114.4" y="283">A</text>
+<text x="1124.9" y="283">G</text>
+<text x="1135.5" y="283">C</text>
+<text x="1146" y="283">T</text>
+</g>
+<g font-family="Georgia, 'Times New Roman', serif" fill="#26443a">
+<text x="96" y="150" font-size="72" letter-spacing="1">streampile</text>
+<path d="M102,186 Q271,178 440,184" fill="none" stroke="#26443a" stroke-width="1.6" stroke-linecap="round"/>
+<text x="271" y="216" text-anchor="middle" font-size="18" font-style="italic" fill="#4c6d63">Pile up as you go, never look back.</text>
+</g>
+<g font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="13.5" fill="#4c6d63">
+<text x="692" y="38" text-anchor="middle">reads.bam, one pass</text>
+<text x="1028" y="38" text-anchor="middle">a snapshot at every column</text>
+</g>
+</svg>
